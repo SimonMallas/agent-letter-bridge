@@ -19,6 +19,7 @@ NOTIFY = ROOT / "src" / "notifier" / "ring.py"
 ALLOW = ROOT / "src" / "allowlist" / "gate.py"
 TG = ROOT / "adapters" / "telegram" / "api.py"
 CMUX = ROOT / "adapters" / "cmux" / "transport.py"
+BRIDGE = ROOT / "src" / "bridge" / "run.py"
 
 # invariant -> (file, tests module, old, new)
 EXTRA = {
@@ -86,6 +87,19 @@ EXTRA = {
         CMUX, "tests.test_cmux_adapter",
         '        if not surface:\n            raise ring.NoTargetSurface("no surface; refusing to guess a pane")',
         "        if False:\n            pass"),
+    "config refuses a readable-by-others token file": (
+        BRIDGE, "tests.test_bridge",
+        "    if mode & (stat.S_IRGRP | stat.S_IROTH):", "    if False:"),
+    "config refuses when a required setting is missing": (
+        BRIDGE, "tests.test_bridge",
+        "    if missing:", "    if False:"),
+    "a batch rings once, not once per letter": (
+        BRIDGE, "tests.test_bridge",
+        "        ring.notify(transport, surface, root / \"inbox\", published[-1])",
+        "        for _p in published:\n            ring.notify(transport, surface, root / \"inbox\", _p)"),
+    "a dead notifier never costs a letter": (
+        BRIDGE, "tests.test_bridge",
+        "    except Exception:\n        # Letters are authoritative", "    except ZeroDivisionError:\n        # Letters are authoritative"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

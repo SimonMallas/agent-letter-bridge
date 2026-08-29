@@ -53,9 +53,25 @@ fetch and write causes redelivery, never loss.
 Read [`docs/invariants.md`](docs/invariants.md) before trusting this with a token.
 The invariants are the product; the code is how they are kept.
 
+## Run it
+
+```sh
+chmod 600 bridge.env          # ALB_TOKEN=... ALB_SURFACE=...
+./alb --config bridge.env --root ~/.alb --once
+```
+
+It refuses to start on a missing, world-readable or incomplete config. That is
+deliberate: a bridge that starts wrong is harder to diagnose at 3am than one
+that will not start at all.
+
+**The ring requires a multiplexer** (cmux, or tmux with a uniquely identified
+pane). v0.1 has no notifier that works without one — see `docs/operations.md`.
+
 ## Status
 
-**Pre-release.** Not yet published for general use.
+**Pre-release, and not yet run against a live platform.** Every component is
+tested against fakes; nothing here has spoken to a real Telegram bot or a real
+cmux pane. Do not point it at a bot you care about.
 
 ## Requirements
 

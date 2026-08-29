@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Agent Letter Bridge — run the inbound bridge.
+
+    alb --config ~/.alb/bridge.env --root ~/.alb
+
+Refuses to start on a missing, unsafe or incomplete config. That is deliberate:
+a bridge that starts wrong is harder to diagnose at 3am than one that will not
+start at all.
+"""
+import argparse
+import pathlib
+import sys
+import time
+
+HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE / "src"))
+sys.path.insert(0, str(HERE))
+
+from adapters.cmux import transport as cmux_transport  # noqa: E402
+from adapters.telegram import api  # noqa: E402
+from bridge import run  # noqa: E402
+from poller import loop  # noqa: E402
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="alb", description=__doc__)
+    parser.add_argument("--config", required=True, help="path to the env file (mode 600)")
+    parser.add_argument("--root", required=True, help="state directory")
+    parser.add_argument("--once", action="store_true", help="one cycle, then exit")
+    parser.add_argument("--interval", type=float, default=2.0)
+    args = parser.parse_args(argv)
+
+    try:
+        config = run.load_config(args.config)
+    except run.ConfigError as exc:
+        print(f"alb: {exc}", file=sys.stderr)
+        return 2
+
+    root = pathlib.Path(args.root)
+    for name in ("inbox", "processed", "state"):
+        (root / name).mkdir(parents=True, exist_ok=True)
+
+    platform = api.Telegram(config["ALB_TOKEN"])
+    transport = cmux_transport.Cmux()
+    surface = config["ALB_SURFACE"]
+
+    while True:
+        try:
+            published = run.run_once(platform, transport, surface, root)
+        except loop.PlatformConflict as exc:
+            # A conflict is a YIELD, not an error: exit 0 so the token's holder
+            # keeps running. Under a restart-on-crash-only policy this stays
+            # down by design - that is the intended behaviour, not a failure.
+            print(f"alb: yielding, {exc}", file=sys.stderr)
+            return 0
+        except api.FetchFailed as exc:
+            # NOT a conflict. Do not send an operator hunting a second poller.
+            print(f"alb: fetch failed: {exc}", file=sys.stderr)
+            return 1
+
+        if published:
+            print(f"alb: {len(published)} letter(s)")
+        if args.once:
+            return 0
+        time.sleep(args.interval)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
