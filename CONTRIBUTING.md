@@ -19,6 +19,31 @@ makes a leak permanent.
 **Honest labelling.** A partially-met criterion is labelled PARTIAL. Do not pad
 it to look complete.
 
+## Set up the hooks — they are not automatic
+
+Git hooks are per-clone local config. A fresh clone inherits nothing, so run this
+once after cloning:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+That wires the `pre-commit` privacy scan and the `commit-msg` trailer check. CI is
+the real gate and runs regardless; the hooks just fail faster.
+
+## What the privacy scan does and does not cover
+
+The scan uses **structural** patterns — absolute home paths, volume paths,
+service-manager domains, token-shaped strings, assistant trailers, machine
+identifiers. It deliberately contains no list of private strings, because such a
+list in the repo would be the leak it exists to prevent.
+
+**It therefore cannot catch semantically private names** (an internal tool or host
+name that looks like an ordinary word). Supply those out of band via
+`ALB_EXTRA_PATTERNS`, a path to a newline-separated regex file that is never
+committed. **CI does not set it**, so that class is covered by review and the
+pre-release history audit — not by the automated gate. Do not assume CI covers it.
+
 ## Claims
 
 Every claim in the docs must be traceable to the mechanism that makes it true.

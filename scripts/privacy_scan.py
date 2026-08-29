@@ -23,7 +23,10 @@ PATTERNS = [
     (r"/Volumes/[A-Za-z0-9._-]+", "external volume path"),
     (r"\bgui/\d+/", "launchd GUI domain path"),
     (r"\b\d{8,10}:[A-Za-z0-9_-]{30,}", "bot-token-shaped string"),
-    (r"(?i)co-authored-by:.*\b(claude|copilot|gpt|gemini|cursor)\b", "AI assistant commit trailer"),
+    # Assembled from fragments so this file does not match its own pattern.
+    # That is what lets the scanner run with NO exemptions - see the SELF note.
+    (r"(?i)co-authored" + r"-by:.*\b(claude|copilot|gpt|gemini|cursor)\b",
+     "AI assistant commit trailer"),
     (r"(?i)\bclaude-session\b", "assistant session trailer"),
     (r"(?i)generated with \[?(claude|copilot)", "assistant attribution"),
     (r"(?i)\bclaude\.ai/code\b", "assistant session URL"),
@@ -31,7 +34,10 @@ PATTERNS = [
 ]
 
 SKIP_DIRS = {".git", "__pycache__", ".venv", "node_modules"}
-SELF = "scripts/privacy_scan.py"
+
+# NO EXEMPTIONS. This file is scanned like every other. Patterns that would
+# otherwise match their own source are assembled from fragments above. An
+# exempted file is a place to hide a real leak, including this one.
 
 
 def load_extra():
@@ -75,7 +81,7 @@ def scan_commit_message(path):
         return findings
     for pattern, label in PATTERNS:
         for m in re.finditer(pattern, text):
-            findings.append(("COMMIT_MSG", m.group(0)[:60], label))
+            findings.append(("COMMIT_MSG", m.group(0), label))
     return findings
 
 
@@ -86,7 +92,7 @@ def main():
         findings = []
         checks = PATTERNS + load_extra()
         for rel in tracked_files():
-            if rel == SELF or not os.path.exists(rel):
+            if not os.path.exists(rel):
                 continue
             try:
                 with open(rel, encoding="utf-8", errors="replace") as fh:
@@ -97,12 +103,14 @@ def main():
                 for pattern, label in checks:
                     m = re.search(pattern, line)
                     if m:
-                        findings.append((f"{rel}:{n}", m.group(0)[:60], label))
+                        findings.append((f"{rel}:{n}", m.group(0), label))
 
     if findings:
         print("PRIVACY SCAN FAILED\n")
         for where, hit, label in findings:
-            print(f"  {where}\n    {label}: {hit}")
+            # Never echo the match. A caught token printed here is copied into
+            # CI logs - a second store, public on flip. Location and class only.
+            print(f"  {where}\n    {label} ({len(hit)} chars)")
         print(f"\n{len(findings)} finding(s). Nothing is committed.")
         return 1
     print("privacy scan: clean")

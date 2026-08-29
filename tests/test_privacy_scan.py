@@ -55,6 +55,36 @@ class PrivacyScanTests(unittest.TestCase):
             msg_path = fh.name
         self.assertEqual(run_scan(ROOT, msg_path).returncode, 1)
 
+    def test_scanner_scans_itself(self):
+        """NO EXEMPTIONS means the scanner is subject to its own rules.
+
+        Regression: an earlier version skipped its own file because a pattern
+        matched its own regex literal, while the docs and commit message claimed
+        no exemptions existed. A planted violation inside the scanner sailed
+        through. Patterns are now assembled from fragments so no skip is needed.
+        """
+        planted = pathlib.Path(tempfile.mkdtemp()) / "privacy_scan.py"
+        planted.write_text(
+            (SCAN.read_text(encoding="utf-8") + "\n" + VIOLATIONS["bot_token"] + "\n"),
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [sys.executable, str(SCAN)], cwd=planted.parent,
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 1, "scanner did not scan its own filename")
+
+    def test_findings_never_echo_the_match(self):
+        """A caught secret must not be copied into CI logs, a second store."""
+        with tempfile.TemporaryDirectory() as tmp:
+            (pathlib.Path(tmp) / "planted.py").write_text(
+                VIOLATIONS["bot_token"], encoding="utf-8"
+            )
+            result = run_scan(tmp)
+            self.assertEqual(result.returncode, 1)
+            self.assertNotIn("AAFakeValue", result.stdout)
+            self.assertIn("bot-token-shaped", result.stdout)
+
     def test_scan_does_not_pass_vacuously(self):
         """An empty directory has nothing to scan; it must not report success
         on a tree it never read. Regression: git ls-files is empty in a fresh

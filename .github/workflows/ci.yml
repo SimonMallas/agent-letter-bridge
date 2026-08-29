@@ -21,10 +21,13 @@ jobs:
 
       - name: Assert zero third-party runtime dependencies
         run: |
-          if [ -f requirements.txt ] || [ -f pyproject.toml ]; then
-            echo "Dependency manifest present — core must stay stdlib-only." >&2
-            exit 1
-          fi
+          for f in requirements.txt requirements-dev.txt pyproject.toml \
+                   setup.py setup.cfg Pipfile Pipfile.lock poetry.lock uv.lock; do
+            if [ -f "$f" ]; then
+              echo "Dependency manifest $f present - core must stay stdlib-only." >&2
+              exit 1
+            fi
+          done
           echo "no dependency manifest: core is stdlib-only"
 
       - name: Tests
