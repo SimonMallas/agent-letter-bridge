@@ -32,3 +32,8 @@ jobs:
 
       - name: Tests
         run: python3 -m unittest discover -s tests -v
+
+      # A test that still passes with an invariant disabled is coverage without
+      # proof. This breaks each invariant in turn and asserts the suite goes red.
+      - name: Mutation gate
+        run: python3 scripts/mutation_check.py
