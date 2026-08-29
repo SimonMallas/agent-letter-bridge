@@ -28,8 +28,8 @@ EXTRA = {
         '        letter_id = store.publish_once(', '        platform.ack(item["update_id"])\n        letter_id = store.publish_once('),
     "denied sender produces no letter": (
         POLL, "tests.test_poller",
-        "        if not gate.allows(allowlist_path, chat_id):\n            continue",
-        "        if False:\n            continue"),
+        "        if gate.allows(allowlist_path, chat_id):",
+        "        if False:"),
     "reply destination read from the letter": (
         SEND, "tests.test_send",
         '    chat_id = stored.meta.get("chat_id")', '    chat_id = "111"'),
@@ -50,6 +50,14 @@ EXTRA = {
         NOTIFY, "tests.test_notifier",
         "    transport.deliver(surface, DOORBELL_LINE)",
         "    transport.deliver(surface, DOORBELL_LINE + store.resolve(inbox, letter_id).body)"),
+    "deny still consumes the update": (
+        POLL, "tests.test_poller",
+        '        platform.ack(item["update_id"])\n\n    # Only after a poll',
+        '        if published:\n            platform.ack(item["update_id"])\n\n    # Only after a poll'),
+    "every completed poll writes a heartbeat": (
+        POLL, "tests.test_poller",
+        "    if health_path is not None:\n        _write_heartbeat(health_path)",
+        "    if False:\n        _write_heartbeat(health_path)"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
@@ -71,12 +79,12 @@ MUTATIONS = {
         "        os.link(temp, dest)",
         '        dest.write_text(_serialise(meta, body), encoding="utf-8")'),
     "ledger recorded AFTER the letter": (
-        "    letter_id = publish(inbox, body, meta)\n\n    delivered.append(update_id)",
-        "    delivered.append(update_id)\n"
-        '    tmp0 = pathlib.Path(f"{ledger}.tmp")\n'
-        '    tmp0.write_text(json.dumps(delivered[-cap:]), encoding="utf-8")\n'
-        "    os.replace(tmp0, ledger)\n"
-        "    letter_id = publish(inbox, body, meta)"),
+        "    letter_id = publish(inbox, body, meta, update_id=update_id)\n"
+        "    _record_delivered(ledger, delivered, update_id, cap)",
+        "    _record_delivered(ledger, delivered, update_id, cap)\n"
+        "    letter_id = publish(inbox, body, meta, update_id=update_id)"),
+    "durable update lookup closes the crash window": (
+        "    if find_by_update(update_id, searched) is not None:", "    if False:"),
 }
 
 

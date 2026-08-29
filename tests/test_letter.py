@@ -131,6 +131,40 @@ class DeliveredIdsLedger(unittest.TestCase):
         store.publish_once(self.inbox, self.ledger, "update-2", "two", {})
         self.assertEqual(len(list(self.inbox.glob("*.md"))), 2)
 
+    def test_a_crash_between_letter_and_ledger_does_not_duplicate(self):
+        """THE CRASH WINDOW. The letter lands, then the process dies before the
+        ledger records it. On redelivery the ledger is silent, so a ledger-only
+        check would publish a SECOND letter for the same update.
+
+        The ledger is a fast path, not the only evidence. The letters on disk
+        are also evidence, and they outlive the ledger write."""
+        with mock.patch("letter.store._record_delivered",
+                        side_effect=OSError("crash after the letter landed")):
+            with self.assertRaises(OSError):
+                store.publish_once(self.inbox, self.ledger, "update-1", "hi", {})
+        self.assertEqual(len(list(self.inbox.glob("*.md"))), 1)
+
+        # The platform redelivers. The ledger never recorded it.
+        again = store.publish_once(self.inbox, self.ledger, "update-1", "hi", {})
+        self.assertIsNone(again, "republished an update whose letter already exists")
+        self.assertEqual(len(list(self.inbox.glob("*.md"))), 1, "duplicate letter")
+
+    def test_a_letter_already_swept_to_processed_is_not_republished(self):
+        """The inbox is swept, so the evidence moves. A durable lookup must
+        cover processed too, or every swept letter can be republished."""
+        processed = self.inbox.parent / "processed"
+        processed.mkdir(exist_ok=True)
+        store.publish_once(self.inbox, self.ledger, "update-1", "hi", {},
+                           searched=[self.inbox, processed])
+        for f in self.inbox.glob("*.md"):
+            f.rename(processed / f.name)
+        self.ledger.unlink(missing_ok=True)
+
+        again = store.publish_once(self.inbox, self.ledger, "update-1", "hi", {},
+                                   searched=[self.inbox, processed])
+        self.assertIsNone(again, "republished a letter that was already swept")
+        self.assertEqual(len(list(self.inbox.glob("*.md"))), 0)
+
     def test_a_failed_publish_is_not_recorded_as_delivered(self):
         """THE ORDERING PROOF. If the letter never landed, the ledger must not
         claim it did - otherwise the redelivery is silently dropped and the

@@ -8,6 +8,11 @@ ORDER IS THE INVARIANT: letter to disk, THEN acknowledge. Acking an update
 whose letter never landed loses the message permanently once the platform's
 retention window passes. That is the single defect this project exists to fix.
 """
+import json
+import os
+import pathlib
+import time
+
 from allowlist import gate
 from letter import store
 
@@ -22,7 +27,20 @@ class PlatformConflict(Exception):
     """
 
 
-def poll_once(platform, inbox, ledger, allowlist_path):
+def _write_heartbeat(path):
+    """Written after EVERY completed poll, busy or quiet.
+
+    Freshness equals liveness: a supervisor judges this process from outside,
+    without its cooperation. If only busy polls wrote it, a quiet bridge would
+    read as a dead one.
+    """
+    path = pathlib.Path(path)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"heartbeat": time.time()}), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def poll_once(platform, inbox, ledger, allowlist_path, health_path=None):
     """Fetch pending updates and durably record the permitted ones.
 
     Returns the ids of letters published, which may be fewer than the updates
@@ -35,20 +53,31 @@ def poll_once(platform, inbox, ledger, allowlist_path):
 
         # Fail-closed. A denied sender produces no letter, no error and no
         # trace. Silence is the deny path succeeding.
-        if not gate.allows(allowlist_path, chat_id):
-            continue
+        #
+        # But a deny MUST still consume the update. The platform offset is a
+        # single high-water mark, not a per-message acknowledgement: an update
+        # left unacked stays at the head of the queue forever, so one stranger's
+        # message would wedge the bridge and no permitted mail behind it would
+        # ever arrive. Silence must not mean stuck.
+        if gate.allows(allowlist_path, chat_id):
+            letter_id = store.publish_once(
+                inbox,
+                ledger,
+                str(item["update_id"]),
+                item.get("text", ""),
+                {"chat_id": chat_id, "update_id": item["update_id"]},
+            )
+            if letter_id is not None:
+                published.append(letter_id)
 
-        letter_id = store.publish_once(
-            inbox,
-            ledger,
-            str(item["update_id"]),
-            item.get("text", ""),
-            {"chat_id": chat_id, "update_id": item["update_id"]},
-        )
-        if letter_id is not None:
-            published.append(letter_id)
-
-        # ONLY NOW. The letter exists on disk, so the platform may forget it.
+        # ONLY NOW, and for denied updates too. For a permitted update the
+        # letter is on disk, so the platform may forget it. For a denied one
+        # there is deliberately nothing to keep.
         platform.ack(item["update_id"])
+
+    # Only after a poll actually completed. A yielding or crashing poller must
+    # not claim liveness on its way out - that would hide the handover.
+    if health_path is not None:
+        _write_heartbeat(health_path)
 
     return published

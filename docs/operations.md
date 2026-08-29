@@ -20,6 +20,8 @@ The ordering is the content. Do these in sequence.
 5. **Settle the webhook case.** `doctor` prints a read-only `getWebhookInfo`
    command; you run it in your own shell. If a webhook is set, the remedy is
    `deleteWebhook` or a token re-issue — polling cannot coexist with it.
+   **The ring requires a multiplexer** (cmux or tmux) with a uniquely
+   identified pane. v0.1 has no notifier that works without one.
 6. **Start it, then run the Day-0 test — inbound only.** A message from a listed
    sender must produce a letter. A message from an unknown sender must produce
    **silence**. Outbound is not a Day-0 step: the send helper replies only to a
@@ -67,8 +69,11 @@ Two rules follow:
    service manager. Testing by hand exercises the wrong context and proves
    nothing.
 
-`doctor` ships the local conflict probe and these daemon-context checks. It holds
-no token and makes no platform calls.
+`doctor` holds no token and makes no platform calls. **PARTIAL:** it currently
+performs the token-free assertion and prints the webhook command. The local
+conflict probe and the daemon-context checks described above are specified but
+**not yet implemented** — do not rely on the doctor to catch a stray poller or a
+`PATH`/volume problem.
 
 ## 3am page
 

@@ -1,4 +1,5 @@
 """Durable-letter store."""
+import hashlib
 import json
 import os
 import pathlib
@@ -40,7 +41,31 @@ def _serialise(meta, body):
     return "\n".join(lines) + "\n"
 
 
-def publish(inbox, body, meta):
+def update_token(update_id):
+    """Stable, filename-safe token for a platform update id.
+
+    Embedding this in the letter's filename makes "has this update already been
+    published?" answerable from the letters themselves, cheaply and exactly -
+    the ledger is a fast path, not the only evidence.
+    """
+    return hashlib.sha256(str(update_id).encode("utf-8")).hexdigest()[:12]
+
+
+def find_by_update(update_id, searched):
+    """Return the first letter published for this update, or None.
+
+    Searched directories must include anywhere letters travel - an inbox that
+    is swept to `processed` still counts as published, or every swept letter
+    could be republished on a late redelivery.
+    """
+    pattern = f"*-u{update_token(update_id)}.md"
+    for directory in searched:
+        for path in sorted(pathlib.Path(directory).glob(pattern)):
+            return path
+    return None
+
+
+def publish(inbox, body, meta, update_id=None):
     """Publish atomically: temp file, then hardlink into place.
 
     The destination name either exists complete or does not exist at all. A
@@ -51,7 +76,8 @@ def publish(inbox, body, meta):
     while it exists.
     """
     inbox = pathlib.Path(inbox)
-    letter_id = f"{time.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:8]}"
+    suffix = f"u{update_token(update_id)}" if update_id is not None else uuid.uuid4().hex[:8]
+    letter_id = f"{time.strftime('%Y%m%dT%H%M%S')}-{suffix}"
     temp = inbox / f".tmp-{letter_id}"
     dest = inbox / f"{letter_id}.md"
 
@@ -111,7 +137,14 @@ def _load_delivered(ledger):
     return data if isinstance(data, list) else []
 
 
-def publish_once(inbox, ledger, update_id, body, meta, cap=1000):
+def _record_delivered(ledger, delivered, update_id, cap):
+    delivered.append(update_id)
+    tmp = pathlib.Path(f"{ledger}.tmp")
+    tmp.write_text(json.dumps(delivered[-cap:]), encoding="utf-8")
+    os.replace(tmp, ledger)
+
+
+def publish_once(inbox, ledger, update_id, body, meta, cap=1000, searched=None):
     """Publish unless this platform update has already been delivered.
 
     ORDER IS THE INVARIANT, and it is not arbitrary:
@@ -127,10 +160,15 @@ def publish_once(inbox, ledger, update_id, body, meta, cap=1000):
     if update_id in delivered:
         return None
 
-    letter_id = publish(inbox, body, meta)
+    # The ledger is a FAST PATH, not the only evidence. A crash between the
+    # hardlink and the ledger write leaves a letter on disk that the ledger
+    # never learned about, and a ledger-only check would publish a second one.
+    # The letters themselves outlive that window, so consult them too.
+    searched = list(searched) if searched else [inbox]
+    if find_by_update(update_id, searched) is not None:
+        _record_delivered(ledger, delivered, update_id, cap)
+        return None
 
-    delivered.append(update_id)
-    tmp = pathlib.Path(f"{ledger}.tmp")
-    tmp.write_text(json.dumps(delivered[-cap:]), encoding="utf-8")
-    os.replace(tmp, ledger)
+    letter_id = publish(inbox, body, meta, update_id=update_id)
+    _record_delivered(ledger, delivered, update_id, cap)
     return letter_id

@@ -17,20 +17,36 @@ from poller import loop  # noqa: E402
 
 
 class FakePlatform:
-    """A stand-in for the platform API. Records what was acked."""
+    """A stand-in that models the REAL queue: a single high-water offset.
+
+    The first version of this double ignored `offset` and always returned the
+    full list, which hid a defect that would have stalled the bridge in
+    production. A double that cannot reproduce the platform's consumption rule
+    cannot test consumption.
+    """
 
     def __init__(self, updates=None, raise_conflict=False):
-        self.updates = updates or []
+        self.updates = list(updates or [])
         self.raise_conflict = raise_conflict
         self.acked_offset = None
+        self.fetch_count = 0
 
     def fetch(self, offset):
         if self.raise_conflict:
             raise loop.PlatformConflict("another consumer holds this token")
-        return self.updates
+        self.fetch_count += 1
+        # Everything at or below the high-water mark is gone for good.
+        if self.acked_offset is None:
+            return list(self.updates)
+        return [u for u in self.updates if u["update_id"] > self.acked_offset]
 
     def ack(self, offset):
-        self.acked_offset = offset
+        # A high-water mark only ever moves forward.
+        if self.acked_offset is None or offset > self.acked_offset:
+            self.acked_offset = offset
+
+    def pending(self):
+        return self.fetch(None)
 
 
 def update(uid, chat, text):
@@ -50,8 +66,9 @@ class PollerBehaviour(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def _run(self, platform):
-        return loop.poll_once(platform, self.inbox, self.ledger, self.allow)
+    def _run(self, platform, health=None):
+        return loop.poll_once(platform, self.inbox, self.ledger, self.allow,
+                              health_path=health)
 
     def test_an_allowed_sender_becomes_a_letter(self):
         self._run(FakePlatform([update(1, "111", "hello")]))
@@ -77,6 +94,62 @@ class PollerBehaviour(unittest.TestCase):
             with self.assertRaises(OSError):
                 self._run(platform)
         self.assertIsNone(platform.acked_offset, "acked an update that never landed")
+
+    def test_a_denied_sender_is_still_consumed(self):
+        """A deny must advance the offset. The platform queue is a single
+        high-water mark: an unacked update stays at the head forever, so a
+        stranger's message would wedge the queue and no allowed mail behind it
+        would ever arrive. Silence must not mean stuck."""
+        platform = FakePlatform([update(1, "999", "let me in")])
+        self._run(platform)
+        self.assertEqual(platform.pending(), [], "denied update was left on the queue")
+
+    def test_a_denied_sender_does_not_block_allowed_mail_behind_it(self):
+        """THE WEDGE. Denied first, allowed second, in one batch."""
+        platform = FakePlatform([
+            update(1, "999", "let me in"),
+            update(2, "111", "real message"),
+        ])
+        self._run(platform)
+        letters = list(self.inbox.glob("*.md"))
+        self.assertEqual(len(letters), 1)
+        self.assertIn("real message", letters[0].read_text(encoding="utf-8"))
+        self.assertEqual(platform.pending(), [], "queue still holds updates")
+
+    def test_a_denied_newest_update_does_not_stall_the_next_poll(self):
+        """Allowed first, denied newest - the bad ordering. If the deny is not
+        consumed, the next poll returns it again, forever."""
+        platform = FakePlatform([
+            update(1, "111", "real message"),
+            update(2, "999", "let me in"),
+        ])
+        self._run(platform)
+        self.assertEqual(platform.pending(), [], "denied newest update wedged the queue")
+        self._run(platform)
+        self.assertEqual(len(list(self.inbox.glob("*.md"))), 1, "republished on re-poll")
+
+    def test_every_poll_writes_a_heartbeat(self):
+        """Freshness equals liveness, so a supervisor needs no cooperation from
+        the process. The watchdog documents a writer; this is that writer."""
+        health = self.root / "health.json"
+        self._run(FakePlatform([update(1, "111", "hello")]), health=health)
+        self.assertTrue(health.is_file(), "no heartbeat written")
+        self.assertIn("heartbeat", json.loads(health.read_text(encoding="utf-8")))
+
+    def test_an_empty_poll_still_writes_a_heartbeat(self):
+        """A quiet bridge is not a dead one. If only busy polls wrote the
+        heartbeat, silence would read as death."""
+        health = self.root / "health.json"
+        self._run(FakePlatform([]), health=health)
+        self.assertTrue(health.is_file(), "a quiet poll wrote no heartbeat")
+
+    def test_a_conflict_does_not_write_a_heartbeat(self):
+        """A yielding poller is not alive for monitoring purposes; claiming
+        liveness while exiting would hide the handover."""
+        health = self.root / "health.json"
+        with self.assertRaises(loop.PlatformConflict):
+            self._run(FakePlatform(raise_conflict=True), health=health)
+        self.assertFalse(health.is_file(), "claimed liveness while yielding")
 
     def test_a_platform_conflict_yields_rather_than_erroring(self):
         """A conflict means another consumer holds the token. Yield cleanly so
