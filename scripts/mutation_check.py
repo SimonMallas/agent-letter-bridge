@@ -17,6 +17,8 @@ SEND = ROOT / "src" / "send" / "reply.py"
 POLL = ROOT / "src" / "poller" / "loop.py"
 NOTIFY = ROOT / "src" / "notifier" / "ring.py"
 ALLOW = ROOT / "src" / "allowlist" / "gate.py"
+TG = ROOT / "adapters" / "telegram" / "api.py"
+CMUX = ROOT / "adapters" / "cmux" / "transport.py"
 
 # invariant -> (file, tests module, old, new)
 EXTRA = {
@@ -63,6 +65,27 @@ EXTRA = {
         "        _dead_letter(state, claim.stem, letter_id,\n"
         '                     f"unclassified {type(exc).__name__}: {exc}")',
         "        pass"),
+    "conflict maps to a yield": (
+        TG, "tests.test_telegram_adapter",
+        '                raise loop.PlatformConflict("another consumer holds this token") from None',
+        "                pass"),
+    "server error is ambiguous, not refused": (
+        TG, "tests.test_telegram_adapter",
+        "            if exc.code >= 500:", "            if False:"),
+    "network failure is ambiguous": (
+        TG, "tests.test_telegram_adapter",
+        '            raise reply.AmbiguousOutcome(f"network failure: {exc.reason}") from None',
+        '            raise reply.DefiniteRefusal("network") from None'),
+    "offset sent is last-acked plus one": (
+        TG, "tests.test_telegram_adapter",
+        'params["offset"] = self._acked + 1', 'params["offset"] = self._acked'),
+    "ring payload must be a single line": (
+        CMUX, "tests.test_cmux_adapter",
+        'if "\\n" in line or "\\r" in line:', "if False:"),
+    "ring addresses an explicit surface": (
+        CMUX, "tests.test_cmux_adapter",
+        '        if not surface:\n            raise ring.NoTargetSurface("no surface; refusing to guess a pane")',
+        "        if False:\n            pass"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
