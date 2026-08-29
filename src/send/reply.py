@@ -61,16 +61,24 @@ def _claim(state, reply_id):
     return path
 
 
+def _write_atomic(path, data):
+    """Every durable write in this project is tmp + replace. A torn record is
+    a record nobody can trust at 3am."""
+    tmp = pathlib.Path(f"{path}.tmp")
+    tmp.write_text(json.dumps(data), encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def _record(path, outcome):
     data = json.loads(path.read_text(encoding="utf-8"))
     data["outcome"] = outcome
-    path.write_text(json.dumps(data), encoding="utf-8")
+    _write_atomic(path, data)
 
 
 def _dead_letter(state, reply_id, letter_id, detail):
     dead = pathlib.Path(state) / "dead-letters"
     dead.mkdir(parents=True, exist_ok=True)
-    (dead / f"{reply_id}.json").write_text(json.dumps({
+    _write_atomic(dead / f"{reply_id}.json", {
         "reply_id": reply_id,
         "letter_id": letter_id,
         "outcome": "ambiguous",
@@ -80,7 +88,7 @@ def _dead_letter(state, reply_id, letter_id, detail):
             "these records. If it is absent: a human decides whether to send new "
             "text. Never delete this file."
         ),
-    }), encoding="utf-8")
+    })
 
 
 def send_reply(sender, inbox, state, allowlist_path, letter_id, text):
@@ -103,5 +111,16 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text):
     except DefiniteRefusal:
         _record(claim, "refused")
         raise
+    except Exception as exc:
+        # THE SAFETY NET. An adapter is contracted to raise AmbiguousOutcome or
+        # DefiniteRefusal, but a bug in one is exactly when this matters: an
+        # unclassified failure would otherwise escape with the claim burned
+        # in_flight forever and nobody told. If an outcome escaped
+        # classification then it is unknown by definition, and unknown means
+        # ambiguous: record it and leave it for a human.
+        _record(claim, "ambiguous")
+        _dead_letter(state, claim.stem, letter_id,
+                     f"unclassified {type(exc).__name__}: {exc}")
+        raise AmbiguousOutcome(f"unclassified sender failure: {exc}") from exc
     _record(claim, "sent")
     return claim.stem

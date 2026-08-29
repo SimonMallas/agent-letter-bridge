@@ -40,13 +40,19 @@ def _write_heartbeat(path):
     os.replace(tmp, path)
 
 
-def poll_once(platform, inbox, ledger, allowlist_path, health_path=None):
+def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
+              processed=None):
     """Fetch pending updates and durably record the permitted ones.
 
     Returns the ids of letters published, which may be fewer than the updates
     fetched: a denied sender produces silence, and a redelivered update
     produces nothing.
     """
+    # Letters travel: an inbox is swept. The durable dedup lookup must cover
+    # everywhere they land, or a late redelivery republishes a letter that was
+    # already handled.
+    searched = [inbox] + ([processed] if processed else [])
+
     published = []
     for item in platform.fetch(offset=None):
         chat_id = item.get("chat_id")
@@ -66,6 +72,7 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None):
                 str(item["update_id"]),
                 item.get("text", ""),
                 {"chat_id": chat_id, "update_id": item["update_id"]},
+                searched=searched,
             )
             if letter_id is not None:
                 published.append(letter_id)

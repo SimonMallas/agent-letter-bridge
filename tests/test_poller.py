@@ -128,6 +128,24 @@ class PollerBehaviour(unittest.TestCase):
         self._run(platform)
         self.assertEqual(len(list(self.inbox.glob("*.md"))), 1, "republished on re-poll")
 
+    def test_a_swept_letter_is_not_republished_on_late_redelivery(self):
+        """The inbox is swept, so the evidence moves. The poller must tell the
+        store everywhere letters travel, or a late redelivery republishes."""
+        processed = self.root / "processed"
+        processed.mkdir()
+        platform = FakePlatform([update(1, "111", "hello")])
+        self._run(platform)
+        for f in self.inbox.glob("*.md"):
+            f.rename(processed / f.name)
+        self.ledger.unlink(missing_ok=True)
+
+        # The platform redelivers an update whose letter was already swept.
+        replay = FakePlatform([update(1, "111", "hello")])
+        loop.poll_once(replay, self.inbox, self.ledger, self.allow,
+                       processed=processed)
+        self.assertEqual(list(self.inbox.glob("*.md")), [],
+                         "republished a letter that was already swept")
+
     def test_every_poll_writes_a_heartbeat(self):
         """Freshness equals liveness, so a supervisor needs no cooperation from
         the process. The watchdog documents a writer; this is that writer."""
@@ -164,6 +182,25 @@ class PollerIsStructurallyIncapable(unittest.TestCase):
 
     FORBIDDEN = ("ring", "doorbell", "notify", "send_message", "sendMessage",
                  "subprocess", "popen", "system", "exec")
+
+    def test_the_poller_is_never_handed_a_transport_or_a_credential(self):
+        """THE LOAD-BEARING PROOF, stronger than the identifier scan below.
+
+        The AST check proves the absence of named identifiers. This proves
+        UNCONSTRUCTIBILITY: poll_once is not given a notifier, a transport, a
+        surface or a token, so there is nothing inside it from which a ring or
+        a send could be built. Capability is denied by what is passed in, not
+        by what the source happens to mention.
+        """
+        import inspect
+        params = set(inspect.signature(loop.poll_once).parameters)
+        self.assertEqual(
+            params,
+            {"platform", "inbox", "ledger", "allowlist_path", "health_path",
+             "processed"},
+            "the poller's signature changed - if it now receives a transport, "
+            "surface or credential, ringing became constructible inside it",
+        )
 
     def test_the_poller_package_contains_no_forbidden_capability(self):
         for path in (ROOT / "src" / "poller").rglob("*.py"):

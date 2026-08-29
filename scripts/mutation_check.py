@@ -58,6 +58,11 @@ EXTRA = {
         POLL, "tests.test_poller",
         "    if health_path is not None:\n        _write_heartbeat(health_path)",
         "    if False:\n        _write_heartbeat(health_path)"),
+    "unclassified failure dead-letters": (
+        SEND, "tests.test_send",
+        "        _dead_letter(state, claim.stem, letter_id,\n"
+        '                     f"unclassified {type(exc).__name__}: {exc}")',
+        "        pass"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

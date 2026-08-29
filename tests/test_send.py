@@ -95,6 +95,29 @@ class BoundedReply(unittest.TestCase):
         self.assertEqual(record["outcome"], "ambiguous")
         self.assertEqual(len(sender.calls), 1, "auto-retried an ambiguous send")
 
+    def test_an_unclassified_exception_dead_letters(self):
+        """THE SAFETY NET. If an outcome escaped classification then it is
+        unknown by definition, and unknown dead-letters for a human.
+
+        Without this the claim is burned in_flight forever with no record: the
+        reply can never be retried (AlreadyClaimed) and nobody is told."""
+        class BrokenSender:
+            def __init__(self):
+                self.calls = []
+
+            def send(self, chat_id, text):
+                self.calls.append((chat_id, text))
+                raise RuntimeError("a bug in a future adapter")
+
+        sender = BrokenSender()
+        with self.assertRaises(reply.AmbiguousOutcome):
+            self._send(sender)
+        dead = list((self.state / "dead-letters").glob("*.json"))
+        self.assertEqual(len(dead), 1, "unclassified failure left no human record")
+        claim = list((self.state / "reply-attempts").glob("*.json"))[0]
+        self.assertEqual(json.loads(claim.read_text())["outcome"], "ambiguous",
+                         "claim left stuck in_flight")
+
     def test_a_definite_refusal_is_not_recorded_as_ambiguous(self):
         """A rate limit is a definite refusal - the send did not happen. Only
         genuine uncertainty dead-letters."""
