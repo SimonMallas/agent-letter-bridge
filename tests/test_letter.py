@@ -165,6 +165,30 @@ class DeliveredIdsLedger(unittest.TestCase):
         self.assertIsNone(again, "republished a letter that was already swept")
         self.assertEqual(len(list(self.inbox.glob("*.md"))), 0)
 
+    def test_a_token_collision_does_not_suppress_a_real_letter(self):
+        """The filename token is a truncated digest, so it is an INDEX, not an
+        identity. Two distinct updates can collide in 48 bits.
+
+        A collision that suppressed publication would silently LOSE a message -
+        strictly worse than the duplicate this lookup exists to prevent. The
+        match must be verified against the letter's own recorded update id
+        before it is believed.
+        """
+        with mock.patch("letter.store.update_token", return_value="collide"):
+            first = store.publish_once(self.inbox, self.ledger, "update-1", "one", {})
+            self.assertIsNotNone(first)
+            self.ledger.unlink(missing_ok=True)  # force the file lookup path
+            second = store.publish_once(self.inbox, self.ledger, "update-2", "two", {})
+        self.assertIsNotNone(second, "a token collision suppressed a different update")
+        self.assertEqual(len(list(self.inbox.glob("*.md"))), 2)
+
+    def test_a_verified_match_still_suppresses_a_true_redelivery(self):
+        """The verification must not disable the dedup it protects."""
+        store.publish_once(self.inbox, self.ledger, "update-1", "one", {})
+        self.ledger.unlink(missing_ok=True)
+        again = store.publish_once(self.inbox, self.ledger, "update-1", "one", {})
+        self.assertIsNone(again, "verification broke the dedup")
+
     def test_a_failed_publish_is_not_recorded_as_delivered(self):
         """THE ORDERING PROOF. If the letter never landed, the ledger must not
         claim it did - otherwise the redelivery is silently dropped and the

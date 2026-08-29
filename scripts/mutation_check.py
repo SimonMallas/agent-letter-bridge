@@ -90,6 +90,12 @@ MUTATIONS = {
         "    letter_id = publish(inbox, body, meta, update_id=update_id)"),
     "durable update lookup closes the crash window": (
         "    if find_by_update(update_id, searched) is not None:", "    if False:"),
+    "token match is VERIFIED, never trusted": (
+        '            if str(found.meta.get("update_id", "")) == str(update_id):\n'
+        "                return path",
+        "            return path"),
+    "the letter records its own update id": (
+        '    meta["update_id"] = update_id', "    pass"),
 }
 
 

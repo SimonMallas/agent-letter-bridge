@@ -52,7 +52,14 @@ def update_token(update_id):
 
 
 def find_by_update(update_id, searched):
-    """Return the first letter published for this update, or None.
+    """Return the letter published for this exact update, or None.
+
+    The filename token is a TRUNCATED digest, so it is an INDEX, not an
+    identity: two distinct updates can collide in its 48 bits. A collision that
+    suppressed publication would silently LOSE a message - strictly worse than
+    the duplicate this lookup exists to prevent. So the token narrows the
+    search cheaply, and the candidate is then VERIFIED against the update id
+    the letter itself recorded. Never believe the index alone.
 
     Searched directories must include anywhere letters travel - an inbox that
     is swept to `processed` still counts as published, or every swept letter
@@ -61,7 +68,14 @@ def find_by_update(update_id, searched):
     pattern = f"*-u{update_token(update_id)}.md"
     for directory in searched:
         for path in sorted(pathlib.Path(directory).glob(pattern)):
-            return path
+            try:
+                found = resolve(path.parent, path.name[:-3])
+            except (MalformedLetter, NoSuchLetter, UnsafeIdentifier, OSError):
+                # An unreadable candidate proves nothing either way. Keep
+                # looking rather than assuming a match.
+                continue
+            if str(found.meta.get("update_id", "")) == str(update_id):
+                return path
     return None
 
 
@@ -76,8 +90,17 @@ def publish(inbox, body, meta, update_id=None):
     while it exists.
     """
     inbox = pathlib.Path(inbox)
-    suffix = f"u{update_token(update_id)}" if update_id is not None else uuid.uuid4().hex[:8]
-    letter_id = f"{time.strftime('%Y%m%dT%H%M%S')}-{suffix}"
+    # Two independent components, and the distinction matters:
+    #   - a random part guarantees the FILENAME is unique, so two letters in
+    #     the same second never collide and the hardlink never fails
+    #   - the update token is a lookup INDEX, deliberately not unique, so a
+    #     redelivery can be found by glob and then verified
+    # Merging them would make a token collision a filename collision, which
+    # surfaces as a hard error instead of a verified non-match.
+    unique = uuid.uuid4().hex[:8]
+    stamp = time.strftime("%Y%m%dT%H%M%S")
+    letter_id = (f"{stamp}-{unique}-u{update_token(update_id)}"
+                 if update_id is not None else f"{stamp}-{unique}")
     temp = inbox / f".tmp-{letter_id}"
     dest = inbox / f"{letter_id}.md"
 
@@ -168,6 +191,13 @@ def publish_once(inbox, ledger, update_id, body, meta, cap=1000, searched=None):
     if find_by_update(update_id, searched) is not None:
         _record_delivered(ledger, delivered, update_id, cap)
         return None
+
+    # The letter must RECORD the identity the lookup verifies against. Relying
+    # on the caller to include it would make the dedup silently depend on a
+    # convention nothing enforces - and a missing field reads as "not a match",
+    # which republishes.
+    meta = dict(meta or {})
+    meta["update_id"] = update_id
 
     letter_id = publish(inbox, body, meta, update_id=update_id)
     _record_delivered(ledger, delivered, update_id, cap)
