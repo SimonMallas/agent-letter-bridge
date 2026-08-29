@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Runs on EVERY commit. A private repo's whole history becomes public if it
+      # is ever flipped, so this is enforcement, not a pre-release checkpoint.
+      - name: Privacy scan
+        run: python3 scripts/privacy_scan.py
+
+      - name: Assert zero third-party runtime dependencies
+        run: |
+          if [ -f requirements.txt ] || [ -f pyproject.toml ]; then
+            echo "Dependency manifest present — core must stay stdlib-only." >&2
+            exit 1
+          fi
+          echo "no dependency manifest: core is stdlib-only"
+
+      - name: Tests
+        run: python3 -m unittest discover -s tests -v

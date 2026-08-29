@@ -1,0 +1,3 @@
+#!/bin/sh
+# Privacy discipline from commit one. See docs/ and scripts/privacy_scan.py.
+exec python3 scripts/privacy_scan.py
