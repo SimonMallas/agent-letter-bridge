@@ -1,0 +1,109 @@
+"""Bounded outbound. Replies only; never originates.
+
+The bridge holds the token, so it is a privilege boundary. Every route out of
+here is a reply to a letter that already exists on disk.
+"""
+import json
+import pathlib
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
+from letter import store  # noqa: E402
+from send import reply  # noqa: E402
+
+
+class FakeSender:
+    def __init__(self, outcome="sent"):
+        self.outcome = outcome
+        self.calls = []
+
+    def send(self, chat_id, text):
+        self.calls.append((chat_id, text))
+        if self.outcome == "ambiguous":
+            raise reply.AmbiguousOutcome("connection reset after POST")
+        if self.outcome == "refused":
+            raise reply.DefiniteRefusal("rate limited")
+        return "ok"
+
+
+class BoundedReply(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        self.inbox = self.root / "inbox"
+        self.inbox.mkdir()
+        self.state = self.root / "state"
+        self.state.mkdir()
+        self.allow = self.root / "allowlist.json"
+        self.allow.write_text(json.dumps({"chats": ["8675309"]}), encoding="utf-8")
+        self.letter_id = store.publish(self.inbox, "incoming", {"chat_id": "8675309"})
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _send(self, sender, letter_id=None, text="a reply"):
+        return reply.send_reply(
+            sender, self.inbox, self.state, self.allow,
+            letter_id or self.letter_id, text,
+        )
+
+    def test_the_destination_comes_from_the_stored_letter(self):
+        """Never remembered, never configured, never inferred."""
+        sender = FakeSender()
+        self._send(sender)
+        self.assertEqual(sender.calls[0][0], "8675309")
+
+    def test_a_reply_to_an_unknown_letter_refuses(self):
+        sender = FakeSender()
+        with self.assertRaises(store.NoSuchLetter):
+            self._send(sender, letter_id="20260101T000000-deadbeef")
+        self.assertEqual(sender.calls, [], "sent without a stored letter")
+
+    def test_a_path_shaped_letter_id_refuses(self):
+        sender = FakeSender()
+        with self.assertRaises(store.UnsafeIdentifier):
+            self._send(sender, letter_id="../escape")
+        self.assertEqual(sender.calls, [])
+
+    def test_the_allowlist_is_rechecked_at_send(self):
+        """Enforced at BOTH ends. A chat removed since the letter arrived must
+        not still receive a reply."""
+        self.allow.write_text(json.dumps({"chats": []}), encoding="utf-8")
+        sender = FakeSender()
+        with self.assertRaises(reply.NotPermitted):
+            self._send(sender)
+        self.assertEqual(sender.calls, [])
+
+    def test_the_same_reply_cannot_be_sent_twice(self):
+        """Claim before send. A replay or restart refuses rather than
+        double-posting; the platform send has no idempotency key."""
+        self._send(FakeSender())
+        second = FakeSender()
+        with self.assertRaises(reply.AlreadyClaimed):
+            self._send(second)
+        self.assertEqual(second.calls, [], "double-posted on replay")
+
+    def test_an_ambiguous_outcome_dead_letters_and_never_retries(self):
+        sender = FakeSender(outcome="ambiguous")
+        with self.assertRaises(reply.AmbiguousOutcome):
+            self._send(sender)
+        dead = list((self.state / "dead-letters").glob("*.json"))
+        self.assertEqual(len(dead), 1)
+        record = json.loads(dead[0].read_text(encoding="utf-8"))
+        self.assertEqual(record["outcome"], "ambiguous")
+        self.assertEqual(len(sender.calls), 1, "auto-retried an ambiguous send")
+
+    def test_a_definite_refusal_is_not_recorded_as_ambiguous(self):
+        """A rate limit is a definite refusal - the send did not happen. Only
+        genuine uncertainty dead-letters."""
+        sender = FakeSender(outcome="refused")
+        with self.assertRaises(reply.DefiniteRefusal):
+            self._send(sender)
+        dead = list((self.state / "dead-letters").glob("*.json"))
+        self.assertEqual(dead, [], "dead-lettered a definite refusal")
+
+
+if __name__ == "__main__":
+    unittest.main()

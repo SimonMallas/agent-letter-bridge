@@ -11,7 +11,50 @@ import pathlib
 import subprocess
 import sys
 
-SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "letter" / "store.py"
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+SRC = ROOT / "src" / "letter" / "store.py"
+SEND = ROOT / "src" / "send" / "reply.py"
+POLL = ROOT / "src" / "poller" / "loop.py"
+NOTIFY = ROOT / "src" / "notifier" / "ring.py"
+ALLOW = ROOT / "src" / "allowlist" / "gate.py"
+
+# invariant -> (file, tests module, old, new)
+EXTRA = {
+    "allowlist denies on a missing file": (
+        ALLOW, "tests.test_allowlist", "    except OSError:\n        return False",
+        "    except OSError:\n        return True"),
+    "ack only after the letter lands": (
+        POLL, "tests.test_poller",
+        '        letter_id = store.publish_once(', '        platform.ack(item["update_id"])\n        letter_id = store.publish_once('),
+    "denied sender produces no letter": (
+        POLL, "tests.test_poller",
+        "        if not gate.allows(allowlist_path, chat_id):\n            continue",
+        "        if False:\n            continue"),
+    "reply destination read from the letter": (
+        SEND, "tests.test_send",
+        '    chat_id = stored.meta.get("chat_id")', '    chat_id = "111"'),
+    "allowlist refuses a non-list chats value": (
+        ALLOW, "tests.test_allowlist",
+        "if not isinstance(chats, list) or not chats:", "if False:"),
+    "allowlist rechecked at send": (
+        SEND, "tests.test_send",
+        "    if not gate.allows(allowlist_path, chat_id):", "    if False:"),
+    "claim before send blocks replay": (
+        SEND, "tests.test_send",
+        "        raise AlreadyClaimed(f\"{reply_id}: already attempted\")",
+        "        return path"),
+    "ambiguous outcome dead-letters": (
+        SEND, "tests.test_send",
+        "        _dead_letter(state, claim.stem, letter_id, str(exc))", "        pass"),
+    "ring carries no content": (
+        NOTIFY, "tests.test_notifier",
+        "    transport.deliver(surface, DOORBELL_LINE)",
+        "    transport.deliver(surface, DOORBELL_LINE + store.resolve(inbox, letter_id).body)"),
+    "no surface means no ring": (
+        NOTIFY, "tests.test_notifier",
+        '        raise NoTargetSurface("no registered surface; refusing to guess")',
+        "        surface = \"GUESS\""),
+}
 
 MUTATIONS = {
     "two-fence required": (
@@ -37,10 +80,31 @@ MUTATIONS = {
 }
 
 
+def _run(name, target, tests, old, new, failures):
+    original = target.read_text(encoding="utf-8")
+    if old not in original:
+        failures.append(f"{name}: mutation anchor no longer present")
+        print(f"  FAIL {name} (anchor missing)")
+        return
+    try:
+        target.write_text(original.replace(old, new, 1), encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, "-m", "unittest", tests],
+            capture_output=True, text=True, cwd=ROOT,
+        )
+    finally:
+        target.write_text(original, encoding="utf-8")
+    if result.returncode == 0:
+        failures.append(f"{name}: DISABLED BUT NO TEST FAILED")
+    print(f"  {'ok  ' if result.returncode else 'FAIL'} {name}")
+
+
 def main():
     original = SRC.read_text(encoding="utf-8")
     failures = []
     try:
+        for name, (target, tests, old, new) in EXTRA.items():
+            _run(name, target, tests, old, new, failures)
         for name, (old, new) in MUTATIONS.items():
             if old not in original:
                 failures.append(f"{name}: mutation anchor no longer present")
@@ -61,7 +125,7 @@ def main():
         for f in failures:
             print(f"  {f}")
         return 1
-    print(f"\nmutation gate: {len(MUTATIONS)} invariants pinned")
+    print(f"\nmutation gate: {len(MUTATIONS) + len(EXTRA)} invariants pinned")
     return 0
 
 
