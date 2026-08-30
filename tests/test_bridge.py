@@ -57,29 +57,42 @@ class Config(unittest.TestCase):
 
 
 class FakePlatform:
-    def __init__(self, updates=None, conflict=False):
+    """Models the REAL contract, in which three things are distinct:
+
+      ack()     RECORDS a high-water mark locally. Consumes nothing.
+      confirm() TRANSMITS it. This is what makes the platform forget.
+      fetch()   returns everything above what has been CONFIRMED.
+
+    An earlier version consumed on ack(), which made the suite unable to
+    reproduce a live defect: a cycle that acked and exited had told the
+    platform nothing, and every test still passed. A double that collapses
+    recording into consuming cannot test consumption.
+    """
+
+    def __init__(self, updates=None, raise_conflict=False):
         self.updates = list(updates or [])
-        self.conflict = conflict
-        self.acked = None
+        self.raise_conflict = raise_conflict
+        self.staged = None      # ack()ed, not yet transmitted
+        self.confirmed = None   # what the platform has actually been told
+        self.fetch_count = 0
 
     def fetch(self, offset=None):
-        if self.conflict:
+        if self.raise_conflict:
             raise loop.PlatformConflict("another consumer holds this token")
-        return [u for u in self.updates
-                if self.acked is None or u["update_id"] > self.acked]
+        self.fetch_count += 1
+        if self.confirmed is None:
+            return list(self.updates)
+        return [u for u in self.updates if u["update_id"] > self.confirmed]
 
     def ack(self, update_id):
-        if self.acked is None or update_id > self.acked:
-            self.acked = update_id
-
-
-class ConfirmingPlatform(FakePlatform):
-    def __init__(self, *a, **kw):
-        super().__init__(*a, **kw)
-        self.confirmed = False
+        if self.staged is None or update_id > self.staged:
+            self.staged = update_id
 
     def confirm(self):
-        self.confirmed = True
+        self.confirmed = self.staged
+
+    def pending(self):
+        return self.fetch(None)
 
 
 class FakeTransport:
@@ -137,23 +150,43 @@ class OneCycle(unittest.TestCase):
     def test_a_conflict_stops_the_cycle_without_ringing(self):
         transport = FakeTransport()
         with self.assertRaises(loop.PlatformConflict):
-            self._cycle(FakePlatform(conflict=True), transport)
+            self._cycle(FakePlatform(raise_conflict=True), transport)
         self.assertEqual(transport.rung, [])
 
     def test_a_cycle_confirms_consumption_after_the_letters_are_durable(self):
         """Acking internally is not consuming. A cycle that ends without
         telling the platform has consumed nothing and will re-read everything
         on the next poll."""
-        platform = ConfirmingPlatform([
+        platform = FakePlatform([
             {"update_id": 1, "chat_id": "111", "text": "hello"}])
         self._cycle(platform, FakeTransport())
-        self.assertTrue(platform.confirmed, "cycle ended without confirming")
+        self.assertEqual(platform.pending(), [],
+                         "the cycle ended without telling the platform anything")
+
+    def test_acking_without_confirming_consumes_nothing(self):
+        """THE LIVE BUG, reproduced against the fake.
+
+        This is the defect a real bot found after 98 green tests: a cycle that
+        records a high-water mark and exits has told the platform NOTHING, so
+        every update returns on the next poll. Persistence does not save this -
+        it saves a restart. Only transmitting does.
+
+        The fake can only show this because ack() records and confirm()
+        transmits, as the platform does. A double that consumed on ack() would
+        pass whether or not confirm was ever called.
+        """
+        platform = FakePlatform([{"update_id": 1, "chat_id": "111", "text": "hello"}])
+        loop.poll_once(platform, self.root / "inbox", self.root / "delivered.json",
+                       self.root / "allowlist.json")
+        self.assertEqual(platform.staged, 1, "nothing was recorded")
+        self.assertEqual(len(platform.pending()), 1,
+                         "the fake consumed on ack, so it cannot show this bug")
 
     def test_a_conflict_confirms_nothing(self):
-        platform = ConfirmingPlatform(conflict=True)
+        platform = FakePlatform(raise_conflict=True)
         with self.assertRaises(loop.PlatformConflict):
             self._cycle(platform, FakeTransport())
-        self.assertFalse(platform.confirmed, "confirmed while yielding")
+        self.assertIsNone(platform.confirmed, "confirmed while yielding")
 
     def test_a_ring_failure_is_recorded_where_a_human_can_see_it(self):
         """The swallow that protects letters also hides ring death.

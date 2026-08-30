@@ -54,6 +54,12 @@ def main(argv=None):
             # down by design - that is the intended behaviour, not a failure.
             print(f"alb: yielding, {exc}", file=sys.stderr)
             return 0
+        except api.TransientFailure as exc:
+            # Ordinary on a long poll. Wait it out rather than dying: the
+            # bridge exists to survive exactly this.
+            print(f"alb: transient, retrying: {exc}", file=sys.stderr)
+            time.sleep(min(args.interval * 5, 30))
+            continue
         except api.FetchFailed as exc:
             # NOT a conflict. Do not send an operator hunting a second poller.
             print(f"alb: fetch failed: {exc}", file=sys.stderr)

@@ -31,6 +31,16 @@ class FetchFailed(Exception):
     """
 
 
+class TransientFailure(Exception):
+    """A network condition, not a verdict about the token or the bridge.
+
+    Connection resets and timeouts are ordinary on a long poll. Treating one as
+    fatal kills the bridge for a condition that resolves itself; treating it as
+    a conflict would hand the token away for no reason. It is neither - it is a
+    thing to wait out.
+    """
+
+
 BASE = "https://api.telegram.org"
 TIMEOUT = 30
 
@@ -98,6 +108,8 @@ class Telegram:
                 # Another consumer holds this token. Yield; never fight for it.
                 raise loop.PlatformConflict("another consumer holds this token") from None
             raise FetchFailed(f"getUpdates failed: HTTP {exc.code}") from None
+        except urllib.error.URLError as exc:
+            raise TransientFailure(f"network: {exc.reason}") from None
 
         updates = []
         for item in payload.get("result", []):
@@ -118,14 +130,18 @@ class Telegram:
         return updates
 
     def ack(self, update_id):
-        """Advance the high-water mark and persist it.
+        """Stage the high-water mark IN MEMORY ONLY.
 
-        This is NOT yet consumption: the platform only forgets an update when
-        the advanced offset is transmitted. See confirm().
+        Deliberately not persisted here. Persisting a mark the platform has not
+        accepted is silent loss: the file says consumed, the platform still
+        holds the updates, and the next start transmits an offset that makes
+        the platform skip messages nobody ever received.
+
+        Recording, transmitting and persisting are three different things and
+        must happen in that order. See confirm().
         """
         if self._acked is None or update_id > self._acked:
             self._acked = update_id
-            self._save_offset()
 
     def confirm(self):
         """Tell the platform what has been handled.
@@ -140,6 +156,11 @@ class Telegram:
         try:
             _request(self._base, "getUpdates",
                      {"offset": self._acked + 1, "timeout": 0, "limit": 1}, self._token)
+            # Persist ONLY what the platform has now accepted. A crash between
+            # the platform accepting and this write is safe: the letters are
+            # durable, and a stale local mark only re-reads, which the
+            # delivered-ids ledger makes harmless.
+            self._save_offset()
         except urllib.error.HTTPError as exc:
             # Classified exactly as in fetch(). Unclassified, a conflict here
             # escapes as a raw HTTPError and the process dies with a traceback
@@ -148,6 +169,10 @@ class Telegram:
             if exc.code == 409:
                 raise loop.PlatformConflict("another consumer holds this token") from None
             raise FetchFailed(f"confirm failed: HTTP {exc.code}") from None
+        except urllib.error.URLError as exc:
+            # The offset stays unpersisted, so the next start re-reads. Safe:
+            # the ledger prevents duplicate letters.
+            raise TransientFailure(f"network: {exc.reason}") from None
 
     # -- outbound --------------------------------------------------------
 

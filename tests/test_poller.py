@@ -17,33 +17,39 @@ from poller import loop  # noqa: E402
 
 
 class FakePlatform:
-    """A stand-in that models the REAL queue: a single high-water offset.
+    """Models the REAL contract, in which three things are distinct:
 
-    The first version of this double ignored `offset` and always returned the
-    full list, which hid a defect that would have stalled the bridge in
-    production. A double that cannot reproduce the platform's consumption rule
-    cannot test consumption.
+      ack()     RECORDS a high-water mark locally. Consumes nothing.
+      confirm() TRANSMITS it. This is what makes the platform forget.
+      fetch()   returns everything above what has been CONFIRMED.
+
+    An earlier version consumed on ack(), which made the suite unable to
+    reproduce a live defect: a cycle that acked and exited had told the
+    platform nothing, and every test still passed. A double that collapses
+    recording into consuming cannot test consumption.
     """
 
     def __init__(self, updates=None, raise_conflict=False):
         self.updates = list(updates or [])
         self.raise_conflict = raise_conflict
-        self.acked_offset = None
+        self.staged = None      # ack()ed, not yet transmitted
+        self.confirmed = None   # what the platform has actually been told
         self.fetch_count = 0
 
-    def fetch(self, offset):
+    def fetch(self, offset=None):
         if self.raise_conflict:
             raise loop.PlatformConflict("another consumer holds this token")
         self.fetch_count += 1
-        # Everything at or below the high-water mark is gone for good.
-        if self.acked_offset is None:
+        if self.confirmed is None:
             return list(self.updates)
-        return [u for u in self.updates if u["update_id"] > self.acked_offset]
+        return [u for u in self.updates if u["update_id"] > self.confirmed]
 
-    def ack(self, offset):
-        # A high-water mark only ever moves forward.
-        if self.acked_offset is None or offset > self.acked_offset:
-            self.acked_offset = offset
+    def ack(self, update_id):
+        if self.staged is None or update_id > self.staged:
+            self.staged = update_id
+
+    def confirm(self):
+        self.confirmed = self.staged
 
     def pending(self):
         return self.fetch(None)
@@ -84,7 +90,7 @@ class PollerBehaviour(unittest.TestCase):
     def test_the_offset_is_acked_only_after_the_letter_lands(self):
         platform = FakePlatform([update(7, "111", "hello")])
         self._run(platform)
-        self.assertEqual(platform.acked_offset, 7)
+        self.assertEqual(platform.staged, 7)
 
     def test_a_failed_write_must_not_ack(self):
         """THE INVARIANT. Acking an update whose letter never landed loses the
@@ -93,7 +99,7 @@ class PollerBehaviour(unittest.TestCase):
         with mock.patch("letter.store.os.link", side_effect=OSError("disk full")):
             with self.assertRaises(OSError):
                 self._run(platform)
-        self.assertIsNone(platform.acked_offset, "acked an update that never landed")
+        self.assertIsNone(platform.staged, "acked an update that never landed")
 
     def test_a_non_message_update_is_consumed_without_a_letter(self):
         """No chat means the fail-closed allowlist denies it, which is exactly
@@ -101,7 +107,7 @@ class PollerBehaviour(unittest.TestCase):
         platform = FakePlatform([{"update_id": 1, "chat_id": "", "text": ""}])
         self._run(platform)
         self.assertEqual(list(self.inbox.glob("*.md")), [])
-        self.assertEqual(platform.pending(), [], "non-message update wedged the queue")
+        self.assertEqual(platform.staged, 1, "non-message update did not advance the mark")
 
     def test_a_denied_sender_is_still_consumed(self):
         """A deny must advance the offset. The platform queue is a single
@@ -110,7 +116,8 @@ class PollerBehaviour(unittest.TestCase):
         would ever arrive. Silence must not mean stuck."""
         platform = FakePlatform([update(1, "999", "let me in")])
         self._run(platform)
-        self.assertEqual(platform.pending(), [], "denied update was left on the queue")
+        self.assertEqual(platform.staged, 1,
+                         "the mark did not advance past a denied update")
 
     def test_a_denied_sender_does_not_block_allowed_mail_behind_it(self):
         """THE WEDGE. Denied first, allowed second, in one batch."""
@@ -122,7 +129,7 @@ class PollerBehaviour(unittest.TestCase):
         letters = list(self.inbox.glob("*.md"))
         self.assertEqual(len(letters), 1)
         self.assertIn("real message", letters[0].read_text(encoding="utf-8"))
-        self.assertEqual(platform.pending(), [], "queue still holds updates")
+        self.assertEqual(platform.staged, 2, "the mark did not cover the batch")
 
     def test_a_denied_newest_update_does_not_stall_the_next_poll(self):
         """Allowed first, denied newest - the bad ordering. If the deny is not
@@ -132,7 +139,8 @@ class PollerBehaviour(unittest.TestCase):
             update(2, "999", "let me in"),
         ])
         self._run(platform)
-        self.assertEqual(platform.pending(), [], "denied newest update wedged the queue")
+        self.assertEqual(platform.staged, 2, "the mark stopped at the denied update")
+        platform.confirm()
         self._run(platform)
         self.assertEqual(len(list(self.inbox.glob("*.md"))), 1, "republished on re-poll")
 

@@ -115,6 +115,14 @@ EXTRA = {
         BRIDGE, "tests.test_bridge",
         '        _record_ring(root, "failing", f"{type(exc).__name__}: {exc}")',
         "        pass"),
+    "offset persists only after the platform accepts": (
+        TG, "tests.test_telegram_adapter",
+        "            self._save_offset()\n        except urllib.error.HTTPError as exc:",
+        "        except urllib.error.HTTPError as exc:"),
+    "a transient network failure is not fatal": (
+        TG, "tests.test_telegram_adapter",
+        '        except urllib.error.URLError as exc:\n            raise TransientFailure(f"network: {exc.reason}") from None\n\n        updates = []',
+        "        finally:\n            pass\n\n        updates = []"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

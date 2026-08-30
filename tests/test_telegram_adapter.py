@@ -78,6 +78,31 @@ class Fetch(unittest.TestCase):
                 self.client.fetch(offset=None)
         self.assertNotIsInstance(caught.exception, loop.PlatformConflict)
 
+    def test_a_transient_network_failure_is_not_fatal(self):
+        """A connection reset is normal on a long poll. It must be a condition
+        the caller can ride out, not a traceback that kills the bridge.
+
+        Found by a real reset during a live run, not by reasoning: fetch
+        classified HTTPError and let URLError escape raw.
+        """
+        with mock.patch.object(api, "_request", side_effect=urllib.error.URLError("reset")):
+            with self.assertRaises(api.TransientFailure):
+                self.client.fetch(offset=None)
+
+    def test_a_transient_failure_is_not_mistaken_for_a_conflict(self):
+        """Yielding on a network blip would hand the token away for no reason."""
+        with mock.patch.object(api, "_request", side_effect=urllib.error.URLError("reset")):
+            with self.assertRaises(Exception) as caught:
+                self.client.fetch(offset=None)
+        self.assertNotIsInstance(caught.exception, loop.PlatformConflict)
+
+    def test_a_transient_confirm_failure_does_not_persist_the_offset(self):
+        client = self._client() if hasattr(self, "_client") else api.Telegram("123:FAKE")
+        client.ack(7)
+        with mock.patch.object(api, "_request", side_effect=urllib.error.URLError("reset")):
+            with self.assertRaises(api.TransientFailure):
+                client.confirm()
+
     def test_the_offset_is_sent_as_last_acked_plus_one(self):
         """The platform consumes everything below the mark, so the mark must be
         the next wanted id - not the last seen one."""
@@ -110,6 +135,8 @@ class OffsetIsDurableAndTransmitted(unittest.TestCase):
     def test_the_offset_survives_a_restart(self):
         client = self._client()
         client.ack(7)
+        with mock.patch.object(api, "_request", return_value={"ok": True, "result": []}):
+            client.confirm()
         with mock.patch.object(api, "_request", return_value={"ok": True, "result": []}) as req:
             self._client().fetch(offset=None)
         self.assertEqual(req.call_args[0][2]["offset"], 8,
@@ -124,6 +151,30 @@ class OffsetIsDurableAndTransmitted(unittest.TestCase):
             client.confirm()
         self.assertTrue(req.called, "exited without telling the platform anything")
         self.assertEqual(req.call_args[0][2]["offset"], 8)
+
+    def test_a_failed_confirm_does_not_persist_the_offset(self):
+        """PI'S BLOCK. Persisting before the platform has been told is silent
+        loss: the mark says consumed, the platform still holds the updates, and
+        the next start transmits an offset that makes the platform skip
+        messages nobody ever received.
+
+        Persist only what the platform has ACCEPTED.
+        """
+        client = self._client()
+        client.ack(7)
+        with mock.patch.object(api, "_request", side_effect=urllib.error.URLError("down")):
+            with self.assertRaises(Exception):
+                client.confirm()
+        self.assertFalse(self.offset_path.exists(),
+                         "persisted a high-water mark the platform never accepted")
+
+    def test_the_offset_persists_only_after_a_successful_confirm(self):
+        client = self._client()
+        client.ack(7)
+        self.assertFalse(self.offset_path.exists(), "persisted before confirming")
+        with mock.patch.object(api, "_request", return_value={"ok": True, "result": []}):
+            client.confirm()
+        self.assertTrue(self.offset_path.exists(), "did not persist after confirming")
 
     def test_confirming_with_nothing_acked_makes_no_call(self):
         client = self._client()
