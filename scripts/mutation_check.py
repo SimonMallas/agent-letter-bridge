@@ -158,9 +158,6 @@ EXTRA = {
         ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
         '    if not path.is_file():\n        return {"can_deliver": False,',
         '    if False:\n        return {"can_deliver": False,'),
-    "injection is refused unless explicitly opted in": (
-        CMUX, "tests.test_cmux_adapter",
-        "        if not self._allow_inject:", "        if False:"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

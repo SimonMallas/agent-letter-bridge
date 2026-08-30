@@ -116,3 +116,10 @@ The token appears in no log line, no error message, no process argument, and no
 test fixture.
 
 **Identity uncertainty fails closed.**
+
+**The ring targets a pane nobody types in.** An operator requirement, not a
+software guarantee — stated here because it is load-bearing and unenforceable.
+A doorbell injected into a pane holding unfinished typing appends to it and
+submits the combination. Whether a human is about to type cannot be observed
+from outside the terminal, and clearing the line first does not work. The
+hazard is removed by choosing the pane, not by detecting the state.
