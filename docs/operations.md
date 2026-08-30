@@ -2,6 +2,56 @@
 
 Written for a stranger at 3am with nobody to ask.
 
+## Before Day-0: the four things you need
+
+None of these are in the repo, and the bridge cannot work without them.
+
+**1. A bot token.** In your chat app, talk to `@BotFather`, send `/newbot`, and
+follow the prompts. It gives you a token like `123456789:AA...`. **If you
+inherited a bot from anywhere, revoke and re-issue the token** — Day-0 step 3
+explains why.
+
+**2. Your own chat id.** Send your new bot any message, then run this once. It
+is read-only and consumes nothing:
+
+```sh
+curl -s "https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates" \
+  | grep -o '"id":[-0-9]*' | head -1
+```
+
+That number is your chat id, and it is the only sender the bridge will accept
+until you add more.
+
+**3. An allowlist file.** This is the one thing that stops a stranger reaching
+your agents, and **the bridge delivers nothing until it exists.** Create
+`allowlist.json` in your state directory:
+
+```json
+{"chats": ["YOUR_CHAT_ID"]}
+```
+
+The list is exact-match and fail-closed: **missing, empty, malformed, or the
+wrong shape all deny everything**, and there is no setting that opens it. If
+nothing arrives, run `alb --doctor` — it says plainly whether the allowlist is
+the reason.
+
+**4. A surface id for the ring.** The pane your agent sits in, as your
+multiplexer names it. In cmux:
+
+```sh
+cmux --id-format uuids tree --all
+```
+
+Take the id of the pane holding your agent. It is pinned, so **re-pin it after
+any multiplexer restart** — see below.
+
+Your `bridge.env`, mode `600`:
+
+```
+ALB_TOKEN=123456789:AA...
+ALB_SURFACE=THE-ID-FROM-ABOVE
+```
+
 ## Day-0, in order
 
 The ordering is the content. Do these in sequence.

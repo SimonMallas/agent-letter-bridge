@@ -69,6 +69,54 @@ class LocalConsumerProbe(unittest.TestCase):
             self.assertIn("no lock", checks.lock_state(pathlib.Path(tmp)).lower())
 
 
+class DeliverabilityIsNotHealth(unittest.TestCase):
+    """A bridge with no allowlist runs perfectly and delivers nothing, ever.
+
+    Found by installing from a fresh clone as a stranger would: with no
+    allowlist the bridge exits 0, status reports ok, and the doctor reports no
+    problems. Meanwhile operations.md teaches that silence is the deny path
+    working correctly - so every signal available tells the operator their
+    broken install is fine.
+
+    Fail-closed stays. What changes is that the operator is TOLD why nothing
+    will arrive.
+    """
+
+    def test_a_missing_allowlist_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = checks.deliverability(pathlib.Path(tmp))
+            self.assertFalse(report["can_deliver"])
+            self.assertIn("no allowlist", report["reason"].lower())
+
+    def test_an_empty_allowlist_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "allowlist.json").write_text('{"chats": []}', encoding="utf-8")
+            report = checks.deliverability(root)
+            self.assertFalse(report["can_deliver"])
+            self.assertIn("empty", report["reason"].lower())
+
+    def test_a_malformed_allowlist_is_reported_as_such(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "allowlist.json").write_text("{not json", encoding="utf-8")
+            report = checks.deliverability(root)
+            self.assertFalse(report["can_deliver"])
+
+    def test_a_populated_allowlist_can_deliver(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "allowlist.json").write_text('{"chats": ["111"]}', encoding="utf-8")
+            report = checks.deliverability(root)
+            self.assertTrue(report["can_deliver"])
+
+    def test_the_summary_says_it_loudly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            text = checks.summary([], self_pid=1, root=pathlib.Path(tmp),
+                                  environ={"PATH": "/bin"})
+            self.assertIn("NOTHING WILL BE DELIVERED", text)
+
+
 class DaemonContext(unittest.TestCase):
     def test_it_reports_the_interpreter_actually_running(self):
         """The failure that costs a morning: a service manager resolves a

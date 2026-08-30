@@ -10,6 +10,7 @@ of the conflict you were on requires repeating it - the loop the boundary
 forbids.
 """
 
+import json
 import pathlib
 import shutil
 import sys
@@ -138,12 +139,52 @@ def daemon_context(environ):
     }
 
 
+def deliverability(root):
+    """Can this bridge deliver anything at all?
+
+    A missing or empty allowlist is CORRECT fail-closed behaviour and also the
+    state in which the bridge runs perfectly and delivers nothing forever. Every
+    other signal - exit code, status, this doctor - reports health, while the
+    operations doc teaches that silence is the deny path working. The operator
+    is then told, by everything available, that their broken install is fine.
+
+    So say it. The security posture does not change; the silence stops being
+    unexplained.
+    """
+    path = pathlib.Path(root) / "allowlist.json"
+    if not path.is_file():
+        return {"can_deliver": False,
+                "reason": f"no allowlist at {path}: nothing will ever be delivered"}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"can_deliver": False,
+                "reason": f"allowlist at {path} is unreadable or malformed"}
+    chats = data.get("chats") if isinstance(data, dict) else None
+    if not isinstance(chats, list) or not chats:
+        return {"can_deliver": False,
+                "reason": f"allowlist at {path} is empty: every sender is denied"}
+    return {"can_deliver": True, "reason": f"{len(chats)} chat(s) permitted"}
+
+
 def summary(process_listing, self_pid, root, environ):
     """The operator-facing report. States limits as plainly as findings."""
     competing = local_consumers(process_listing, self_pid)
     context = daemon_context(environ)
 
+    delivery = deliverability(root)
+
     lines = ["agent-letter-bridge doctor", ""]
+    if not delivery["can_deliver"]:
+        lines.append("*** NOTHING WILL BE DELIVERED ***")
+        lines.append(f"  {delivery['reason']}")
+        lines.append("  This is fail-closed behaviour working correctly, and it is")
+        lines.append("  also indistinguishable from a dead bot. Add your chat id to")
+        lines.append("  the allowlist - see docs/operations.md, Day-0.")
+        lines.append("")
+    else:
+        lines.append(f"DELIVERY: {delivery['reason']}")
+        lines.append("")
     lines.append("TOKEN")
     lines.append(f"  this tool is not holding a bot token : "
                  f"{env_is_token_free(environ)}")

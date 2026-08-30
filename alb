@@ -74,7 +74,12 @@ def main(argv=None):
     # Status reads files only: no config, no token, no network. It is the
     # thing you run when you want to know whether to worry.
     if args.status:
+        from doctor import checks as _checks
         from watchdog import health
+
+        delivery = _checks.deliverability(pathlib.Path(args.root))
+        if not delivery["can_deliver"]:
+            print(f"DELIVERY: NOTHING WILL BE DELIVERED - {delivery['reason']}")
         state = pathlib.Path(args.root) / "state"
         bridge = health.status(state / "health.json", max_age=120)
         print(f"bridge : {bridge.state} - {bridge.reason}")
@@ -95,7 +100,8 @@ def main(argv=None):
             print(f"ring   : {ring['state']} - {ring['reason']}")
         else:
             print("ring   : unknown - no ring has been attempted yet")
-        return 0 if bridge.state == "ok" else 1
+        # A bridge that cannot deliver is not ok, however fresh its heartbeat.
+        return 0 if (bridge.state == "ok" and delivery["can_deliver"]) else 1
 
     # Doctor runs BEFORE the config is loaded and never reads the token: it is
     # the tool you reach for when the bridge will not start.

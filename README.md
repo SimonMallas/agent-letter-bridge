@@ -56,9 +56,16 @@ The invariants are the product; the code is how they are kept.
 ## Run it
 
 ```sh
-chmod 600 bridge.env          # ALB_TOKEN=... ALB_SURFACE=...
 ./alb --config bridge.env --root ~/.alb --once
 ```
+
+**Read [`docs/operations.md`](docs/operations.md) first.** You need four things
+that are not in this repo — a bot token, your own chat id, an `allowlist.json`,
+and a surface id for the ring — and **the bridge delivers nothing until the
+allowlist exists**. That doc tells you how to get each one.
+
+If nothing arrives, run `alb --doctor --root ~/.alb`. A fail-closed allowlist is
+indistinguishable from a dead bot, so the doctor tells you which you have.
 
 It refuses to start on a missing, world-readable or incomplete config. That is
 deliberate: a bridge that starts wrong is harder to diagnose at 3am than one

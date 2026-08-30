@@ -151,6 +151,13 @@ EXTRA = {
         ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
         '        if argv and pathlib.PurePath(argv[0]).name == "env":',
         "        if False:"),
+    "an undeliverable bridge is not reported as healthy": (
+        ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
+        '        lines.append("*** NOTHING WILL BE DELIVERED ***")', "        pass"),
+    "a missing allowlist means it cannot deliver": (
+        ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
+        '    if not path.is_file():\n        return {"can_deliver": False,',
+        '    if False:\n        return {"can_deliver": False,'),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
