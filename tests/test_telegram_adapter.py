@@ -1,6 +1,7 @@
 """Telegram adapter: the only place that talks to the platform."""
 import json
 import pathlib
+import tempfile
 import sys
 import unittest
 import urllib.error
@@ -65,6 +66,51 @@ class Fetch(unittest.TestCase):
         with mock.patch.object(api, "_request", return_value={"ok": True, "result": []}) as req:
             self.client.fetch(offset=None)
         self.assertEqual(req.call_args[0][2]["offset"], 8)
+
+
+class OffsetIsDurableAndTransmitted(unittest.TestCase):
+    """Acking in memory is not consuming.
+
+    The platform only forgets an update when the advanced offset is SENT. A
+    process that acks internally and exits has consumed nothing, and a process
+    that keeps the mark only in memory re-reads everything after a restart.
+    Both were true of the first version and neither was visible to a fake that
+    treated ack() as immediately effective.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.offset_path = pathlib.Path(self.tmp.name) / "offset.json"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _client(self):
+        return api.Telegram("123:FAKE", offset_path=self.offset_path)
+
+    def test_the_offset_survives_a_restart(self):
+        client = self._client()
+        client.ack(7)
+        with mock.patch.object(api, "_request", return_value={"ok": True, "result": []}) as req:
+            self._client().fetch(offset=None)
+        self.assertEqual(req.call_args[0][2]["offset"], 8,
+                         "a restarted process re-read consumed updates")
+
+    def test_confirming_transmits_the_offset_to_the_platform(self):
+        """A run that ends without transmitting has consumed nothing, however
+        many letters it wrote."""
+        client = self._client()
+        client.ack(7)
+        with mock.patch.object(api, "_request", return_value={"ok": True, "result": []}) as req:
+            client.confirm()
+        self.assertTrue(req.called, "exited without telling the platform anything")
+        self.assertEqual(req.call_args[0][2]["offset"], 8)
+
+    def test_confirming_with_nothing_acked_makes_no_call(self):
+        client = self._client()
+        with mock.patch.object(api, "_request") as req:
+            client.confirm()
+        req.assert_not_called()
 
 
 class Send(unittest.TestCase):

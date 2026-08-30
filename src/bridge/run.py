@@ -68,6 +68,14 @@ def run_once(platform, transport, surface, root):
         processed=root / "processed",
     )
 
+    # Tell the platform only now: every letter in this batch is durably on
+    # disk, so it is safe for the platform to forget them. Acking internally
+    # was never consumption - a cycle that ends without this re-reads
+    # everything on the next poll.
+    confirm = getattr(platform, "confirm", None)
+    if confirm is not None:
+        confirm()
+
     if not published:
         return published
 

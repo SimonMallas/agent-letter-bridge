@@ -40,7 +40,8 @@ def main(argv=None):
     for name in ("inbox", "processed", "state"):
         (root / name).mkdir(parents=True, exist_ok=True)
 
-    platform = api.Telegram(config["ALB_TOKEN"])
+    platform = api.Telegram(config["ALB_TOKEN"],
+                            offset_path=root / "state" / "offset.json")
     transport = cmux_transport.Cmux()
     surface = config["ALB_SURFACE"]
 

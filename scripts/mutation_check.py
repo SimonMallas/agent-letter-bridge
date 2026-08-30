@@ -100,6 +100,12 @@ EXTRA = {
     "a dead notifier never costs a letter": (
         BRIDGE, "tests.test_bridge",
         "    except Exception:\n        # Letters are authoritative", "    except ZeroDivisionError:\n        # Letters are authoritative"),
+    "the offset survives a restart": (
+        TG, "tests.test_telegram_adapter",
+        "            self._save_offset()", "            pass"),
+    "a cycle transmits consumption to the platform": (
+        BRIDGE, "tests.test_bridge",
+        "    if confirm is not None:\n        confirm()", "    if False:\n        confirm()"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

@@ -73,6 +73,15 @@ class FakePlatform:
             self.acked = update_id
 
 
+class ConfirmingPlatform(FakePlatform):
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.confirmed = False
+
+    def confirm(self):
+        self.confirmed = True
+
+
 class FakeTransport:
     def __init__(self):
         self.rung = []
@@ -130,6 +139,21 @@ class OneCycle(unittest.TestCase):
         with self.assertRaises(loop.PlatformConflict):
             self._cycle(FakePlatform(conflict=True), transport)
         self.assertEqual(transport.rung, [])
+
+    def test_a_cycle_confirms_consumption_after_the_letters_are_durable(self):
+        """Acking internally is not consuming. A cycle that ends without
+        telling the platform has consumed nothing and will re-read everything
+        on the next poll."""
+        platform = ConfirmingPlatform([
+            {"update_id": 1, "chat_id": "111", "text": "hello"}])
+        self._cycle(platform, FakeTransport())
+        self.assertTrue(platform.confirmed, "cycle ended without confirming")
+
+    def test_a_conflict_confirms_nothing(self):
+        platform = ConfirmingPlatform(conflict=True)
+        with self.assertRaises(loop.PlatformConflict):
+            self._cycle(platform, FakeTransport())
+        self.assertFalse(platform.confirmed, "confirmed while yielding")
 
     def test_a_ring_failure_does_not_lose_the_letter(self):
         """Letters are authoritative; rings only accelerate. A dead notifier
