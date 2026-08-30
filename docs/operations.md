@@ -102,6 +102,17 @@ dies, and it looks exactly like nothing being wrong.
 After any multiplexer restart: get the current surface id, update the env file,
 restart the bridge, and send yourself one message to confirm the knock.
 
+## Do not tune the poll interval
+
+`--interval` is the pause between cycles, not how fast messages arrive. **The
+wait is the long poll**: the platform holds the connection open until a message
+appears, so a message is delivered the moment it exists regardless of this
+number.
+
+Shrinking it does not make the bridge faster. It makes it hammer the API for
+nothing, and it is the first thing an operator reaches for when something feels
+slow. If delivery is slow, the cause is elsewhere — check `alb --status`.
+
 ## Is anything wrong? Read-only, no token
 
 ```sh
@@ -127,6 +138,10 @@ reads files only — no config, no token, no network.
 The shipped entry point uses `#!/usr/bin/env python3` and calls `cmux` by name.
 Neither is safe under a service manager, which does not share your shell's
 `PATH` — you will get the wrong interpreter, or no `cmux` at all.
+
+**Copy-paste unit files ship with this repo**: `examples/launchd.plist` and
+`examples/systemd.user.service`. Use those rather than transcribing the
+paragraph below — strangers copy files, not prose.
 
 In your unit file, invoke the absolute interpreter and the absolute script:
 

@@ -143,6 +143,10 @@ EXTRA = {
     "canary fixtures never enter the inbox": (
         ROOT / "src" / "canary" / "probe.py", "tests.test_canary",
         '    fixtures = root / "state" / "canary"', '    fixtures = root / "inbox"'),
+    "the credential check is scoped to this tool": (
+        ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor",
+        "        key.upper().startswith(_OUR_PREFIX)\n        and any(",
+        "        any("),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

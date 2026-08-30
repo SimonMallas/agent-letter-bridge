@@ -14,12 +14,26 @@ import pathlib
 import shutil
 import sys
 
+# Scoped to THIS TOOL'S variables. The claim being made is "alb is not holding
+# the bot token", not "the surrounding shell contains no secrets" - an operator
+# exports AWS keys and GitHub tokens as a matter of course, and a check that
+# fails in almost every real environment is a wolf. An operator who sees one
+# learns to ignore the whole report.
+_OUR_PREFIX = "ALB_"
 _TOKEN_HINTS = ("token", "secret", "api_key", "apikey")
 
 
 def env_is_token_free(environ):
-    """True if no credential-shaped variable is present in this process."""
-    return not any(hint in key.lower() for key in environ for hint in _TOKEN_HINTS)
+    """True if THIS TOOL is not holding a credential.
+
+    Only ALB_-prefixed variables count. Whatever else the operator's shell
+    exports is their business and not evidence about the doctor.
+    """
+    return not any(
+        key.upper().startswith(_OUR_PREFIX)
+        and any(hint in key.lower() for hint in _TOKEN_HINTS)
+        for key in environ
+    )
 
 
 def webhook_check_command():
@@ -122,7 +136,10 @@ def summary(process_listing, self_pid, root, environ):
 
     lines = ["agent-letter-bridge doctor", ""]
     lines.append("TOKEN")
-    lines.append(f"  this process holds no credential : {env_is_token_free(environ)}")
+    lines.append(f"  this tool is not holding a bot token : "
+                 f"{env_is_token_free(environ)}")
+    lines.append("  (only ALB_ variables are checked; your shell's own secrets")
+    lines.append("   are none of the doctor's business)")
     lines.append("")
     lines.append("LOCAL SINGLE-CONSUMER PROBE")
     if competing:

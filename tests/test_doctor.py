@@ -11,10 +11,33 @@ from doctor import checks  # noqa: E402
 
 class DoctorBoundary(unittest.TestCase):
     def test_it_asserts_its_own_environment_holds_no_token(self):
-        """Hermes' constraint, promoted from policy to a testable invariant."""
+        """Hermes' constraint, promoted from policy to a testable invariant.
+
+        Scoped to THIS TOOL's variables. A TELEGRAM_BOT_TOKEN exported by the
+        operator's shell for some other purpose is not evidence about the
+        doctor, and reporting it as our failure is the wolf that teaches an
+        operator to ignore the report.
+        """
         self.assertTrue(checks.env_is_token_free({"HOME": "/x", "PATH": "/bin"}))
-        self.assertFalse(checks.env_is_token_free({"TELEGRAM_BOT_TOKEN": "123:abc"}))
+        self.assertTrue(checks.env_is_token_free({"TELEGRAM_BOT_TOKEN": "123:abc"}))
         self.assertFalse(checks.env_is_token_free({"ALB_TOKEN": "123:abc"}))
+
+    def test_an_operators_own_shell_secrets_are_not_reported_as_our_failure(self):
+        """Found by running the doctor in a normal shell, where it reported a
+        credential and alarmed about nothing.
+
+        The claim is that THIS TOOL did not load the bot token - not that the
+        surrounding shell is free of every secret its owner happens to export.
+        A check that fails in almost every real environment is a wolf, and an
+        operator who sees one learns to ignore the report.
+        """
+        shell_env = {"AWS_SECRET_ACCESS_KEY": "x", "GITHUB_TOKEN": "y", "PATH": "/bin"}
+        self.assertTrue(checks.env_is_token_free(shell_env))
+
+    def test_a_credential_this_tool_loaded_is_reported(self):
+        """The claim that matters: alb itself is not holding the bot token."""
+        self.assertFalse(checks.env_is_token_free({"ALB_TOKEN": "1:abc"}))
+        self.assertFalse(checks.env_is_token_free({"ALB_BOT_SECRET": "x"}))
 
     def test_it_prints_the_webhook_command_rather_than_running_it(self):
         """The one remote read is performed by the operator's own shell."""

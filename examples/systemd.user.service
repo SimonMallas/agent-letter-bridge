@@ -1,0 +1,37 @@
+# Linux systemd USER unit for agent-letter-bridge.
+#
+# EVERY PATH IS ABSOLUTE ON PURPOSE. systemd does not share your shell's PATH,
+# so a version manager is invisible to it and a bare `python3` may resolve to a
+# different interpreter than the one you tested with. That failure looks like
+# "the bot is dead".
+#
+# Run `alb --doctor --root ...` to see which interpreter actually resolves and
+# whether cmux can be found.
+#
+# Install: ~/.config/systemd/user/agent-letter-bridge.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now agent-letter-bridge
+
+[Unit]
+Description=Agent Letter Bridge
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /ABSOLUTE/PATH/TO/agent-letter-bridge/alb \
+    --config /ABSOLUTE/PATH/TO/bridge.env \
+    --root /ABSOLUTE/PATH/TO/state
+
+# The notifier shells out to cmux, so its directory must be on PATH.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+
+# RESTART ON FAILURE ONLY.
+#
+# A platform conflict makes the bridge exit 0 so the token's holder keeps
+# running. That is a deliberate yield and must NOT be restarted into a fight
+# over the token. The consequence is that a clean stop stays stopped.
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

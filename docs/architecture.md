@@ -36,3 +36,25 @@ without reading a dependency tree, and a mutation test can break exactly one of
 them and watch a test fail.
 
 The filesystem is also the history. There is no history UI and will not be one.
+
+
+## Deliberately not built
+
+Recorded so these are visible as decisions rather than gaps, and so nobody
+adds them believing they were simply forgotten.
+
+**No watchdog daemon.** `alb --status` reports; nothing restarts the bridge
+automatically. Restarting belongs to the service manager. A process that
+supervises the bridge is the monitor gaining authority over the thing it
+monitors — the rule against that exists because we broke it once.
+
+**No spawn-on-mail notifier in v0.1.** Waking an idle agent by launching a
+headless run is a legitimate peer adapter, and it is specified — constant argv,
+coalescing, an explicit privilege expansion. It is not in v0.1, and it must
+never be a silent fallback when the live-pane ring fails: that is the emergency
+hatch reimplemented in software.
+
+**No auto-retry of an ambiguous send.** There is no idempotency key, so a retry
+cannot be made safe. A human decides. This is not a gap to close later.
+
+**No history UI.** The filesystem is the history.

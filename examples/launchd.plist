@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS launchd unit for agent-letter-bridge.
+
+  EVERY PATH HERE IS ABSOLUTE ON PURPOSE. launchd does not share your shell's
+  PATH, so a version manager (nvm, pyenv, asdf) is invisible to it and a bare
+  `python3` may resolve to a different interpreter than the one you tested
+  with. That failure looks like "the bot is dead" and costs a morning.
+
+  Run `alb --doctor --root ...` to see which interpreter is actually resolving
+  and whether cmux can be found.
+
+  Replace: /ABSOLUTE/PATH/TO with your own paths, and the interpreter with the
+  output of `which python3` in a shell where the bridge works.
+
+  Load:   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/agent-letter-bridge.plist
+  Unload: launchctl bootout gui/$(id -u)/agent-letter-bridge
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>agent-letter-bridge</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/python3</string>
+    <string>/ABSOLUTE/PATH/TO/agent-letter-bridge/alb</string>
+    <string>--config</string>
+    <string>/ABSOLUTE/PATH/TO/bridge.env</string>
+    <string>--root</string>
+    <string>/ABSOLUTE/PATH/TO/state</string>
+  </array>
+
+  <!-- The notifier shells out to cmux, so its directory must be here. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+
+  <!-- RESTART ON CRASH ONLY.
+
+       A platform conflict makes the bridge exit 0 so the token's holder keeps
+       running. That is a deliberate yield, not a failure, and it must NOT be
+       restarted into a fight over the token. The consequence is that a clean
+       stop stays stopped - including one you did not intend. -->
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/ABSOLUTE/PATH/TO/state/alb.log</string>
+  <key>StandardErrorPath</key>
+  <string>/ABSOLUTE/PATH/TO/state/alb.log</string>
+</dict>
+</plist>

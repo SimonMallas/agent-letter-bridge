@@ -15,8 +15,12 @@ from poller import loop  # noqa: E402
 from send import reply  # noqa: E402
 
 
-def http_error(code, body=b'{"description":"x"}'):
-    return urllib.error.HTTPError("u", code, "err", {}, None)
+def http_error(code):
+    """HTTPError holds a file object, so an unclosed one warns at teardown.
+    Warnings in a suite train you to ignore its output."""
+    err = urllib.error.HTTPError("u", code, "err", {}, None)
+    err.close()
+    return err
 
 
 class Fetch(unittest.TestCase):
