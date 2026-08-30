@@ -1,13 +1,29 @@
 #!/usr/bin/env python3
-"""Agent Letter Bridge — run the inbound bridge.
+"""Agent Letter Bridge - your agents, reachable from your phone, as durable mail.
 
-    alb --config ~/.alb/bridge.env --root ~/.alb
+A message from your chat app becomes a durable file on disk BEFORE it is
+acknowledged and BEFORE any agent is notified. The file is the source of truth;
+the notification only makes it faster.
 
-Refuses to start on a missing, unsafe or incomplete config. That is deliberate:
-a bridge that starts wrong is harder to diagnose at 3am than one that will not
-start at all.
+RUN IT
+  alb --config bridge.env --root ~/.alb        both flags are required
+  The env file must be mode 600 and set ALB_TOKEN and ALB_SURFACE.
+
+WHEN SOMETHING IS WRONG
+  alb --status   should I worry? reads files only, no token, no network
+  alb --doctor   what is my environment doing? no token, no platform calls
+  alb --canary   is the send path alive? sends to your own chat, then you
+                 confirm it arrived - nothing here can prove that for you
+
+REPLY TO A STORED LETTER
+  alb --reply-to <letter-id> --text "..."
+
+The bridge exits 0 on a platform conflict: that is a deliberate yield so the
+token's holder keeps running, not a failure. Under restart-on-crash-only
+supervision it will stay stopped, which is intended. See docs/operations.md.
 """
 import argparse
+import contextlib
 import pathlib
 import sys
 import time
@@ -23,8 +39,23 @@ from poller import loop  # noqa: E402
 from send import reply  # noqa: E402
 
 
+@contextlib.contextmanager
+def lock_guard(lock):
+    """Release the singleton lock on any exit path.
+
+    The kernel would release it anyway when the process dies; this removes the
+    question rather than relying on that.
+    """
+    try:
+        yield
+    finally:
+        lock.__exit__(None, None, None)
+
+
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="alb", description=__doc__)
+    parser = argparse.ArgumentParser(
+        prog="alb", description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", default="", help="path to the env file (mode 600)")
     parser.add_argument("--root", required=True, help="state directory")
     parser.add_argument("--once", action="store_true", help="one cycle, then exit")
@@ -47,6 +78,16 @@ def main(argv=None):
         state = pathlib.Path(args.root) / "state"
         bridge = health.status(state / "health.json", max_age=120)
         print(f"bridge : {bridge.state} - {bridge.reason}")
+        # The canary is the only evidence the OUTBOUND path is alive, and its
+        # last run is already a file. Without this line, --status answers
+        # "should I worry" for inbound and the ring but not for sending.
+        canary_log = state / "canary.log"
+        if canary_log.is_file():
+            lines = [l for l in canary_log.read_text(encoding="utf-8").splitlines() if l]
+            print(f"canary : {lines[-1] if lines else 'log is empty'}")
+        else:
+            print("canary : never run - the send path is unproven")
+
         ring_path = state / "ring-health.json"
         if ring_path.is_file():
             import json as _json
@@ -132,6 +173,11 @@ def main(argv=None):
         print(f"alb: {exc}", file=sys.stderr)
         return 4
 
+    with lock_guard(lock):
+        return _poll_forever(platform, transport, surface, root, args)
+
+
+def _poll_forever(platform, transport, surface, root, args):
     while True:
         try:
             published = run.run_once(platform, transport, surface, root)
@@ -156,7 +202,10 @@ def main(argv=None):
             print(f"alb: {len(published)} letter(s)")
         if args.once:
             return 0
-        time.sleep(args.interval)
+        # NO SLEEP ON SUCCESS. getUpdates already blocked for up to the poll
+        # timeout waiting for a message, so a sleep here adds latency to every
+        # quiet cycle and buys nothing. The wait is the long poll. --interval
+        # is only the backoff after a transient failure.
 
 
 if __name__ == "__main__":

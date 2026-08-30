@@ -47,6 +47,13 @@ class LocalConsumerProbe(unittest.TestCase):
                 self.assertEqual(
                     len(checks.local_consumers([f"501 900 {command}"], 999)), 1)
 
+    def test_an_env_prefixed_invocation_is_found(self):
+        """/usr/bin/env python3 /path/alb is a real unit-file and wrapper
+        shape. Skipping `env` keeps the no-cry-wolf property while closing the
+        miss: a diagnostic that misses is the other half of one that shouts."""
+        listing = ["501 900 /usr/bin/env python3 /opt/alb --root /a"]
+        self.assertEqual(len(checks.local_consumers(listing, 999)), 1)
+
     def test_it_reports_nothing_when_nothing_competes(self):
         self.assertEqual(checks.local_consumers(["501 900 /usr/bin/vim x"], 999), [])
 

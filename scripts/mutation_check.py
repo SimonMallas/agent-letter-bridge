@@ -128,7 +128,7 @@ EXTRA = {
         "            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)", "            pass"),
     "the probe matches an executable, not a mention": (
         ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
-        "        head = argv[:2]", "        head = argv"),
+        "        head = argv_for_match[:2]", "        head = argv_for_match"),
     "the doctor names what it cannot prove": (
         ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
         '    lines.append("  A consumer on ANOTHER MACHINE is not detectable from here.")',
@@ -147,6 +147,10 @@ EXTRA = {
         ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor",
         "        key.upper().startswith(_OUR_PREFIX)\n        and any(",
         "        any("),
+    "the probe finds an env-prefixed invocation": (
+        ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
+        '        if argv and pathlib.PurePath(argv[0]).name == "env":',
+        "        if False:"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

@@ -9,8 +9,10 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 sys.path.insert(0, str(ROOT))
 from bridge import run  # noqa: E402
+from fake_platform import FakePlatform  # noqa: E402
 from poller import loop  # noqa: E402
 
 
@@ -54,45 +56,6 @@ class Config(unittest.TestCase):
         self._write("ALB_TOKEN=1:x\nALB_SURFACE=SURFACE-1\n")
         config = run.load_config(self.path)
         self.assertEqual(config["ALB_SURFACE"], "SURFACE-1")
-
-
-class FakePlatform:
-    """Models the REAL contract, in which three things are distinct:
-
-      ack()     RECORDS a high-water mark locally. Consumes nothing.
-      confirm() TRANSMITS it. This is what makes the platform forget.
-      fetch()   returns everything above what has been CONFIRMED.
-
-    An earlier version consumed on ack(), which made the suite unable to
-    reproduce a live defect: a cycle that acked and exited had told the
-    platform nothing, and every test still passed. A double that collapses
-    recording into consuming cannot test consumption.
-    """
-
-    def __init__(self, updates=None, raise_conflict=False):
-        self.updates = list(updates or [])
-        self.raise_conflict = raise_conflict
-        self.staged = None      # ack()ed, not yet transmitted
-        self.confirmed = None   # what the platform has actually been told
-        self.fetch_count = 0
-
-    def fetch(self, offset=None):
-        if self.raise_conflict:
-            raise loop.PlatformConflict("another consumer holds this token")
-        self.fetch_count += 1
-        if self.confirmed is None:
-            return list(self.updates)
-        return [u for u in self.updates if u["update_id"] > self.confirmed]
-
-    def ack(self, update_id):
-        if self.staged is None or update_id > self.staged:
-            self.staged = update_id
-
-    def confirm(self):
-        self.confirmed = self.staged
-
-    def pending(self):
-        return self.fetch(None)
 
 
 class FakeTransport:

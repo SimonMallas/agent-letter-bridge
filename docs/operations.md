@@ -129,7 +129,9 @@ reads files only — no config, no token, no network.
 - **Conflict vs rate limit** — a conflict is another consumer; a rate limit is a
   definite refusal.
 - **Dead-letter table** — see below.
-- **How to stop it safely** — not `kill -9` unless you accept the lease TTL.
+- **How to stop it safely** — `kill -9` is safe for the lock. It is an
+  `flock`, released by the kernel when the process dies, so there is no lease
+  to expire and no stale lock file to clean up before restarting.
 - **Restart-on-crash-only means a clean kill stays down.** This surprises
   everyone once.
 

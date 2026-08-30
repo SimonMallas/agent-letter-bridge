@@ -90,7 +90,16 @@ def local_consumers(process_listing, self_pid):
         # heredoc - not run. Scanning the whole line makes the probe accuse
         # the shell that invoked it, which is how a diagnostic teaches an
         # operator to ignore it.
-        head = argv[:2]
+        # Skip a leading `env`: /usr/bin/env python3 /path/alb is a real
+        # unit-file and wrapper shape, and it pushes the executable out of the
+        # first two arguments. Skipping it closes the miss without widening
+        # the window - a diagnostic that MISSES is the other half of one that
+        # shouts, and both teach an operator to distrust the report.
+        if argv and pathlib.PurePath(argv[0]).name == "env":
+            argv_for_match = argv[1:]
+        else:
+            argv_for_match = argv
+        head = argv_for_match[:2]
         if any(pathlib.PurePath(arg).name in _BRIDGE_EXECUTABLES for arg in head):
             found.append(f"pid {pid}: {' '.join(argv[:6])}")
     return found
