@@ -25,14 +25,31 @@ from send import reply  # noqa: E402
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="alb", description=__doc__)
-    parser.add_argument("--config", required=True, help="path to the env file (mode 600)")
+    parser.add_argument("--config", default="", help="path to the env file (mode 600)")
     parser.add_argument("--root", required=True, help="state directory")
     parser.add_argument("--once", action="store_true", help="one cycle, then exit")
+    parser.add_argument("--doctor", action="store_true",
+                        help="local diagnostics; holds no token, makes no platform call")
     parser.add_argument("--reply-to", metavar="LETTER_ID",
                         help="reply to a stored letter instead of polling")
     parser.add_argument("--text", help="reply body, with --reply-to")
     parser.add_argument("--interval", type=float, default=2.0)
     args = parser.parse_args(argv)
+
+    # Doctor runs BEFORE the config is loaded and never reads the token: it is
+    # the tool you reach for when the bridge will not start.
+    if args.doctor:
+        import os
+        import subprocess
+        from doctor import checks
+        listing = subprocess.run(["ps", "-Ao", "uid,pid,command"],
+                                 capture_output=True, text=True).stdout.splitlines()
+        print(checks.summary(listing, os.getpid(), pathlib.Path(args.root), dict(os.environ)))
+        return 0
+
+    if not args.config:
+        print("alb: --config is required", file=sys.stderr)
+        return 2
 
     try:
         config = run.load_config(args.config)

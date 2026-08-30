@@ -126,6 +126,13 @@ EXTRA = {
     "one bridge per state directory": (
         ROOT / "src" / "bridge" / "singleton.py", "tests.test_singleton",
         "            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)", "            pass"),
+    "the probe matches an executable, not a mention": (
+        ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
+        "        head = argv[:2]", "        head = argv"),
+    "the doctor names what it cannot prove": (
+        ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
+        '    lines.append("  A consumer on ANOTHER MACHINE is not detectable from here.")',
+        "    pass"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

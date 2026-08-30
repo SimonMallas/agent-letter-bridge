@@ -1,25 +1,22 @@
 # doctor
 
 Local diagnostics. **No token. No platform calls. No `getUpdates` — ever.**
+The package has no network capability at all, and that is asserted by test.
 
-## What it does today
+## What it does
 
-- `env_is_token_free()` — asserts this process holds no credential-shaped
-  variable. Hermes' constraint, promoted from policy to a testable invariant.
-- `webhook_check_command()` — prints the read-only `getWebhookInfo` command for
-  the **operator** to run in their own shell. The doctor never runs it, because
-  running it would mean holding the token.
+- Asserts this process holds no credential-shaped variable.
+- Finds another bridge running locally, matching the EXECUTABLE at the head of
+  a command line rather than the name anywhere in it — a probe that cries wolf
+  teaches the operator to ignore it.
+- Reports the lock state without taking the lock; acquiring it would evict the
+  process it exists to observe.
+- Reports the interpreter actually running, whether `cmux` resolves, and
+  whether a version manager sits on `PATH` where a service manager cannot see it.
+- Prints the read-only `getWebhookInfo` command for the operator to run.
 
-## What it does NOT do yet — PARTIAL
+## What it states it cannot prove
 
-The local single-consumer conflict probe (process, service-manager, lock and
-cron inspection) and the daemon-context permission checks are **specified but
-not implemented**. Do not tell an operator the doctor will catch a stray poller
-or a `PATH`/volume problem. It will not, yet.
-
-## Why the boundary
-
-A doctor that polls is the very thing it exists to detect. A `getUpdates`
-conflict probe is forbidden and uninterpretable: an "ok" may mean it just
-terminated another consumer's in-flight request, and telling which side of the
-conflict you were on requires repeating it — the loop the boundary forbids.
+A consumer on another machine, and a webhook. Both are named in the report
+rather than left as an implied all-clear, because the difference between a
+limitation and a false assurance is whether you said it out loud.

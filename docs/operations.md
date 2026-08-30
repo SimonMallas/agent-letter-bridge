@@ -75,11 +75,22 @@ Two rules follow:
    service manager. Testing by hand exercises the wrong context and proves
    nothing.
 
-`doctor` holds no token and makes no platform calls. **PARTIAL:** it currently
-performs the token-free assertion and prints the webhook command. The local
-conflict probe and the daemon-context checks described above are specified but
-**not yet implemented** — do not rely on the doctor to catch a stray poller or a
-`PATH`/volume problem.
+`doctor` holds no token and makes no platform calls. Run it with:
+
+```sh
+alb --doctor --root /path/to/state
+```
+
+It reports: whether this process holds a credential, whether another bridge is
+running locally, the lock state, the interpreter actually in use, whether `cmux`
+resolves on this `PATH`, and a warning if a version manager is on `PATH` (a
+service manager will not see it).
+
+It then states plainly what it **cannot** prove: a consumer on another machine
+is not detectable from here, and neither is a webhook — that check is a
+read-only command it prints for you to run. If the token's history is unknown,
+revoke and re-issue it; that makes single-consumer true by construction, which
+no amount of probing can.
 
 ## After a multiplexer restart: RE-PIN THE SURFACE
 
