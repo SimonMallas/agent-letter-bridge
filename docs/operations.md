@@ -35,23 +35,19 @@ wrong shape all deny everything**, and there is no setting that opens it. If
 nothing arrives, run `alb --doctor` — it says plainly whether the allowlist is
 the reason.
 
-**4. A surface id for the ring — CHOOSE A PANE YOU DO NOT TYPE IN.**
+**4. A surface id for the ring.**
 
-This is the most important choice in the setup, and the code cannot check it
-for you.
+The ring types a line into the pane and presses return. If something is already
+half-typed there, the doorbell appends to it and submits the combination.
 
-The ring works by typing a line into the pane and pressing return. If you have
-half-typed something there, **the doorbell appends to it and submits the
-combination** — your unfinished command plus our line, run as one input at a
-moment you did not choose. This is not a bug to be fixed at the software layer:
-whether a human is about to type cannot be observed from outside the terminal,
-and clearing the line first does not work (`ctrl+u`, `ctrl+c` and `escape` are
-all accepted by the multiplexer and none of them clear the buffer).
+**In practice this rarely bites here, and the reason is structural:** the ring
+is triggered by *you sending a message*. If you are texting, you are not
+simultaneously typing at that prompt. Unlike an agent-to-agent doorbell, which
+can arrive at any moment, this one is caused by the human being elsewhere.
 
-**So remove the question instead of answering it: point `ALB_SURFACE` at a
-dedicated agent pane, never the prompt you work at.** That is also the natural
-arrangement — if you are messaging from your phone, you are not sitting at that
-prompt anyway. The pane your agent sits in, as your
+A dedicated agent pane removes even that, and is worth preferring if you have
+one. It is a recommendation, not a requirement — and worth knowing rather than
+worrying about. The pane your agent sits in, as your
 multiplexer names it. In cmux:
 
 ```sh

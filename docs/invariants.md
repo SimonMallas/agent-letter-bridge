@@ -117,9 +117,14 @@ test fixture.
 
 **Identity uncertainty fails closed.**
 
-**The ring targets a pane nobody types in.** An operator requirement, not a
-software guarantee — stated here because it is load-bearing and unenforceable.
-A doorbell injected into a pane holding unfinished typing appends to it and
-submits the combination. Whether a human is about to type cannot be observed
-from outside the terminal, and clearing the line first does not work. The
-hazard is removed by choosing the pane, not by detecting the state.
+**A ring appends to whatever is already typed in the pane.** Recorded as a
+known property, not a guarantee: a doorbell injected into a pane holding
+unfinished input submits the combination. Whether a human is about to type
+cannot be observed from outside the terminal, and clearing the line first does
+not work — `ctrl+u`, `ctrl+c` and `escape` are all accepted by the multiplexer
+and none of them clear the buffer.
+
+**The exposure here is lower than for an agent-to-agent doorbell**, and for a
+structural reason: this ring is caused by the operator sending a message, so it
+correlates with them being away from the keyboard. A dedicated agent pane
+removes the remaining case.
