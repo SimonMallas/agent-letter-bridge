@@ -102,6 +102,16 @@ dies, and it looks exactly like nothing being wrong.
 After any multiplexer restart: get the current surface id, update the env file,
 restart the bridge, and send yourself one message to confirm the knock.
 
+## Is anything wrong? Read-only, no token
+
+```sh
+alb --status --root /path/to/state
+```
+
+Reports bridge liveness (freshness of the heartbeat) and the last ring outcome.
+Exits non-zero when the bridge is not ok, so a monitor can use it directly. It
+reads files only — no config, no token, no network.
+
 ## 3am page
 
 - **Health reasons** — read the health file; freshness equals liveness.
@@ -162,9 +172,23 @@ already stated for the token. Anyone modifying the running bridge can send.
 
 ## Canary
 
-A local timer **you own** (cron, launchd, or a systemd user unit) runs the send
-helper against a fixture letter on disk and logs locally. You confirm receipt in
-the app.
+A local timer **you own** (cron, launchd, or a systemd user unit) runs:
+
+```sh
+alb --config /path/to/bridge.env --root /path/to/state --canary
+```
+
+It sends to your own allowlisted chat through the **real** send path — allowlist,
+claim ledger, platform — because a canary that bypasses those tests nothing worth
+testing. It logs to `state/canary.log`, and it refuses rather than inventing a
+destination if no chat is allowlisted.
+
+**You confirm receipt in the app.** Nothing here can prove the message arrived,
+only that the send path accepted it, which is why the confirmation is a human
+step and stays one.
+
+The canary's fixture letter lives in `state/canary/`, never the inbox: a fixture
+is not mail and must never be swept or acted on as though a person sent it.
 
 A missed week does not reset anyone's calendar — it means you **lack evidence the
 send path is alive**, and should establish that before relying on it.

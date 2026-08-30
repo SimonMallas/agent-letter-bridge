@@ -28,6 +28,10 @@ def main(argv=None):
     parser.add_argument("--config", default="", help="path to the env file (mode 600)")
     parser.add_argument("--root", required=True, help="state directory")
     parser.add_argument("--once", action="store_true", help="one cycle, then exit")
+    parser.add_argument("--canary", action="store_true",
+                        help="prove the send path is alive; sends to your own chat")
+    parser.add_argument("--status", action="store_true",
+                        help="report bridge and ring health; reads only")
     parser.add_argument("--doctor", action="store_true",
                         help="local diagnostics; holds no token, makes no platform call")
     parser.add_argument("--reply-to", metavar="LETTER_ID",
@@ -35,6 +39,22 @@ def main(argv=None):
     parser.add_argument("--text", help="reply body, with --reply-to")
     parser.add_argument("--interval", type=float, default=2.0)
     args = parser.parse_args(argv)
+
+    # Status reads files only: no config, no token, no network. It is the
+    # thing you run when you want to know whether to worry.
+    if args.status:
+        from watchdog import health
+        state = pathlib.Path(args.root) / "state"
+        bridge = health.status(state / "health.json", max_age=120)
+        print(f"bridge : {bridge.state} - {bridge.reason}")
+        ring_path = state / "ring-health.json"
+        if ring_path.is_file():
+            import json as _json
+            ring = _json.loads(ring_path.read_text(encoding="utf-8"))
+            print(f"ring   : {ring['state']} - {ring['reason']}")
+        else:
+            print("ring   : unknown - no ring has been attempted yet")
+        return 0 if bridge.state == "ok" else 1
 
     # Doctor runs BEFORE the config is loaded and never reads the token: it is
     # the tool you reach for when the bridge will not start.
@@ -60,6 +80,24 @@ def main(argv=None):
     root = pathlib.Path(args.root)
     for name in ("inbox", "processed", "state"):
         (root / name).mkdir(parents=True, exist_ok=True)
+
+    if args.canary:
+        from canary import probe
+        try:
+            rid = probe.run(api.Telegram(config["ALB_TOKEN"]), root)
+        except probe.NoCanaryTarget as exc:
+            print(f"alb: {exc}", file=sys.stderr)
+            return 2
+        except reply.AmbiguousOutcome as exc:
+            print(f"alb: canary AMBIGUOUS, dead-lettered, NOT retried: {exc}",
+                  file=sys.stderr)
+            return 3
+        except Exception as exc:
+            print(f"alb: canary failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 1
+        print(f"alb: canary sent {rid} - now CONFIRM IT ARRIVED in your chat. "
+              f"This proves the send path was accepted, not that it landed.")
+        return 0
 
     # Replying is on the binary the operator starts, not a Python import they
     # have to reconstruct at 3am.

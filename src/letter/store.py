@@ -131,6 +131,11 @@ def resolve(inbox, letter_id):
     # Exact match only. Substring or glob resolution misdelivers.
     if not path.is_file():
         raise NoSuchLetter(f"{letter_id}: no letter with this exact id")
+    # Note on line endings: read_text uses universal newlines, so a letter
+    # written with CRLF by a foreign writer is already normalised here. No
+    # explicit translation is needed and adding one would be dead code that
+    # looks like a guarantee. Two tests pin the behaviour so nobody "fixes"
+    # this again, and so a future change away from read_text is caught.
     text = path.read_text(encoding="utf-8")
     # Two fences REQUIRED. A one-fence file must never parse, or body lines
     # become routing metadata - the fence-spoof class.

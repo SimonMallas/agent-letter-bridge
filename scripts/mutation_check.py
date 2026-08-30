@@ -133,6 +133,16 @@ EXTRA = {
         ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
         '    lines.append("  A consumer on ANOTHER MACHINE is not detectable from here.")',
         "    pass"),
+    "canary refuses without an allowlisted target": (
+        ROOT / "src" / "canary" / "probe.py", "tests.test_canary",
+        '        raise NoCanaryTarget("no allowlisted chat to send a canary to")',
+        '        return "999"'),
+    "canary goes through the real send path": (
+        ROOT / "src" / "canary" / "probe.py", "tests.test_canary",
+        "        reply_id = reply.send_reply(", "        reply_id = 'faked'  # noqa\n        _unused = (reply.send_reply,) and ("),
+    "canary fixtures never enter the inbox": (
+        ROOT / "src" / "canary" / "probe.py", "tests.test_canary",
+        '    fixtures = root / "state" / "canary"', '    fixtures = root / "inbox"'),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

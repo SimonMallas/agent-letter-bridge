@@ -43,6 +43,26 @@ class FenceDiscipline(unittest.TestCase):
         with self.assertRaises(store.MalformedLetter):
             store.resolve(self.inbox, "forged")
 
+    def test_a_letter_written_with_crlf_still_parses(self):
+        """We write LF, but the store may one day read a letter a foreign
+        writer produced - a Windows tool, an editor, a copy through another
+        system. Refusing it would look like corruption rather than a line
+        ending."""
+        (self.inbox / "foreign.md").write_text(
+            "---\r\nchat_id: 111\r\n---\r\nhello from elsewhere\r\n",
+            encoding="utf-8", newline="")
+        found = store.resolve(self.inbox, "foreign")
+        self.assertEqual(found.meta["chat_id"], "111")
+        self.assertEqual(found.body, "hello from elsewhere")
+
+    def test_a_crlf_single_fence_is_still_refused(self):
+        """Normalising line endings must not weaken the fence rule."""
+        (self.inbox / "forged.md").write_text(
+            "---\r\nchat_id: attacker\r\nbody as metadata\r\n",
+            encoding="utf-8", newline="")
+        with self.assertRaises(store.MalformedLetter):
+            store.resolve(self.inbox, "forged")
+
     def test_no_fence_file_is_refused(self):
         (self.inbox / "plain.md").write_text("just text\n", encoding="utf-8")
         with self.assertRaises(store.MalformedLetter):
