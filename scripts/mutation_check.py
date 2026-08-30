@@ -123,6 +123,9 @@ EXTRA = {
         TG, "tests.test_telegram_adapter",
         '        except urllib.error.URLError as exc:\n            raise TransientFailure(f"network: {exc.reason}") from None\n\n        updates = []',
         "        finally:\n            pass\n\n        updates = []"),
+    "one bridge per state directory": (
+        ROOT / "src" / "bridge" / "singleton.py", "tests.test_singleton",
+        "            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)", "            pass"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

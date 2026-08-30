@@ -18,8 +18,9 @@ sys.path.insert(0, str(HERE))
 
 from adapters.cmux import transport as cmux_transport  # noqa: E402
 from adapters.telegram import api  # noqa: E402
-from bridge import run  # noqa: E402
+from bridge import run, singleton  # noqa: E402
 from poller import loop  # noqa: E402
+from send import reply  # noqa: E402
 
 
 def main(argv=None):
@@ -27,6 +28,9 @@ def main(argv=None):
     parser.add_argument("--config", required=True, help="path to the env file (mode 600)")
     parser.add_argument("--root", required=True, help="state directory")
     parser.add_argument("--once", action="store_true", help="one cycle, then exit")
+    parser.add_argument("--reply-to", metavar="LETTER_ID",
+                        help="reply to a stored letter instead of polling")
+    parser.add_argument("--text", help="reply body, with --reply-to")
     parser.add_argument("--interval", type=float, default=2.0)
     args = parser.parse_args(argv)
 
@@ -40,10 +44,38 @@ def main(argv=None):
     for name in ("inbox", "processed", "state"):
         (root / name).mkdir(parents=True, exist_ok=True)
 
+    # Replying is on the binary the operator starts, not a Python import they
+    # have to reconstruct at 3am.
+    if args.reply_to:
+        if not args.text:
+            print("alb: --reply-to needs --text", file=sys.stderr)
+            return 2
+        try:
+            rid = reply.send_reply(
+                api.Telegram(config["ALB_TOKEN"]), root / "inbox", root / "state",
+                root / "allowlist.json", args.reply_to, args.text)
+        except reply.AmbiguousOutcome as exc:
+            print(f"alb: AMBIGUOUS - dead-lettered for a human, NOT retried: {exc}",
+                  file=sys.stderr)
+            return 3
+        except Exception as exc:
+            print(f"alb: refused: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 1
+        print(f"alb: sent {rid}")
+        return 0
+
     platform = api.Telegram(config["ALB_TOKEN"],
                             offset_path=root / "state" / "offset.json")
     transport = cmux_transport.Cmux()
     surface = config["ALB_SURFACE"]
+
+    try:
+        lock = singleton.hold(root)
+        lock.__enter__()
+    except singleton.AlreadyRunning as exc:
+        # Refuse locally rather than race until the platform notices.
+        print(f"alb: {exc}", file=sys.stderr)
+        return 4
 
     while True:
         try:

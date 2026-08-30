@@ -81,6 +81,16 @@ conflict probe and the daemon-context checks described above are specified but
 **not yet implemented** — do not rely on the doctor to catch a stray poller or a
 `PATH`/volume problem.
 
+## After a multiplexer restart: RE-PIN THE SURFACE
+
+`ALB_SURFACE` is a pinned id. **A multiplexer restart usually kills it**, and
+the ring then fails silently — letters keep landing, nothing pings, and
+`state/ring-health.json` is the only tell. This is the most likely way your ring
+dies, and it looks exactly like nothing being wrong.
+
+After any multiplexer restart: get the current surface id, update the env file,
+restart the bridge, and send yourself one message to confirm the knock.
+
 ## 3am page
 
 - **Health reasons** — read the health file; freshness equals liveness.
@@ -90,6 +100,22 @@ conflict probe and the daemon-context checks described above are specified but
 - **How to stop it safely** — not `kill -9` unless you accept the lease TTL.
 - **Restart-on-crash-only means a clean kill stays down.** This surprises
   everyone once.
+
+## Unit files: pin absolute paths
+
+The shipped entry point uses `#!/usr/bin/env python3` and calls `cmux` by name.
+Neither is safe under a service manager, which does not share your shell's
+`PATH` — you will get the wrong interpreter, or no `cmux` at all.
+
+In your unit file, invoke the absolute interpreter and the absolute script:
+
+```
+/opt/homebrew/bin/python3 /path/to/alb --config /path/to/bridge.env --root /path/to/state
+```
+
+and make sure the directory containing `cmux` is on the unit's `PATH`.
+`doctor` reports its own interpreter so you can confirm which one a daemon
+actually resolved.
 
 ## Dead letters — the file is the instruction
 
@@ -113,6 +139,15 @@ only the response was lost.
 
 An auto-retry design would have double-posted. This is why ambiguity is never
 resolved by trying again.
+
+## An honest limit: the inbound process can send
+
+`adapters/telegram/api.py` is one class that both fetches and sends, so the
+running inbound process has the send capability loaded even though the poller
+package itself is send-free and proved so by test.
+
+This is **code discipline, not process isolation** — the same honest limit
+already stated for the token. Anyone modifying the running bridge can send.
 
 ## Canary
 
