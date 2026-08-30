@@ -180,13 +180,17 @@ def main(argv=None):
         return 4
 
     with lock_guard(lock):
-        return _poll_forever(platform, transport, surface, root, args)
+        return _poll_forever(platform, transport, surface, root, args, config)
 
 
-def _poll_forever(platform, transport, surface, root, args):
+def _poll_forever(platform, transport, surface, root, args, config):
     while True:
         try:
-            published = run.run_once(platform, transport, surface, root)
+            published = run.run_once(
+                platform, transport, surface, root,
+                sender=config.get("ALB_FROM", "telegram-bridge"),
+                recipient=config.get("ALB_TO", "agent"),
+            )
         except loop.PlatformConflict as exc:
             # A conflict is a YIELD, not an error: exit 0 so the token's holder
             # keeps running. Under a restart-on-crash-only policy this stays

@@ -41,7 +41,7 @@ def _write_heartbeat(path):
 
 
 def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
-              processed=None):
+              processed=None, sender="telegram-bridge", recipient="agent"):
     """Fetch pending updates and durably record the permitted ones.
 
     Returns the ids of letters published, which may be fewer than the updates
@@ -71,7 +71,14 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
                 ledger,
                 str(item["update_id"]),
                 item.get("text", ""),
-                {"chat_id": chat_id, "update_id": item["update_id"]},
+                store.envelope(
+                    sender=sender,
+                    recipient=recipient,
+                    extra={
+                        "telegram_chat_id": chat_id,
+                        "telegram_update_id": item["update_id"],
+                    },
+                ),
                 searched=searched,
             )
             if letter_id is not None:

@@ -39,6 +39,22 @@ class PollerBehaviour(unittest.TestCase):
         return loop.poll_once(platform, self.inbox, self.ledger, self.allow,
                               health_path=health)
 
+    def test_the_letter_is_written_in_the_standard_envelope(self):
+        """So that pointing --root at an existing inter-agent inbox is all the
+        integration required."""
+        self._run(FakePlatform([update(1, "111", "hello")]))
+        text = list(self.inbox.glob("*.md"))[0].read_text(encoding="utf-8")
+        self.assertIn("from: telegram-bridge", text)
+        self.assertIn("to: agent", text)
+        self.assertIn("type: info", text)
+        self.assertIn("telegram_chat_id: 111", text)
+
+    def test_the_recipient_is_configurable(self):
+        loop.poll_once(FakePlatform([update(1, "111", "hi")]), self.inbox,
+                       self.ledger, self.allow, recipient="kimi")
+        text = list(self.inbox.glob("*.md"))[0].read_text(encoding="utf-8")
+        self.assertIn("to: kimi", text)
+
     def test_an_allowed_sender_becomes_a_letter(self):
         self._run(FakePlatform([update(1, "111", "hello")]))
         letters = list(self.inbox.glob("*.md"))
@@ -175,8 +191,12 @@ class PollerIsStructurallyIncapable(unittest.TestCase):
         params = set(inspect.signature(loop.poll_once).parameters)
         self.assertEqual(
             params,
+            # sender and recipient are NAMES written into a letter's
+            # envelope - strings, not capabilities. Nothing here is a
+            # transport, a surface or a credential, so a ring still cannot be
+            # constructed inside the poller.
             {"platform", "inbox", "ledger", "allowlist_path", "health_path",
-             "processed"},
+             "processed", "sender", "recipient"},
             "the poller's signature changed - if it now receives a transport, "
             "surface or credential, ringing became constructible inside it",
         )

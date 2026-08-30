@@ -158,6 +158,13 @@ EXTRA = {
         ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
         '    if not path.is_file():\n        return {"can_deliver": False,',
         '    if False:\n        return {"can_deliver": False,'),
+    "letters carry the routing envelope": (
+        ROOT / "src" / "letter" / "store.py", "tests.test_envelope",
+        '    if "id" in meta:\n        meta["id"] = letter_id',
+        "    if False:\n        meta[\"id\"] = letter_id"),
+    "the envelope precedes platform fields": (
+        ROOT / "src" / "letter" / "store.py", "tests.test_envelope",
+        "    out = {k: meta[k] for k in ENVELOPE_ORDER if k in meta}", "    out = {}"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
@@ -186,11 +193,11 @@ MUTATIONS = {
     "durable update lookup closes the crash window": (
         "    if find_by_update(update_id, searched) is not None:", "    if False:"),
     "token match is VERIFIED, never trusted": (
-        '            if str(found.meta.get("update_id", "")) == str(update_id):\n'
+        '            if str(found.meta.get("source_id", "")) == str(update_id):\n'
         "                return path",
         "            return path"),
     "the letter records its own update id": (
-        '    meta["update_id"] = update_id', "    pass"),
+        '    meta["source_id"] = update_id', "    pass"),
 }
 
 

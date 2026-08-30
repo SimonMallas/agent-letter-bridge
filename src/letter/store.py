@@ -32,9 +32,50 @@ class Letter:
         self.body = body
 
 
+# The routing envelope, in the order a reader meets it. Chosen to match the
+# inter-agent letter format already in production use, so that pointing this
+# bridge at an existing letterbox is a directory path rather than a feature.
+#
+# Frozen at v0.1: every letter on every user's disk carries this shape, so a
+# later change is a migration rather than an edit.
+ENVELOPE_ORDER = ("id", "from", "to", "type", "re", "priority",
+                  "requires_ack", "deadline")
+
+
+def envelope(sender, recipient, kind="info", priority="now", extra=None):
+    """Build the routing envelope for a letter.
+
+    `id` is filled in at publish time, when the letter id exists.
+
+    Defaults are deliberate: platform mail is INFO and requests no
+    acknowledgement. A message from a phone is not a task, and it must not
+    enter an inter-agent letterbox demanding an ack from whoever sweeps it.
+    """
+    meta = {
+        "id": "",
+        "from": sender,
+        "to": recipient,
+        "type": kind,
+        "re": "",
+        "priority": priority,
+        "requires_ack": "false",
+        "deadline": "",
+    }
+    meta.update(extra or {})
+    return meta
+
+
+def _ordered(meta):
+    """Envelope first, platform fields after. A reader scanning the head of a
+    letter should meet routing before transport trivia."""
+    out = {k: meta[k] for k in ENVELOPE_ORDER if k in meta}
+    out.update({k: v for k, v in meta.items() if k not in out})
+    return out
+
+
 def _serialise(meta, body):
     lines = ["---"]
-    for key, value in meta.items():
+    for key, value in _ordered(meta).items():
         lines.append(f"{key}: {value}")
     lines.append("---")
     lines.append(body)
@@ -74,7 +115,7 @@ def find_by_update(update_id, searched):
                 # An unreadable candidate proves nothing either way. Keep
                 # looking rather than assuming a match.
                 continue
-            if str(found.meta.get("update_id", "")) == str(update_id):
+            if str(found.meta.get("source_id", "")) == str(update_id):
                 return path
     return None
 
@@ -103,6 +144,12 @@ def publish(inbox, body, meta, update_id=None):
                  if update_id is not None else f"{stamp}-{unique}")
     temp = inbox / f".tmp-{letter_id}"
     dest = inbox / f"{letter_id}.md"
+
+    # The envelope's id is the letter id. It is stamped here because this is
+    # the first moment the id exists.
+    meta = dict(meta or {})
+    if "id" in meta:
+        meta["id"] = letter_id
 
     fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
@@ -202,7 +249,13 @@ def publish_once(inbox, ledger, update_id, body, meta, cap=1000, searched=None):
     # convention nothing enforces - and a missing field reads as "not a match",
     # which republishes.
     meta = dict(meta or {})
-    meta["update_id"] = update_id
+    # The store's OWN dedup identity, deliberately transport-neutral and
+    # deliberately not named after any platform. A Telegram letter also carries
+    # telegram_update_id; the values coincide today and the meanings do not -
+    # one is "what this store deduplicates on", the other is "what the platform
+    # called it". Reusing the platform's field would make the store know about
+    # Telegram.
+    meta["source_id"] = update_id
 
     letter_id = publish(inbox, body, meta, update_id=update_id)
     _record_delivered(ledger, delivered, update_id, cap)

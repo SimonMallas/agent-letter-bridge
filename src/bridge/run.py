@@ -62,7 +62,8 @@ def _record_ring(root, state, reason):
     os.replace(tmp, path)
 
 
-def run_once(platform, transport, surface, root):
+def run_once(platform, transport, surface, root,
+             sender="telegram-bridge", recipient="agent"):
     """One cycle. Returns the letters published.
 
     A conflict propagates: the caller exits cleanly so the token's holder keeps
@@ -78,6 +79,8 @@ def run_once(platform, transport, surface, root):
         root / "allowlist.json",
         health_path=root / "state" / "health.json",
         processed=root / "processed",
+        sender=sender,
+        recipient=recipient,
     )
 
     # Tell the platform only now: every letter in this batch is durably on
