@@ -84,9 +84,10 @@ cmux pane. Do not point it at a bot you care about.
 
 - **Python 3.11+.** Standard library only, zero third-party runtime
   dependencies.
-- **A terminal multiplexer** — cmux today. The ring works by typing a line into
-  a pane, so a pane must exist to type into. Without one the mail still lands on
-  disk; nothing pings.
+- **A terminal multiplexer — optional.** cmux today. The ring works by typing a
+  line into a pane, so a pane must exist to type into. **Without one the bridge
+  still runs**: mail lands durably and nothing pings, and `alb --status` reports
+  the ring as `disabled` rather than leaving you guessing.
 - **A CLI agent** sitting in that pane.
 - **A bot** on your chat platform.
 

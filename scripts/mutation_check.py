@@ -173,6 +173,13 @@ EXTRA = {
         ROOT / "src" / "letter" / "store.py", "tests.test_envelope",
         'lines.append(f"{key}: {text}" if text else f"{key}:")',
         'lines.append(f"{key}: {text}")'),
+    "it runs without a multiplexer": (
+        BRIDGE, "tests.test_bridge",
+        'REQUIRED = ("ALB_TOKEN",)', 'REQUIRED = ("ALB_TOKEN", "ALB_SURFACE")'),
+    "a missing surface is recorded, not silent": (
+        BRIDGE, "tests.test_bridge",
+        '        _record_ring(root, "disabled", "no ALB_SURFACE configured; mail lands, nothing rings")',
+        "        pass"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

@@ -169,7 +169,7 @@ def main(argv=None):
     platform = api.Telegram(config["ALB_TOKEN"],
                             offset_path=root / "state" / "offset.json")
     transport = cmux_transport.Cmux()
-    surface = config["ALB_SURFACE"]
+    surface = config.get("ALB_SURFACE", "")
 
     try:
         lock = singleton.hold(root)

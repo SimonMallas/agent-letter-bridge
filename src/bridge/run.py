@@ -13,7 +13,11 @@ import time
 from notifier import ring
 from poller import loop
 
-REQUIRED = ("ALB_TOKEN", "ALB_SURFACE")
+# ALB_SURFACE is deliberately NOT required. Running without a multiplexer is a
+# supported way to use this: mail lands durably and nothing pings, and the
+# operator finds it by looking. Requiring a surface would mean the docs promise
+# a mode the code refuses to start in.
+REQUIRED = ("ALB_TOKEN",)
 
 
 class ConfigError(Exception):
@@ -92,6 +96,13 @@ def run_once(platform, transport, surface, root,
         confirm()
 
     if not published:
+        return published
+
+    if not surface:
+        # No multiplexer configured. Not an error and not a silent gap: the
+        # letters are on disk and the absence of a bell is recorded where
+        # --status and --doctor will show it.
+        _record_ring(root, "disabled", "no ALB_SURFACE configured; mail lands, nothing rings")
         return published
 
     # COALESCED: one ring for the batch, not one per letter. The recipient

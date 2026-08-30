@@ -35,7 +35,12 @@ wrong shape all deny everything**, and there is no setting that opens it. If
 nothing arrives, run `alb --doctor` — it says plainly whether the allowlist is
 the reason.
 
-**4. A surface id for the ring.**
+**4. A surface id for the ring — OPTIONAL.**
+
+Leave `ALB_SURFACE` unset and the bridge runs happily without a multiplexer:
+mail lands durably and nothing pings. `alb --status` reports the ring as
+`disabled` with the reason, so a missing bell is never confused with a broken
+one. Add the surface later when you have a multiplexer.
 
 The ring types a line into the pane and presses return. If something is already
 half-typed there, the doorbell appends to it and submits the combination.

@@ -40,14 +40,31 @@ class Config(unittest.TestCase):
             run.load_config(self.path)
         self.assertIn("permissions", str(caught.exception).lower())
 
-    def test_a_missing_required_key_refuses_and_names_it(self):
+    def test_it_runs_without_a_surface(self):
+        """The docs promise mail lands with no multiplexer and nothing pings.
+        The code required a surface, so it would not start at all - a direct
+        contradiction, and the first thing someone installing on a machine
+        without cmux would hit."""
         self._write("ALB_TOKEN=1:x\n")
+        config = run.load_config(self.path)
+        self.assertEqual(config.get("ALB_SURFACE", ""), "")
+
+    def test_a_missing_token_still_refuses_and_names_it(self):
+        self._write("ALB_SURFACE=S\n")
         with self.assertRaises(run.ConfigError) as caught:
             run.load_config(self.path)
-        self.assertIn("ALB_SURFACE", str(caught.exception))
+        self.assertIn("ALB_TOKEN", str(caught.exception))
+
+    def test_a_missing_required_key_refuses_and_names_it(self):
+        self._write("ALB_SURFACE=S\n")
+        with self.assertRaises(run.ConfigError) as caught:
+            run.load_config(self.path)
+        self.assertIn("ALB_TOKEN", str(caught.exception))
 
     def test_the_token_is_never_included_in_a_config_error(self):
-        self._write("ALB_TOKEN=1:SECRETVALUE\n")
+        # A config that HAS a token but is otherwise incomplete: the error must
+        # name what is missing and never echo what is present.
+        self._write("ALB_TOKEN=1:SECRETVALUE\nALB_TOKEN=\n")
         with self.assertRaises(run.ConfigError) as caught:
             run.load_config(self.path)
         self.assertNotIn("SECRETVALUE", str(caught.exception))
@@ -98,6 +115,23 @@ class OneCycle(unittest.TestCase):
             {"update_id": 3, "chat_id": "111", "text": "three"}]), transport)
         self.assertEqual(len(list((self.root / "inbox").glob("*.md"))), 3)
         self.assertEqual(len(transport.rung), 1)
+
+    def test_with_no_surface_the_letter_lands_and_nothing_rings(self):
+        """Degraded mode is a supported way to run, not a broken install: no
+        multiplexer, mail on disk, no bell. The operator finds it by looking."""
+        transport = FakeTransport()
+        run.run_once(FakePlatform([
+            {"update_id": 1, "chat_id": "111", "text": "hello"}]),
+            transport, "", self.root)
+        self.assertEqual(len(list((self.root / "inbox").glob("*.md"))), 1)
+        self.assertEqual(transport.rung, [])
+
+        # And it is RECORDED. A missing bell that leaves no trace is
+        # indistinguishable from a broken one, which is the confusion the
+        # whole ring-health file exists to prevent.
+        record = json.loads((self.root / "state" / "ring-health.json").read_text())
+        self.assertEqual(record["state"], "disabled")
+        self.assertIn("ALB_SURFACE", record["reason"])
 
     def test_nothing_new_means_no_ring(self):
         transport = FakeTransport()
