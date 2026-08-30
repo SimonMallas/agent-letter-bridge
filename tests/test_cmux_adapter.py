@@ -13,61 +13,53 @@ from notifier import ring  # noqa: E402
 
 class Delivery(unittest.TestCase):
     def setUp(self):
-        self.t = transport.Cmux()
+        # Injection is opt-in; these exercise the injecting path deliberately.
+        self.t = transport.Cmux(allow_inject=True)
 
     def test_it_addresses_the_surface_explicitly_and_never_the_focused_pane(self):
         """Ringing 'whatever is focused' is how the wrong agent gets woken."""
         with mock.patch.object(transport, "_run") as run:
             self.t.deliver("SURFACE-1", "you have mail")
-        sent = run.call_args_list[1][0][0]
+        sent = run.call_args_list[0][0][0]
         self.assertIn("--surface", sent)
         self.assertIn("SURFACE-1", sent)
         self.assertNotIn("--focused", sent)
 
-    def test_the_input_line_is_cleared_before_the_payload(self):
-        """FOUND BY FIRING THE RING FOR REAL, not by review.
+    def test_it_refuses_to_inject_by_default(self):
+        """PROVEN LIVE, twice. A doorbell injected into a pane holding
+        half-typed text APPENDS to it and submits the combination:
 
-        A doorbell injected into a pane that already holds half-typed text
-        APPENDS to it and submits the combination - a partial command plus our
-        line, executed as one input at a moment nobody chose. Observed live:
+            rm -rf /some/half/typed/thingyou have mail: check your letterbox
 
-            ring test: ...adapteryou have mail: check your letterbox
+        Clearing first does not work: ctrl+u, ctrl+c and escape were all
+        ACCEPTED by the multiplexer and none cleared the buffer. Acceptance of
+        a key is not evidence of its effect, and input occupancy is not
+        observable from outside the TTY - so the buffer's contents are
+        unknowable and injecting into an unknown buffer is the defect itself.
 
-        Clearing first destroys in-progress typing, which is a real cost and
-        the price of injecting into a live TUI. It is recoverable: they retype.
-        Concatenate-and-submit is not in the same class of recoverable.
+        Letters are authoritative. A missed ring is always acceptable; a
+        chimera command is not.
         """
+        default = transport.Cmux()   # no opt-in: the shipped default
         with mock.patch.object(transport, "_run") as run:
-            self.t.deliver("SURFACE-1", "you have mail")
-        first = run.call_args_list[0][0][0]
-        self.assertIn("send-key", first)
-        self.assertIn("ctrl+u", first)
+            with self.assertRaises(transport.UnsafeToInject):
+                default.deliver("SURFACE-1", "you have mail")
+        run.assert_not_called()
 
-    def test_the_order_is_clear_then_payload_then_return(self):
+    def test_injection_requires_an_explicit_opt_in(self):
+        """Clobber is a named choice by the operator, never a silent default,
+        and it destroys whatever was being typed."""
+        t = transport.Cmux(allow_inject=True)
         with mock.patch.object(transport, "_run") as run:
-            self.t.deliver("SURFACE-1", "you have mail")
-        calls = [" ".join(c[0][0]) for c in run.call_args_list]
-        self.assertEqual(len(calls), 3)
-        self.assertIn("ctrl+u", calls[0])
-        self.assertIn("you have mail", calls[1])
-        self.assertIn("Enter", calls[2])
-
-    def test_a_failed_clear_means_no_ring_at_all(self):
-        """If the buffer cannot be cleared, its contents are unknown, and
-        ringing into an unknown buffer is the defect. Letters are
-        authoritative, so refusing to ring is always an acceptable outcome."""
-        with mock.patch.object(transport, "_run",
-                               side_effect=[RuntimeError("no clear"), None, None]) as run:
-            with self.assertRaises(RuntimeError):
-                self.t.deliver("SURFACE-1", "you have mail")
-        self.assertEqual(run.call_count, 1, "sent the payload after a failed clear")
+            t.deliver("SURFACE-1", "you have mail")
+        self.assertEqual(run.call_count, 2)
 
     def test_the_line_and_the_return_are_separate_calls(self):
         """A line without a return is text sitting in a prompt, not a turn."""
         with mock.patch.object(transport, "_run") as run:
             self.t.deliver("SURFACE-1", "you have mail")
-        self.assertEqual(run.call_count, 3)
-        self.assertIn("send-key", run.call_args_list[2][0][0])
+        self.assertEqual(run.call_count, 2)
+        self.assertIn("send-key", run.call_args_list[1][0][0])
 
     def test_it_refuses_an_empty_surface(self):
         with mock.patch.object(transport, "_run") as run:

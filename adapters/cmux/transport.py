@@ -24,30 +24,40 @@ def _run(argv):
     subprocess.run(argv, check=True, capture_output=True)
 
 
+class UnsafeToInject(Exception):
+    """The pane's input buffer contents are unknown, so injecting is unsafe.
+
+    Proven live, twice: a doorbell injected into a pane holding half-typed text
+    appends to it and submits the combination as one input. Clearing first does
+    not work - ctrl+u, ctrl+c and escape were all ACCEPTED by the multiplexer
+    and none cleared the buffer. Acceptance of a key is not evidence of its
+    effect.
+
+    Input occupancy is not observable from outside the TTY, so "is it safe to
+    inject" cannot be answered. Letters are authoritative and every accelerator
+    may fail, so a missed ring is always acceptable. A chimera command built
+    from someone's unfinished typing plus our line is not.
+    """
+
+
 class Cmux:
-    def __init__(self, binary=CMUX):
+    def __init__(self, binary=CMUX, allow_inject=False):
         self._binary = binary
+        # Clobber is a named choice by the operator, never a silent default.
+        # It destroys whatever was being typed in the target pane.
+        self._allow_inject = allow_inject
 
     def deliver(self, surface, line):
         if not surface:
             raise ring.NoTargetSurface("no surface; refusing to guess a pane")
         if "\n" in line or "\r" in line:
             raise ValueError("the doorbell payload must be a single line")
+        if not self._allow_inject:
+            raise UnsafeToInject(
+                "refusing to inject: the pane's input buffer may hold unfinished "
+                "typing, and appending to it would submit a command nobody chose. "
+                "Enable explicitly only for a pane you accept clobbering."
+            )
 
-        # CLEAR THE INPUT LINE FIRST. A doorbell injected into a pane that
-        # already holds half-typed text APPENDS to it and submits the
-        # combination - a partial command plus our line, executed as one input
-        # at a moment nobody chose. Observed live; no amount of review found it
-        # because the ring had never been fired.
-        #
-        # The cost is real: in-progress typing is destroyed. That is the price
-        # of injecting into a live TUI, and it is recoverable - they retype.
-        # Concatenate-and-submit is not in the same class of recoverable.
-        #
-        # If the clear fails, this raises and NOTHING is sent. The buffer's
-        # contents are then unknown, and ringing into an unknown buffer is the
-        # defect itself. Letters are authoritative, so not ringing is always an
-        # acceptable outcome; the caller records the miss.
-        _run([self._binary, "send-key", "--surface", surface, "ctrl+u"])
         _run([self._binary, "send", "--surface", surface, line])
         _run([self._binary, "send-key", "--surface", surface, "Enter"])

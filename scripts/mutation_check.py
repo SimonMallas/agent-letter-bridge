@@ -158,10 +158,9 @@ EXTRA = {
         ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
         '    if not path.is_file():\n        return {"can_deliver": False,',
         '    if False:\n        return {"can_deliver": False,'),
-    "the input line is cleared before the payload": (
+    "injection is refused unless explicitly opted in": (
         CMUX, "tests.test_cmux_adapter",
-        '        _run([self._binary, "send-key", "--surface", surface, "ctrl+u"])',
-        "        pass"),
+        "        if not self._allow_inject:", "        if False:"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
