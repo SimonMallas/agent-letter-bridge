@@ -126,5 +126,20 @@ and none of them clear the buffer.
 
 **The exposure here is lower than for an agent-to-agent doorbell**, and for a
 structural reason: this ring is caused by the operator sending a message, so it
-correlates with them being away from the keyboard. A dedicated agent pane
-removes the remaining case.
+correlates with them being away from the keyboard.
+
+**Concatenation is only dangerous when one side is not a doorbell.** Two rings
+landing together produce a mangled knock, not a hazard — both payloads are fixed
+and innocuous, which is what the zero-content rule buys. So a pane that never
+sees human keystrokes has the defect's teeth pulled entirely, with no detection
+needed. That is why the dedicated-pane recommendation is the answer rather than
+an interim measure.
+
+**No prompt-free detector exists**, and this was established by falsification
+rather than assumed. Three shapes were designed and all three failed at the same
+point: each needed to tell an empty prompt from an occupied one, and each tried
+to do so without looking at the prompt. Clearing the line does not work; the
+last captured line is a status bar, not the input line; and the payload joins
+the existing text with no separator, so a clean write and a dirty one are
+identical in form. Do not re-derive this — the evidence is in the commit
+history.
