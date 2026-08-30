@@ -99,13 +99,22 @@ EXTRA = {
         "        for _p in published:\n            ring.notify(transport, surface, root / \"inbox\", _p)"),
     "a dead notifier never costs a letter": (
         BRIDGE, "tests.test_bridge",
-        "    except Exception:\n        # Letters are authoritative", "    except ZeroDivisionError:\n        # Letters are authoritative"),
+        "    except Exception as exc:\n        # Letters are authoritative",
+        "    except ZeroDivisionError as exc:\n        # Letters are authoritative"),
     "the offset survives a restart": (
         TG, "tests.test_telegram_adapter",
         "            self._save_offset()", "            pass"),
     "a cycle transmits consumption to the platform": (
         BRIDGE, "tests.test_bridge",
         "    if confirm is not None:\n        confirm()", "    if False:\n        confirm()"),
+    "non-message updates are consumed, not dropped": (
+        TG, "tests.test_telegram_adapter",
+        '"chat_id": str(message.get("chat", {}).get("id", "")) if message else "",',
+        '"chat_id": str(message["chat"]["id"]),'),
+    "ring failure is recorded, not merely swallowed": (
+        BRIDGE, "tests.test_bridge",
+        '        _record_ring(root, "failing", f"{type(exc).__name__}: {exc}")',
+        "        pass"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

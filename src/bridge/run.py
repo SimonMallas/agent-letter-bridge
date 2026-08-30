@@ -4,9 +4,11 @@ This is the only module that knows all the pieces exist. Each piece keeps its
 own privilege; this one just hands the output of the untrusted poller to the
 notifier, and nothing else.
 """
+import json
 import os
 import pathlib
 import stat
+import time
 
 from notifier import ring
 from poller import loop
@@ -50,6 +52,16 @@ def load_config(path):
     return config
 
 
+def _record_ring(root, state, reason):
+    """Ring outcome, written where the operator and the watchdog can read it."""
+    path = pathlib.Path(root) / "state" / "ring-health.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = pathlib.Path(f"{path}.tmp")
+    tmp.write_text(json.dumps(
+        {"state": state, "reason": reason, "at": time.time()}), encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def run_once(platform, transport, surface, root):
     """One cycle. Returns the letters published.
 
@@ -84,10 +96,17 @@ def run_once(platform, transport, surface, root):
     # reader. The ring names the newest letter only to prove one exists.
     try:
         ring.notify(transport, surface, root / "inbox", published[-1])
-    except Exception:
+    except Exception as exc:
         # Letters are authoritative; rings only accelerate. A dead notifier
         # must never cost a message - the mail is already on disk and will be
         # found by a sweep.
-        pass
+        #
+        # But the swallow that protects the letter also HIDES ring death, and
+        # mail-with-no-bell is a failure state, not a quieter tier. So the
+        # failure is recorded where a human and a monitor can see it, without
+        # ever being allowed to affect the letter.
+        _record_ring(root, "failing", f"{type(exc).__name__}: {exc}")
+    else:
+        _record_ring(root, "ok", "delivered")
 
     return published

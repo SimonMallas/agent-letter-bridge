@@ -33,10 +33,29 @@ class Fetch(unittest.TestCase):
             got = self.client.fetch(offset=None)
         self.assertEqual(got, [{"update_id": 5, "chat_id": "111", "text": "hi"}])
 
-    def test_an_update_without_a_message_is_skipped_not_crashed(self):
-        """Edited messages, reactions and channel posts all arrive here."""
+    def test_a_non_message_update_is_surfaced_so_it_can_be_consumed(self):
+        """Edits, reactions and channel posts must not be silently dropped.
+
+        Dropping them means the poller never acks them, so the mark never
+        advances past them and they re-arrive on EVERY poll indefinitely - the
+        same queue-wedge the deny fix already closed once. They are surfaced
+        with no chat, so the fail-closed allowlist denies them and the poller
+        consumes them without writing a letter.
+        """
         with self._reply({"ok": True, "result": [{"update_id": 5}]}):
-            self.assertEqual(self.client.fetch(offset=None), [])
+            got = self.client.fetch(offset=None)
+        self.assertEqual(len(got), 1, "a non-message update was dropped, not consumed")
+        self.assertEqual(got[0]["update_id"], 5)
+        self.assertEqual(got[0]["chat_id"], "", "a non-message update carried a chat")
+
+    def test_a_non_message_update_does_not_hide_a_real_one(self):
+        with self._reply({"ok": True, "result": [
+            {"update_id": 5},
+            {"update_id": 6, "message": {"chat": {"id": 111}, "text": "hi"}},
+        ]}):
+            got = self.client.fetch(offset=None)
+        self.assertEqual([u["update_id"] for u in got], [5, 6])
+        self.assertEqual(got[1]["text"], "hi")
 
     def test_a_conflict_becomes_a_yield(self):
         with mock.patch.object(api, "_request", side_effect=http_error(409)):

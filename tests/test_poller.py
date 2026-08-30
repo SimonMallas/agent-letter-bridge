@@ -95,6 +95,14 @@ class PollerBehaviour(unittest.TestCase):
                 self._run(platform)
         self.assertIsNone(platform.acked_offset, "acked an update that never landed")
 
+    def test_a_non_message_update_is_consumed_without_a_letter(self):
+        """No chat means the fail-closed allowlist denies it, which is exactly
+        the behaviour wanted: consumed, no letter, no wedge."""
+        platform = FakePlatform([{"update_id": 1, "chat_id": "", "text": ""}])
+        self._run(platform)
+        self.assertEqual(list(self.inbox.glob("*.md")), [])
+        self.assertEqual(platform.pending(), [], "non-message update wedged the queue")
+
     def test_a_denied_sender_is_still_consumed(self):
         """A deny must advance the offset. The platform queue is a single
         high-water mark: an unacked update stays at the head forever, so a

@@ -101,14 +101,18 @@ class Telegram:
 
         updates = []
         for item in payload.get("result", []):
-            message = item.get("message")
-            if not message:
-                # Edits, reactions and channel posts arrive here too. Skipping
-                # them is correct; crashing on them would wedge the queue.
-                continue
+            message = item.get("message") or {}
+            # Edits, reactions and channel posts arrive here too. NOT publishing
+            # them is correct; DROPPING them is not. A dropped update is never
+            # acked, so the high-water mark never passes it and it re-arrives on
+            # every poll indefinitely - the same wedge a denied sender caused.
+            #
+            # They are surfaced with no chat, so the fail-closed allowlist
+            # denies them and the poller consumes them without writing a letter.
+            # Consuming is the other half of skipping.
             updates.append({
                 "update_id": item["update_id"],
-                "chat_id": str(message.get("chat", {}).get("id", "")),
+                "chat_id": str(message.get("chat", {}).get("id", "")) if message else "",
                 "text": message.get("text", ""),
             })
         return updates
@@ -133,8 +137,17 @@ class Telegram:
         """
         if self._acked is None:
             return
-        _request(self._base, "getUpdates",
-                 {"offset": self._acked + 1, "timeout": 0, "limit": 1}, self._token)
+        try:
+            _request(self._base, "getUpdates",
+                     {"offset": self._acked + 1, "timeout": 0, "limit": 1}, self._token)
+        except urllib.error.HTTPError as exc:
+            # Classified exactly as in fetch(). Unclassified, a conflict here
+            # escapes as a raw HTTPError and the process dies with a traceback
+            # instead of the clean yield the conflict path exists to provide -
+            # and the operator is told the wrong thing.
+            if exc.code == 409:
+                raise loop.PlatformConflict("another consumer holds this token") from None
+            raise FetchFailed(f"confirm failed: HTTP {exc.code}") from None
 
     # -- outbound --------------------------------------------------------
 

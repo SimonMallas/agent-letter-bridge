@@ -26,7 +26,13 @@ The ordering is the content. Do these in sequence.
    sender must produce a letter. A message from an unknown sender must produce
    **silence**. Outbound is not a Day-0 step: the send helper replies only to a
    stored inbound letter, so there is nothing to reply to yet.
-7. **Know the rollback** that restores *your* previous consumer.
+7. **Verify the ring for real, once.** Send yourself a message and watch the
+   knock arrive in the pane. This step cannot be skipped or inferred: the code
+   deliberately swallows ring failures so a dead notifier never costs a letter —
+   which means a broken ring is **silent**. Mail landing with no bell is a
+   failure state, not a quieter mode of working. `state/ring-health.json`
+   records the last outcome, but only a real knock proves the transport.
+8. **Know the rollback** that restores *your* previous consumer.
 
 ### The first-hour allowlist test
 

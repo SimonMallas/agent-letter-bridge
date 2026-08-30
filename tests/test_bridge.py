@@ -155,6 +155,30 @@ class OneCycle(unittest.TestCase):
             self._cycle(platform, FakeTransport())
         self.assertFalse(platform.confirmed, "confirmed while yielding")
 
+    def test_a_ring_failure_is_recorded_where_a_human_can_see_it(self):
+        """The swallow that protects letters also hides ring death.
+
+        A dead ring - missing binary, stale surface, changed permissions -
+        would otherwise fail silently forever: mail lands, nothing pings. That
+        is the no-bell state, which is a failure and not a tier. Letters stay
+        authoritative; the failure just stops being invisible.
+        """
+        class BrokenTransport:
+            def deliver(self, surface, line):
+                raise RuntimeError("relay is dead")
+
+        self._cycle(FakePlatform([
+            {"update_id": 1, "chat_id": "111", "text": "hello"}]), BrokenTransport())
+        record = json.loads((self.root / "state" / "ring-health.json").read_text())
+        self.assertEqual(record["state"], "failing")
+        self.assertIn("relay is dead", record["reason"])
+
+    def test_a_working_ring_records_success(self):
+        self._cycle(FakePlatform([
+            {"update_id": 1, "chat_id": "111", "text": "hello"}]), FakeTransport())
+        record = json.loads((self.root / "state" / "ring-health.json").read_text())
+        self.assertEqual(record["state"], "ok")
+
     def test_a_ring_failure_does_not_lose_the_letter(self):
         """Letters are authoritative; rings only accelerate. A dead notifier
         must not cost a message - the mail is already on disk."""
