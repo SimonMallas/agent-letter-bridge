@@ -80,6 +80,21 @@ pane). v0.1 has no notifier that works without one — see `docs/operations.md`.
 tested against fakes; nothing here has spoken to a real Telegram bot or a real
 cmux pane. Do not point it at a bot you care about.
 
+## What you need
+
+- **Python 3.11+.** Standard library only, zero third-party runtime
+  dependencies.
+- **A terminal multiplexer** — cmux today. The ring works by typing a line into
+  a pane, so a pane must exist to type into. Without one the mail still lands on
+  disk; nothing pings.
+- **A CLI agent** sitting in that pane.
+- **A bot** on your chat platform.
+
+**You do not need Agent Letterbox.** They are separate products that share a
+metaphor and nothing else — no shared code, no shared files, no shared config.
+Letterbox carries mail between agents on one machine; this carries mail in from
+outside. Install either, both, or neither.
+
 ## Requirements
 
 Python 3.11+, standard library only. **Zero third-party runtime dependencies** —

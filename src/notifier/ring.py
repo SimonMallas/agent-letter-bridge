@@ -11,7 +11,10 @@ prompt-injection.
 from letter import store
 
 # Fixed and content-free. Never interpolate anything into this.
-DOORBELL_LINE = "you have mail: check your letterbox"
+# Says what to do and names nothing the operator may not have. The earlier
+# wording told a standalone user to check a "letterbox" - a different product
+# ALB does not depend on and they may never have installed.
+DOORBELL_LINE = "you have new mail: check your inbox directory"
 
 
 class NoTargetSurface(Exception):
