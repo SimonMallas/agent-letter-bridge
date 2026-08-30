@@ -14,7 +14,12 @@ from letter import store
 # Says what to do and names nothing the operator may not have. The earlier
 # wording told a standalone user to check a "letterbox" - a different product
 # ALB does not depend on and they may never have installed.
-DOORBELL_LINE = "you have new mail: check your inbox directory"
+# Names the STORE, not a product. If the operator also runs an inter-agent
+# letterbox they have two stores, and "check your letterbox" would send them to
+# the wrong one. In integrated mode there is only one store and the ambiguity
+# dissolves - but the payload is written for the ambiguous case, which is the
+# one that confuses.
+DOORBELL_LINE = "you have new mail: check the bridge inbox"
 
 
 class NoTargetSurface(Exception):
