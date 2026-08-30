@@ -165,6 +165,14 @@ EXTRA = {
     "the envelope precedes platform fields": (
         ROOT / "src" / "letter" / "store.py", "tests.test_envelope",
         "    out = {k: meta[k] for k in ENVELOPE_ORDER if k in meta}", "    out = {}"),
+    "the id timestamp is dashed for the shared parser": (
+        ROOT / "src" / "letter" / "store.py", "tests.test_envelope",
+        'stamp = time.strftime("%Y-%m-%dT%H%M%S")',
+        'stamp = time.strftime("%Y%m%dT%H%M%S")'),
+    "an empty value is a bare key": (
+        ROOT / "src" / "letter" / "store.py", "tests.test_envelope",
+        'lines.append(f"{key}: {text}" if text else f"{key}:")',
+        'lines.append(f"{key}: {text}")'),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

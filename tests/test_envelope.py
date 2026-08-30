@@ -38,6 +38,26 @@ class Envelope(unittest.TestCase):
             with self.subTest(field=field):
                 self.assertIn(field, text)
 
+    def test_the_id_timestamp_is_dashed(self):
+        """Byte parity with the living inter-agent format, checked against its
+        parser rather than its appearance: the timestamp is extracted with a
+        DASHED date pattern, so an undashed id parses as unknown and any
+        timestamp-derived logic silently loses its input.
+
+        Frozen at v0.1, so this is fixed before a public letter exists.
+        """
+        import re
+        letter_id, _ = self._publish()
+        self.assertRegex(letter_id, r"\A[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}-")
+
+    def test_an_empty_value_is_written_as_a_bare_key(self):
+        """Production writes 're:' with nothing after it. Both parse the same,
+        but the format is frozen, so match the bytes rather than rely on a
+        parser being forgiving."""
+        _, text = self._publish()
+        self.assertIn("\nre:\n", text)
+        self.assertIn("\ndeadline:\n", text)
+
     def test_the_id_field_is_the_letter_id(self):
         letter_id, text = self._publish()
         self.assertIn(f"id: {letter_id}", text)

@@ -76,7 +76,11 @@ def _ordered(meta):
 def _serialise(meta, body):
     lines = ["---"]
     for key, value in _ordered(meta).items():
-        lines.append(f"{key}: {value}")
+        # A bare key when the value is empty, matching the living format byte
+        # for byte. Both forms parse identically today; the format is frozen,
+        # so match the bytes rather than depend on a parser staying forgiving.
+        text = "" if value is None else str(value)
+        lines.append(f"{key}: {text}" if text else f"{key}:")
     lines.append("---")
     lines.append(body)
     return "\n".join(lines) + "\n"
@@ -139,7 +143,11 @@ def publish(inbox, body, meta, update_id=None):
     # Merging them would make a token collision a filename collision, which
     # surfaces as a hard error instead of a verified non-match.
     unique = uuid.uuid4().hex[:8]
-    stamp = time.strftime("%Y%m%dT%H%M%S")
+    # DASHED date, matching the inter-agent format's own id stamp. Its display
+    # parser extracts the timestamp with a dashed pattern, so an undashed id
+    # reads as unknown and any timestamp-derived logic loses its input. Checked
+    # against that parser, not against how the id looks.
+    stamp = time.strftime("%Y-%m-%dT%H%M%S")
     letter_id = (f"{stamp}-{unique}-u{update_token(update_id)}"
                  if update_id is not None else f"{stamp}-{unique}")
     temp = inbox / f".tmp-{letter_id}"
