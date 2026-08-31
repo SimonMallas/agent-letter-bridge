@@ -248,6 +248,10 @@ EXTRA = {
         BRIDGE, "tests.test_mail_root",
         '    if result.returncode != 0 or "doorbell submitted" not in output:',
         "    if result.returncode != 0:"),
+    "the BINARY replies to letters where they live": (
+        ROOT / "src" / "alb" / "cli.py", "tests.test_mail_root",
+        '    mail = pathlib.Path(args.mail_root or config.get("ALB_MAIL_ROOT") or root)',
+        "    mail = root"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

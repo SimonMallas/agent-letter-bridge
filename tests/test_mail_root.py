@@ -6,6 +6,8 @@ contamination it exists to prevent rather than removing it.
 
 These are the pins they said they would look for.
 """
+import contextlib
+import io
 import json
 import pathlib
 import stat
@@ -161,6 +163,53 @@ class ReplyFindsLettersWhereTheyLive(unittest.TestCase):
         reply.send_reply(sender, self.mail / "inbox", self.root / "state",
                          self.root / "allowlist.json", letter_id, "a reply",
                          searched=[self.mail / "inbox", self.mail / "processed"])
+        self.assertEqual(sent[0][0], "111")
+
+
+class ReplyThroughTheBinary(unittest.TestCase):
+    """Through main(), not through a searched list the test builds itself.
+
+    Grok's residual: the other reply tests pass their own searched list, so
+    reverting the line in the CLI that builds it would leave them green. That
+    is the fixture-versus-production hide again - a test proving the library
+    can do something, while the thing the operator actually runs cannot.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = pathlib.Path(self.tmp.name)
+        self.root = run.prepare_root(base / "private")
+        self.mail = base / "shared" / "seat"
+        (self.mail / "inbox").mkdir(parents=True)
+        (self.mail / "processed").mkdir(parents=True)
+        (self.root / "allowlist.json").write_text(
+            json.dumps({"chats": ["111"]}), encoding="utf-8")
+        self.env = base / "bridge.env"
+        self.env.write_text(f"ALB_TOKEN=1:x\nALB_MAIL_ROOT={self.mail}\n",
+                            encoding="utf-8")
+        self.env.chmod(0o600)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_binary_replies_to_a_letter_in_the_mailbox(self):
+        from alb import cli
+        from alb.adapters.telegram import api
+
+        with mock.patch.object(run, "_bus_ring"):
+            run.run_once(FakePlatform([update(1, "111", "hi")]), None, "",
+                         self.root, mail_root=self.mail, recipient="grok-build")
+        letter_id = [p.stem for p in (self.mail / "inbox").glob("*.md")][0]
+
+        sent = []
+        # The CLI prints on success; a suite that prints is a suite whose
+        # output stops being read.
+        with mock.patch.object(api.Telegram, "send",
+                               lambda self, chat, text: sent.append((chat, text))), \
+                contextlib.redirect_stdout(io.StringIO()):
+            code = cli.main(["--config", str(self.env), "--root", str(self.root),
+                             "--reply-to", letter_id, "--text", "a reply"])
+        self.assertEqual(code, 0)
         self.assertEqual(sent[0][0], "111")
 
 

@@ -53,7 +53,7 @@ system's inbox, in the standard envelope, so there is one store, one sweep and
 one set of tooling — while `--root` keeps every private file where it belongs.
 The two are deliberately separate settings: mail may travel, state may not.
 
-Until that adapter ships, the doorbell names the store it means ("the bridge
+In standalone mode the doorbell names the store it means ("the bridge
 inbox") rather than a product, because in two-store mode "check your letterbox"
 sends the reader to the wrong one.
 
