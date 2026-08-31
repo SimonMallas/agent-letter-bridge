@@ -68,6 +68,27 @@ class Config(unittest.TestCase):
             run.load_config(self.path)
         self.assertNotIn("SECRETVALUE", str(caught.exception))
 
+    def test_a_notifier_can_be_selected(self):
+        self._write("ALB_TOKEN=1:x\nALB_NOTIFIER=tmux\n")
+        self.assertEqual(run.load_config(self.path)["ALB_NOTIFIER"], "tmux")
+
+    def test_an_unsupported_notifier_is_refused_by_name(self):
+        """Naming a transport we do not have must fail loudly. The dogfood
+        install set a notifier nothing read, believed it had selected one, and
+        diverged from its own config in silence."""
+        self._write("ALB_TOKEN=1:x\nALB_NOTIFIER=screen\n")
+        with self.assertRaises(run.ConfigError) as caught:
+            run.load_config(self.path)
+        self.assertIn("screen", str(caught.exception))
+        self.assertIn("cmux", str(caught.exception))
+
+    def test_a_typo_in_the_notifier_key_is_still_refused(self):
+        """ALB_NOTIFER must not silently fall back to the default - that is the
+        original failure with the typo made harder to spot."""
+        self._write("ALB_TOKEN=1:x\nALB_NOTIFER=tmux\n")
+        with self.assertRaises(run.ConfigError):
+            run.load_config(self.path)
+
     def test_an_unknown_setting_is_refused_not_ignored(self):
         """A dogfood install set ALB_NOTIFIER=tmux. Nothing read it, and the
         bridge reported success - so the operator believed a selection had
@@ -76,10 +97,13 @@ class Config(unittest.TestCase):
 
         A key that looks like it did something is worse than one that errors.
         """
-        self._write("ALB_TOKEN=1:x\nALB_NOTIFIER=tmux\n")
+        # ALB_NOTIFIER is a supported key now that the adapter exists, so this
+        # uses one that is genuinely unread. The lesson is unchanged: the
+        # dogfood set a key nothing read and believed it had taken effect.
+        self._write("ALB_TOKEN=1:x\nALB_RETRIES=5\n")
         with self.assertRaises(run.ConfigError) as caught:
             run.load_config(self.path)
-        self.assertIn("ALB_NOTIFIER", str(caught.exception))
+        self.assertIn("ALB_RETRIES", str(caught.exception))
 
     def test_the_error_lists_what_is_actually_supported(self):
         self._write("ALB_TOKEN=1:x\nALB_WHATEVER=1\n")

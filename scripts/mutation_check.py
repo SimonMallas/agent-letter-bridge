@@ -213,6 +213,14 @@ EXTRA = {
         BRIDGE, "tests.test_permissions",
         "    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, FILE_MODE)",
         "    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)"),
+    "an unsupported notifier is refused": (
+        BRIDGE, "tests.test_bridge",
+        "    if notifier not in NOTIFIERS:", "    if False:"),
+    "the tmux payload is sent literally": (
+        ROOT / "src" / "alb" / "adapters" / "tmux" / "transport.py",
+        "tests.test_tmux_adapter",
+        '_run([self._binary, "send-keys", "-t", surface, "-l", line])',
+        '_run([self._binary, "send-keys", "-t", surface, line])'),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

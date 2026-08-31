@@ -41,12 +41,26 @@ wrong shape all deny everything**, and there is no setting that opens it. If
 nothing arrives, run `alb --doctor` — it says plainly whether the allowlist is
 the reason.
 
-**4. A surface id for the ring — OPTIONAL, and cmux only.**
+**4. A surface id for the ring — OPTIONAL.**
 
-There is no tmux adapter in v0.1. The notifier is a seam and one can be added,
-but until it exists, setting a notifier in the config will be REFUSED rather
-than quietly ignored — an unread setting that appears to work is worse than an
-error.
+Two transports ship. Choose with `ALB_NOTIFIER`; an unsupported value is
+**refused by name**, never silently defaulted.
+
+**cmux** (`ALB_NOTIFIER=cmux`, the default) — surface id from:
+
+```sh
+cmux --id-format uuids tree --all
+```
+
+**tmux** (`ALB_NOTIFIER=tmux`) — pane id such as `%1` from:
+
+```sh
+tmux list-panes -a -F '#{pane_id} #{session_name}:#{window_index}.#{pane_index}'
+```
+
+A typo in the key itself — `ALB_NOTIFER` — is also refused. An unread setting
+that appears to have worked is worse than an error, which is how a real
+deployment ran for days believing it had selected a transport nothing read.
 
 Leave `ALB_SURFACE` unset and the bridge runs happily without a multiplexer:
 mail lands durably and nothing pings. `alb --status` reports the ring as

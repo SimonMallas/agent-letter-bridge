@@ -24,7 +24,12 @@ REQUIRED = ("ALB_TOKEN",)
 # reported success - so the operator believed they had selected a notifier that
 # did not exist, and their deployment diverged from their config in silence. A
 # key that looks like it did something is worse than one that errors.
-KNOWN = ("ALB_TOKEN", "ALB_SURFACE", "ALB_FROM", "ALB_TO")
+KNOWN = ("ALB_TOKEN", "ALB_SURFACE", "ALB_FROM", "ALB_TO", "ALB_NOTIFIER")
+
+# Transports that exist. Naming one that does not is refused rather than
+# defaulted, because defaulting is what let a deployment believe it had
+# selected tmux for days while nothing read the setting.
+NOTIFIERS = ("cmux", "tmux")
 
 
 class ConfigError(Exception):
@@ -60,6 +65,13 @@ def load_config(path):
     missing = [key for key in REQUIRED if not config.get(key)]
     if missing:
         raise ConfigError(f"missing required settings: {', '.join(missing)}")
+
+    notifier = config.get("ALB_NOTIFIER", "cmux")
+    if notifier not in NOTIFIERS:
+        raise ConfigError(
+            f"unsupported ALB_NOTIFIER {notifier!r}. Available: "
+            f"{', '.join(NOTIFIERS)}."
+        )
 
     unknown = [key for key in config if key not in KNOWN]
     if unknown:

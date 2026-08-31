@@ -29,6 +29,7 @@ import sys
 import time
 
 from alb.adapters.cmux import transport as cmux_transport
+from alb.adapters.tmux import transport as tmux_transport
 from alb.adapters.telegram import api
 from alb.bridge import run, singleton
 from alb.poller import loop
@@ -165,7 +166,12 @@ def main(argv=None):
 
     platform = api.Telegram(config["ALB_TOKEN"],
                             offset_path=root / "state" / "offset.json")
-    transport = cmux_transport.Cmux()
+    # Selection is honoured, not merely accepted. load_config has already
+    # refused any value that is not a transport we ship.
+    if config.get("ALB_NOTIFIER", "cmux") == "tmux":
+        transport = tmux_transport.Tmux()
+    else:
+        transport = cmux_transport.Cmux()
     surface = config.get("ALB_SURFACE", "")
 
     try:

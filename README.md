@@ -80,9 +80,8 @@ It refuses to start on a missing, world-readable or incomplete config. That is
 deliberate: a bridge that starts wrong is harder to diagnose at 3am than one
 that will not start at all.
 
-**The ring requires cmux** in v0.1. There is no tmux adapter yet — the
-notifier seam exists for one, but shipping a promise before the adapter is how
-an operator ends up believing they selected something that was never read.
+**The ring requires a multiplexer** — cmux or tmux. Set `ALB_NOTIFIER=tmux`
+to use tmux; an unsupported value is refused rather than silently defaulted.
 
 ## Status
 
@@ -94,7 +93,8 @@ by someone other than its author. Not published, and not formally audited — se
 
 - **Python 3.11+.** Standard library only, zero third-party runtime
   dependencies.
-- **A terminal multiplexer — optional.** **cmux only** in v0.1. The ring works by typing a
+- **A terminal multiplexer — optional.** cmux or tmux, selected with
+  `ALB_NOTIFIER`. The ring works by typing a
   line into a pane, so a pane must exist to type into. **Without one the bridge
   still runs**: mail lands durably and nothing pings, and `alb --status` reports
   the ring as `disabled` rather than leaving you guessing.
