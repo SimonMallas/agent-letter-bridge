@@ -212,6 +212,21 @@ Reports bridge liveness (freshness of the heartbeat) and the last ring outcome.
 Exits non-zero when the bridge is not ok, so a monitor can use it directly. It
 reads files only — no config, no token, no network.
 
+## Permissions
+
+The bridge creates its directories `0700` and every state file `0600`, from the
+first run. Files are created with those permissions rather than corrected
+afterwards, so nothing is briefly readable while it is being written.
+
+**If you created the directory yourself before installing, check it.** A
+directory made with a normal umask is `0755` and world-listable, and the state
+holds a canary log naming the chats you have messaged, an offset describing your
+traffic, and dead letters quoting failed sends.
+
+```sh
+chmod -R go-rwx /path/to/state
+```
+
 ## Moving machines
 
 Preserve the whole `state/` directory, and **`state/delivered.json` above all**.

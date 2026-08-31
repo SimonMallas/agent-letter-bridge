@@ -250,7 +250,9 @@ def _load_delivered(ledger):
 def _record_delivered(ledger, delivered, update_id, cap):
     delivered.append(update_id)
     tmp = pathlib.Path(f"{ledger}.tmp")
-    tmp.write_text(json.dumps(delivered[-cap:]), encoding="utf-8")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(delivered[-cap:]))
     os.replace(tmp, ledger)
 
 

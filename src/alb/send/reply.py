@@ -107,7 +107,9 @@ def _write_atomic(path, data):
     """Every durable write in this project is tmp + replace. A torn record is
     a record nobody can trust at 3am."""
     tmp = pathlib.Path(f"{path}.tmp")
-    tmp.write_text(json.dumps(data), encoding="utf-8")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(data))
     os.replace(tmp, path)
 
 

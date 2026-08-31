@@ -206,6 +206,13 @@ EXTRA = {
         ROOT / "scripts" / "deps_check.py", "tests.test_deps_gate",
         '        failures.append("pyproject.toml is missing: the package must be installable")',
         "        pass"),
+    "the state layout is created private": (
+        BRIDGE, "tests.test_permissions",
+        "            path.chmod(DIR_MODE)", "            pass"),
+    "state files are created private": (
+        BRIDGE, "tests.test_permissions",
+        "    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, FILE_MODE)",
+        "    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

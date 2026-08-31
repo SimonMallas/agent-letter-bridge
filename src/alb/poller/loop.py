@@ -36,7 +36,11 @@ def _write_heartbeat(path):
     """
     path = pathlib.Path(path)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"heartbeat": time.time()}), encoding="utf-8")
+    # Created 0600 rather than chmod'd afterwards, so the contents are never
+    # briefly readable by anyone else.
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps({"heartbeat": time.time()}))
     os.replace(tmp, path)
 
 

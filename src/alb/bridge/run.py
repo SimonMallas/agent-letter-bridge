@@ -72,14 +72,50 @@ def load_config(path):
     return config
 
 
+# Private by default, not private if the operator remembers. The state
+# directory holds a canary log naming the chats you messaged, an offset file
+# describing your traffic, and dead letters quoting failures. Letters were
+# already 0600; everything AROUND them was being created world-listable,
+# because a directory made with the default umask is 0755 and nobody notices
+# until they look.
+DIR_MODE = 0o700
+FILE_MODE = 0o600
+
+
+def prepare_root(root):
+    """Create the state layout with private permissions from the first run."""
+    root = pathlib.Path(root)
+    for path in (root, root / "inbox", root / "processed", root / "state"):
+        path.mkdir(parents=True, exist_ok=True)
+        try:
+            path.chmod(DIR_MODE)
+        except OSError:
+            # A filesystem that cannot express this is a lost guarantee, not a
+            # reason to refuse to run.
+            pass
+    return root
+
+
+def write_private(path, text):
+    """Write a state file that nobody else can read.
+
+    Created before writing rather than chmod'd after, so the contents are never
+    briefly world-readable on disk.
+    """
+    path = pathlib.Path(path)
+    tmp = pathlib.Path(f"{path}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, FILE_MODE)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    os.replace(tmp, path)
+
+
 def _record_ring(root, state, reason):
     """Ring outcome, written where the operator and the watchdog can read it."""
     path = pathlib.Path(root) / "state" / "ring-health.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = pathlib.Path(f"{path}.tmp")
-    tmp.write_text(json.dumps(
-        {"state": state, "reason": reason, "at": time.time()}), encoding="utf-8")
-    os.replace(tmp, path)
+    write_private(path, json.dumps(
+        {"state": state, "reason": reason, "at": time.time()}))
 
 
 def run_once(platform, transport, surface, root,

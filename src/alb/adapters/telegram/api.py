@@ -85,7 +85,9 @@ class Telegram:
         if not self._offset_path or self._acked is None:
             return
         tmp = pathlib.Path(f"{self._offset_path}.tmp")
-        tmp.write_text(json.dumps({"acked": self._acked}), encoding="utf-8")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"acked": self._acked}))
         os.replace(tmp, self._offset_path)
 
     def __repr__(self):

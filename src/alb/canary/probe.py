@@ -13,6 +13,7 @@ message arrived - only that the send path accepted it - which is why the
 confirmation is a human step and stays one.
 """
 import json
+import os
 import pathlib
 import time
 
@@ -44,7 +45,10 @@ def _log(root, line):
     path = pathlib.Path(root) / "state" / "canary.log"
     path.parent.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    with open(path, "a", encoding="utf-8") as fh:
+    # This log names the chats you have messaged, so it is created private
+    # rather than left to the umask.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as fh:
         fh.write(f"{stamp} {line}\n")
 
 

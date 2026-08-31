@@ -120,9 +120,9 @@ def main(argv=None):
         print(f"alb: {exc}", file=sys.stderr)
         return 2
 
-    root = pathlib.Path(args.root)
-    for name in ("inbox", "processed", "state"):
-        (root / name).mkdir(parents=True, exist_ok=True)
+    # Private from the first run: 0700 directories, not whatever the umask
+    # happens to be.
+    root = run.prepare_root(args.root)
 
     if args.canary:
         from alb.canary import probe
