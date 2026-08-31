@@ -16,11 +16,17 @@ is read-only and consumes nothing:
 
 ```sh
 curl -s "https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates" \
-  | grep -o '"id":[-0-9]*' | head -1
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"][0]["message"]["chat"]["id"])'
 ```
 
 That number is your chat id, and it is the only sender the bridge will accept
 until you add more.
+
+**Take the `chat` id, not the `from` id.** In a direct message they are the same
+number, so a wrong recipe appears to work. In a group they differ — `from` is
+the person, `chat` is the group — and an allowlist holding the wrong one denies
+everything. That denial is silent by design, so it looks exactly like a dead
+bot, which is the situation the first-hour test below exists to prevent.
 
 **3. An allowlist file.** This is the one thing that stops a stranger reaching
 your agents, and **the bridge delivers nothing until it exists.** Create
@@ -35,7 +41,12 @@ wrong shape all deny everything**, and there is no setting that opens it. If
 nothing arrives, run `alb --doctor` — it says plainly whether the allowlist is
 the reason.
 
-**4. A surface id for the ring — OPTIONAL.**
+**4. A surface id for the ring — OPTIONAL, and cmux only.**
+
+There is no tmux adapter in v0.1. The notifier is a seam and one can be added,
+but until it exists, setting a notifier in the config will be REFUSED rather
+than quietly ignored — an unread setting that appears to work is worse than an
+error.
 
 Leave `ALB_SURFACE` unset and the bridge runs happily without a multiplexer:
 mail lands durably and nothing pings. `alb --status` reports the ring as
@@ -200,6 +211,14 @@ alb --status --root /path/to/state
 Reports bridge liveness (freshness of the heartbeat) and the last ring outcome.
 Exits non-zero when the bridge is not ok, so a monitor can use it directly. It
 reads files only — no config, no token, no network.
+
+## Moving machines
+
+Preserve the whole `state/` directory, and **`state/delivered.json` above all**.
+It is the record of which platform updates have already become letters: without
+it, everything the platform still retains is delivered again. The other ledgers
+degrade gracefully; that one is the difference between a clean move and a
+re-run of your recent history.
 
 ## 3am page
 

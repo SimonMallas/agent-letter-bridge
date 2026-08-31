@@ -56,6 +56,20 @@ class BoundedReply(unittest.TestCase):
         self._send(sender)
         self.assertEqual(sender.calls[0][0], "8675309")
 
+    def test_a_reply_still_works_after_the_letter_is_swept(self):
+        """The poller searches inbox AND processed; the send path searched only
+        the inbox. So after a sweep a reply raised NoSuchLetter and the
+        operator concluded sending was broken - when the letter was simply
+        filed. The send side must search the same set as the receive side."""
+        processed = self.root / "processed"
+        processed.mkdir(exist_ok=True)
+        for f in self.inbox.glob("*.md"):
+            f.rename(processed / f.name)
+        sender = FakeSender()
+        reply.send_reply(sender, self.inbox, self.state, self.allow,
+                         self.letter_id, "a reply", searched=[self.inbox, processed])
+        self.assertEqual(sender.calls[0][0], "8675309")
+
     def test_a_reply_to_an_unknown_letter_refuses(self):
         sender = FakeSender()
         with self.assertRaises(store.NoSuchLetter):

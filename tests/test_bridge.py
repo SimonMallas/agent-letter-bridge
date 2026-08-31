@@ -68,6 +68,25 @@ class Config(unittest.TestCase):
             run.load_config(self.path)
         self.assertNotIn("SECRETVALUE", str(caught.exception))
 
+    def test_an_unknown_setting_is_refused_not_ignored(self):
+        """A dogfood install set ALB_NOTIFIER=tmux. Nothing read it, and the
+        bridge reported success - so the operator believed a selection had
+        happened that never did, and their deployment silently diverged from
+        what the config said.
+
+        A key that looks like it did something is worse than one that errors.
+        """
+        self._write("ALB_TOKEN=1:x\nALB_NOTIFIER=tmux\n")
+        with self.assertRaises(run.ConfigError) as caught:
+            run.load_config(self.path)
+        self.assertIn("ALB_NOTIFIER", str(caught.exception))
+
+    def test_the_error_lists_what_is_actually_supported(self):
+        self._write("ALB_TOKEN=1:x\nALB_WHATEVER=1\n")
+        with self.assertRaises(run.ConfigError) as caught:
+            run.load_config(self.path)
+        self.assertIn("ALB_SURFACE", str(caught.exception))
+
     def test_a_complete_config_loads(self):
         self._write("ALB_TOKEN=1:x\nALB_SURFACE=SURFACE-1\n")
         config = run.load_config(self.path)

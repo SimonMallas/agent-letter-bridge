@@ -193,6 +193,11 @@ EXTRA = {
     "a smuggled manifest is refused": (
         ROOT / "scripts" / "deps_check.py", "tests.test_deps_gate",
         "        if (ROOT / name).exists():", "        if False:"),
+    "an unknown setting is refused, not ignored": (
+        BRIDGE, "tests.test_bridge", "    if unknown:", "    if False:"),
+    "a reply finds a letter that has been swept": (
+        SEND, "tests.test_send",
+        "    for directory in (searched or [inbox]):", "    for directory in [inbox]:"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

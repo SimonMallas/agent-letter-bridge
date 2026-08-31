@@ -80,20 +80,21 @@ It refuses to start on a missing, world-readable or incomplete config. That is
 deliberate: a bridge that starts wrong is harder to diagnose at 3am than one
 that will not start at all.
 
-**The ring requires a multiplexer** (cmux, or tmux with a uniquely identified
-pane). v0.1 has no notifier that works without one — see `docs/operations.md`.
+**The ring requires cmux** in v0.1. There is no tmux adapter yet — the
+notifier seam exists for one, but shipping a promise before the adapter is how
+an operator ends up believing they selected something that was never read.
 
 ## Status
 
-**Pre-release, and not yet run against a live platform.** Every component is
-tested against fakes; nothing here has spoken to a real Telegram bot or a real
-cmux pane. Do not point it at a bot you care about.
+**Pre-release.** Run end to end against real bots on macOS and Linux, including
+by someone other than its author. Not published, and not formally audited — see
+`docs/threat-model.md` for what is and is not claimed.
 
 ## What you need
 
 - **Python 3.11+.** Standard library only, zero third-party runtime
   dependencies.
-- **A terminal multiplexer — optional.** cmux today. The ring works by typing a
+- **A terminal multiplexer — optional.** **cmux only** in v0.1. The ring works by typing a
   line into a pane, so a pane must exist to type into. **Without one the bridge
   still runs**: mail lands durably and nothing pings, and `alb --status` reports
   the ring as `disabled` rather than leaving you guessing.

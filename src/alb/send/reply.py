@@ -114,10 +114,24 @@ def _dead_letter(state, reply_id, letter_id, detail):
     })
 
 
-def send_reply(sender, inbox, state, allowlist_path, letter_id, text):
-    """Reply to the chat named by a stored inbound letter. Nothing else."""
+def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
+               searched=None):
+    """Reply to the chat named by a stored inbound letter. Nothing else.
+
+    `searched` must cover everywhere letters travel. An inbox is swept, and
+    searching only the inbox means a reply to a filed letter fails as though it
+    never existed - which an operator reads as the send path being broken.
+    """
     # The destination is read from disk - never remembered, configured or inferred.
-    stored = store.resolve(inbox, letter_id)
+    stored = None
+    for directory in (searched or [inbox]):
+        try:
+            stored = store.resolve(directory, letter_id)
+            break
+        except store.NoSuchLetter:
+            continue
+    if stored is None:
+        raise store.NoSuchLetter(f"{letter_id}: no letter with this exact id")
     chat_id = stored.meta.get("chat_id")
 
     # Re-checked at send: the allowlist is enforced at BOTH ends.

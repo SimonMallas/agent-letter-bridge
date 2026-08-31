@@ -6,7 +6,8 @@ the notification only makes it faster.
 
 RUN IT
   alb --config bridge.env --root ~/.alb        both flags are required
-  The env file must be mode 600 and set ALB_TOKEN and ALB_SURFACE.
+  The env file must be mode 600 and set ALB_TOKEN. ALB_SURFACE is optional:
+  without it, mail lands and nothing rings.
 
 WHEN SOMETHING IS WRONG
   alb --status   should I worry? reads files only, no token, no network
@@ -150,7 +151,8 @@ def main(argv=None):
         try:
             rid = reply.send_reply(
                 api.Telegram(config["ALB_TOKEN"]), root / "inbox", root / "state",
-                root / "allowlist.json", args.reply_to, args.text)
+                root / "allowlist.json", args.reply_to, args.text,
+                searched=[root / "inbox", root / "processed"])
         except reply.AmbiguousOutcome as exc:
             print(f"alb: AMBIGUOUS - dead-lettered for a human, NOT retried: {exc}",
                   file=sys.stderr)

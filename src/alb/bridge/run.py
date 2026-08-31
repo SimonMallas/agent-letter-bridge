@@ -19,6 +19,13 @@ from alb.poller import loop
 # a mode the code refuses to start in.
 REQUIRED = ("ALB_TOKEN",)
 
+# Every setting this tool reads. An unknown key is refused rather than ignored:
+# a dogfood install set ALB_NOTIFIER=tmux, nothing read it, and the bridge
+# reported success - so the operator believed they had selected a notifier that
+# did not exist, and their deployment diverged from their config in silence. A
+# key that looks like it did something is worse than one that errors.
+KNOWN = ("ALB_TOKEN", "ALB_SURFACE", "ALB_FROM", "ALB_TO")
+
 
 class ConfigError(Exception):
     """Refuse loudly at startup rather than fail obscurely at 3am."""
@@ -53,6 +60,15 @@ def load_config(path):
     missing = [key for key in REQUIRED if not config.get(key)]
     if missing:
         raise ConfigError(f"missing required settings: {', '.join(missing)}")
+
+    unknown = [key for key in config if key not in KNOWN]
+    if unknown:
+        raise ConfigError(
+            f"unknown settings: {', '.join(sorted(unknown))}. "
+            f"This tool reads only: {', '.join(KNOWN)}. "
+            f"Refusing rather than ignoring them, so a setting never appears to "
+            f"take effect when nothing read it."
+        )
     return config
 
 
@@ -79,7 +95,11 @@ def run_once(platform, transport, surface, root,
     published = loop.poll_once(
         platform,
         root / "inbox",
-        root / "delivered.json",
+        # Under state/, with the other ledgers. It sat at the root while the
+        # operations guidance told operators to preserve "the state ledgers" on
+        # a machine move - so the one file that prevents republishing every
+        # letter was the one the instruction missed.
+        root / "state" / "delivered.json",
         root / "allowlist.json",
         health_path=root / "state" / "health.json",
         processed=root / "processed",
