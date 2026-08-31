@@ -36,7 +36,7 @@ EXTRA = {
         "        if False:"),
     "reply destination read from the letter": (
         SEND, "tests.test_send",
-        '    chat_id = stored.meta.get("chat_id")', '    chat_id = "111"'),
+        "    chat_id = destination(stored.meta)", '    chat_id = "not-the-test-chat"'),
     "allowlist refuses a non-list chats value": (
         ALLOW, "tests.test_allowlist",
         "if not isinstance(chats, list) or not chats:", "if False:"),
@@ -198,6 +198,14 @@ EXTRA = {
     "a reply finds a letter that has been swept": (
         SEND, "tests.test_send",
         "    for directory in (searched or [inbox]):", "    for directory in [inbox]:"),
+    "a reply resolves the destination the poller actually writes": (
+        SEND, "tests.test_send",
+        'DESTINATION_KEYS = ("telegram_chat_id", "chat_id")',
+        'DESTINATION_KEYS = ("chat_id",)'),
+    "a missing pyproject is refused": (
+        ROOT / "scripts" / "deps_check.py", "tests.test_deps_gate",
+        '        failures.append("pyproject.toml is missing: the package must be installable")',
+        "        pass"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

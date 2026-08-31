@@ -50,6 +50,40 @@ class BoundedReply(unittest.TestCase):
             letter_id or self.letter_id, text,
         )
 
+    def test_a_reply_works_on_a_letter_THE_POLLER_ACTUALLY_WROTE(self):
+        """The fixtures in this file build letters by hand in a shape the
+        poller stopped producing when the routing envelope landed. The poller
+        writes telegram_chat_id; the send path read chat_id; so every reply to
+        a real letter failed the allowlist with a destination of None.
+
+        Same class as a test double that drifts from production: the letters
+        under test must be the letters the system writes.
+        """
+        from alb.poller import loop
+
+        class OnePlatform:
+            def __init__(self):
+                self.staged = None
+
+            def fetch(self, offset=None):
+                return [{"update_id": 1, "chat_id": "8675309", "text": "hi"}]
+
+            def ack(self, uid):
+                self.staged = uid
+
+        loop.poll_once(OnePlatform(), self.inbox, self.root / "delivered.json",
+                       self.allow)
+        # Pick the POLLER's letter explicitly. setUp also publishes one, and
+        # sorting picked between them by a random suffix - so this test passed
+        # by resolving the hand-built fixture instead of the real letter,
+        # which is the very drift it exists to catch.
+        letter_id = [p.stem for p in self.inbox.glob("*-u*.md")][0]
+
+        sender = FakeSender()
+        reply.send_reply(sender, self.inbox, self.state, self.allow,
+                         letter_id, "a reply")
+        self.assertEqual(sender.calls[0][0], "8675309")
+
     def test_the_destination_comes_from_the_stored_letter(self):
         """Never remembered, never configured, never inferred."""
         sender = FakeSender()

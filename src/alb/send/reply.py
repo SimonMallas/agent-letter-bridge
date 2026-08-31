@@ -39,6 +39,25 @@ class DefiniteRefusal(Exception):
     """
 
 
+# Where a letter names its destination, newest first. This list is the
+# compatibility surface between the letter format and the send path, and it
+# exists because they drifted: the routing envelope moved the field to
+# telegram_chat_id while this module still read chat_id, so every reply to a
+# real letter resolved to None and was denied by the allowlist. The tests did
+# not catch it because they built letters by hand in the shape the poller had
+# stopped writing.
+DESTINATION_KEYS = ("telegram_chat_id", "chat_id")
+
+
+def destination(meta):
+    """The chat a reply goes to, read from the stored letter and nowhere else."""
+    for key in DESTINATION_KEYS:
+        value = meta.get(key)
+        if value:
+            return value
+    return None
+
+
 def _reply_id(letter_id, text):
     """Deterministic, so a replay or restart claims the same id and refuses."""
     digest = hashlib.sha256(f"{letter_id}\x00{text}".encode("utf-8")).hexdigest()
@@ -132,7 +151,7 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
             continue
     if stored is None:
         raise store.NoSuchLetter(f"{letter_id}: no letter with this exact id")
-    chat_id = stored.meta.get("chat_id")
+    chat_id = destination(stored.meta)
 
     # Re-checked at send: the allowlist is enforced at BOTH ends.
     if not gate.allows(allowlist_path, chat_id):
