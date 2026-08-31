@@ -221,6 +221,10 @@ EXTRA = {
         "tests.test_tmux_adapter",
         '_run([self._binary, "send-keys", "-t", surface, "-l", line])',
         '_run([self._binary, "send-keys", "-t", surface, line])'),
+    "the platform destination field takes precedence": (
+        SEND, "tests.test_send",
+        'DESTINATION_KEYS = ("telegram_chat_id", "chat_id")',
+        'DESTINATION_KEYS = ("chat_id", "telegram_chat_id")'),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

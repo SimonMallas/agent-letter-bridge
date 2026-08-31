@@ -84,6 +84,26 @@ class BoundedReply(unittest.TestCase):
                          letter_id, "a reply")
         self.assertEqual(sender.calls[0][0], "8675309")
 
+    def test_the_platform_field_wins_when_a_letter_carries_both(self):
+        """Two independent fixes for the same defect chose opposite orders.
+
+        Every real letter carries exactly one of these keys, so both orders
+        behave identically today and neither side's tests could tell them
+        apart. They differ only for a letter carrying both - which is precisely
+        what a migration or a hand-edited letter produces, and precisely when
+        being wrong is silent.
+
+        The platform field wins: it is the format letters are written in now,
+        and a stale chat_id would send a reply to whatever the old shape said.
+        """
+        letter_id = store.publish(
+            self.inbox, "incoming",
+            {"chat_id": "0000000", "telegram_chat_id": "8675309"})
+        sender = FakeSender()
+        reply.send_reply(sender, self.inbox, self.state, self.allow,
+                         letter_id, "a reply")
+        self.assertEqual(sender.calls[0][0], "8675309")
+
     def test_the_destination_comes_from_the_stored_letter(self):
         """Never remembered, never configured, never inferred."""
         sender = FakeSender()
