@@ -96,8 +96,8 @@ EXTRA = {
         "    if missing:", "    if False:"),
     "a batch rings once, not once per letter": (
         BRIDGE, "tests.test_bridge",
-        "        ring.notify(transport, surface, root / \"inbox\", published[-1])",
-        "        for _p in published:\n            ring.notify(transport, surface, root / \"inbox\", _p)"),
+        "            ring.notify(transport, surface, mail / \"inbox\", published[-1])",
+        "            for _p in published:\n                ring.notify(transport, surface, mail / \"inbox\", _p)"),
     "a dead notifier never costs a letter": (
         BRIDGE, "tests.test_bridge",
         "    except Exception as exc:\n        # Letters are authoritative",
@@ -232,6 +232,18 @@ EXTRA = {
     "a failed cycle does not claim liveness": (
         BRIDGE, "tests.test_offset_state_machine",
         '    loop._write_heartbeat(root / "state" / "health.json")', "    pass"),
+    "the mailbox never receives private state": (
+        BRIDGE, "tests.test_mail_root",
+        '    for name in ("inbox", "processed"):\n        (mail_root / name).mkdir(parents=True, exist_ok=True)',
+        "    prepare_root(mail_root)"),
+    "integrated mode rings through the letterbox helper": (
+        BRIDGE, "tests.test_mail_root",
+        '            _bus_ring(recipient, "info", published[-1])',
+        '            ring.notify(transport, surface, mail / "inbox", published[-1])'),
+    "standalone keeps its own knock and store": (
+        BRIDGE, "tests.test_mail_root",
+        "    integrated = mail_root is not None and pathlib.Path(mail_root) != root",
+        "    integrated = True"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

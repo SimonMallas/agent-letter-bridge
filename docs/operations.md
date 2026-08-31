@@ -94,6 +94,34 @@ ALB_TOKEN=123456789:AA...
 ALB_SURFACE=THE-ID-FROM-ABOVE
 ```
 
+## Integrated mode: letters into a mailbox you already sweep
+
+If the agent already has an inter-agent letterbox, point the bridge's **mail**
+at it and leave its **state** where it is:
+
+```sh
+alb --config bridge.env --root ~/.alb/grok --mail-root ~/shared-brain/bus/grok-build
+```
+
+Letters land in the existing inbox in the standard envelope, and the ring goes
+through the letterbox's own doorbell helper — so it matches the skill the agent
+already has and there is nothing to teach.
+
+**`--root` and `--mail-root` are separate on purpose.** Everything private stays
+under `--root`: the allowlist, the lock, the dedup ledger, the offset, health,
+canary and dead letters. The mailbox receives **letters and nothing else** — no
+state directory, and its own permissions are left exactly as found, because it
+holds files belonging to something that is not this bridge.
+
+**One running bridge per mailbox.** The lock is per `--root`, so two bridges with
+different state directories pointed at one mailbox would both write to it. That
+is an operational rule, not something the lock can enforce — putting a lock file
+in a shared mailbox would be the contamination this design exists to avoid.
+
+`ALB_SURFACE` is not needed in integrated mode: the letterbox helper resolves
+the recipient's registered pane itself. `ALB_TO` must be the agent's exact
+participant name, since that is who the doorbell is addressed to.
+
 ## Onboarding an agent that already has a doorbell
 
 **If the agent you are waking already handles inter-agent mail, the transport

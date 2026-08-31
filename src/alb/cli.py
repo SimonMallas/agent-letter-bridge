@@ -54,7 +54,10 @@ def main(argv=None):
         prog="alb", description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", default="", help="path to the env file (mode 600)")
-    parser.add_argument("--root", required=True, help="state directory")
+    parser.add_argument("--root", required=True, help="private state directory")
+    parser.add_argument("--mail-root", default=None,
+                        help="publish letters here instead (integrated mode); "
+                             "private state always stays under --root")
     parser.add_argument("--once", action="store_true", help="one cycle, then exit")
     parser.add_argument("--canary", action="store_true",
                         help="prove the send path is alive; sends to your own chat")
@@ -193,6 +196,7 @@ def _poll_forever(platform, transport, surface, root, args, config):
                 platform, transport, surface, root,
                 sender=config.get("ALB_FROM", "telegram-bridge"),
                 recipient=config.get("ALB_TO", "agent"),
+                mail_root=args.mail_root or config.get("ALB_MAIL_ROOT") or None,
             )
         except loop.PlatformConflict as exc:
             # A conflict is a YIELD, not an error: exit 0 so the token's holder

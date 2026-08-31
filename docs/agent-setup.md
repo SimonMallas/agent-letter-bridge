@@ -41,6 +41,17 @@ though it were work assigned by another agent.
 The destination for any reply is in the letter itself. It is never remembered,
 configured, or inferred.
 
+## If you were set up in integrated mode
+
+Letters arrive in the inbox you already sweep, and the knock is the doorbell you
+already recognise. Nothing above applies: no second directory, no new line to
+learn. A letter from the bridge is identifiable by its `from:` field.
+
+**Do not reply through the letterbox.** The sender is not a participant there,
+so a reply would be addressed to something that cannot receive it. Outbound is
+`alb --reply-to`, which is operator-side and needs the token. Being woken and
+reading mail does not.
+
 ## Commands
 
 ```

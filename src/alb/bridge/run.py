@@ -8,6 +8,7 @@ import json
 import os
 import pathlib
 import stat
+import subprocess
 import time
 
 from alb.notifier import ring
@@ -24,7 +25,8 @@ REQUIRED = ("ALB_TOKEN",)
 # reported success - so the operator believed they had selected a notifier that
 # did not exist, and their deployment diverged from their config in silence. A
 # key that looks like it did something is worse than one that errors.
-KNOWN = ("ALB_TOKEN", "ALB_SURFACE", "ALB_FROM", "ALB_TO", "ALB_NOTIFIER")
+KNOWN = ("ALB_TOKEN", "ALB_SURFACE", "ALB_FROM", "ALB_TO", "ALB_NOTIFIER",
+         "ALB_MAIL_ROOT")
 
 # Transports that exist. Naming one that does not is refused rather than
 # defaulted, because defaulting is what let a deployment believe it had
@@ -90,6 +92,9 @@ def load_config(path):
 # already 0600; everything AROUND them was being created world-listable,
 # because a directory made with the default umask is 0755 and nobody notices
 # until they look.
+# The letterbox helper, overridable because this is not everyone's path.
+BUS_BINARY = os.environ.get("ALB_BUS_BINARY", "bus.sh")
+
 DIR_MODE = 0o700
 FILE_MODE = 0o600
 
@@ -122,6 +127,39 @@ def write_private(path, text):
     os.replace(tmp, path)
 
 
+def prepare_mail_root(mail_root):
+    """Create ONLY what letters need, in a directory that may not be ours.
+
+    Deliberately not prepare_root. That function chmods the root, inbox,
+    processed and state to 0700, which is right for a directory this bridge
+    owns and wrong for a shared mailbox: it would write our umask onto identity
+    and surface files belonging to something else, and create private state
+    beside mail that must not carry it.
+
+    So: inbox and processed if missing, nothing else, and the parent's
+    permissions are left exactly as found.
+    """
+    mail_root = pathlib.Path(mail_root)
+    for name in ("inbox", "processed"):
+        (mail_root / name).mkdir(parents=True, exist_ok=True)
+    return mail_root
+
+
+def _bus_ring(recipient, kind, letter_id, binary=None):
+    """Ring through the letterbox's own helper rather than imitating it.
+
+    An inter-agent doorbell has an exact grammar, including a token the helper
+    derives from the letter id. A line assembled here would either be rejected
+    by the recipient's matcher or send them to look up the wrong token - so the
+    helper that owns those bytes is the thing that must emit them.
+
+    Integrated mode may assume the helper exists: it is only reachable by
+    pointing at a letterbox, which implies one is installed.
+    """
+    subprocess.run([binary or BUS_BINARY, "ring", recipient, kind, letter_id],
+                   check=True, capture_output=True)
+
+
 def _record_ring(root, state, reason):
     """Ring outcome, written where the operator and the watchdog can read it."""
     path = pathlib.Path(root) / "state" / "ring-health.json"
@@ -131,7 +169,7 @@ def _record_ring(root, state, reason):
 
 
 def run_once(platform, transport, surface, root,
-             sender="telegram-bridge", recipient="agent"):
+             sender="telegram-bridge", recipient="agent", mail_root=None):
     """One cycle. Returns the letters published.
 
     A conflict propagates: the caller exits cleanly so the token's holder keeps
@@ -140,9 +178,14 @@ def run_once(platform, transport, surface, root,
     this is deployed.
     """
     root = pathlib.Path(root)
+
+    # Letters may live somewhere this bridge does not own. State never does.
+    integrated = mail_root is not None and pathlib.Path(mail_root) != root
+    mail = prepare_mail_root(mail_root) if integrated else root
+
     published = loop.poll_once(
         platform,
-        root / "inbox",
+        mail / "inbox",
         # Under state/, with the other ledgers. It sat at the root while the
         # operations guidance told operators to preserve "the state ledgers" on
         # a machine move - so the one file that prevents republishing every
@@ -155,7 +198,7 @@ def run_once(platform, transport, surface, root,
         # a fresh heartbeat behind, so a bridge that had consumed nothing
         # looked healthy. The cycle claims liveness, below, once it is done.
         health_path=None,
-        processed=root / "processed",
+        processed=mail / "processed",
         sender=sender,
         recipient=recipient,
     )
@@ -176,7 +219,12 @@ def run_once(platform, transport, surface, root,
     if not published:
         return published
 
-    if not surface:
+    if not surface and not integrated:
+        # Integrated mode needs no surface: the letterbox helper resolves the
+        # recipient's registered pane itself, which is the whole reason to use
+        # it rather than imitate it. Requiring ALB_SURFACE here would make an
+        # operator pin a surface that nothing then reads.
+        #
         # No multiplexer configured. Not an error and not a silent gap: the
         # letters are on disk and the absence of a bell is recorded where
         # --status and --doctor will show it.
@@ -187,7 +235,13 @@ def run_once(platform, transport, surface, root,
     # sweeps the inbox, so a ring per letter is noise that can outrun the
     # reader. The ring names the newest letter only to prove one exists.
     try:
-        ring.notify(transport, surface, root / "inbox", published[-1])
+        if integrated:
+            # The letterbox's own doorbell, so it matches every skill that
+            # already exists there. The standalone notifier is NOT also used:
+            # two injects would be two submissions.
+            _bus_ring(recipient, "info", published[-1])
+        else:
+            ring.notify(transport, surface, mail / "inbox", published[-1])
     except Exception as exc:
         # Letters are authoritative; rings only accelerate. A dead notifier
         # must never cost a message - the mail is already on disk and will be
