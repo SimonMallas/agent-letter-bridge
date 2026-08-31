@@ -261,6 +261,36 @@ MUTATIONS = {
 }
 
 
+def _purge_bytecode():
+    """Remove every __pycache__ under the tree.
+
+    THIS IS NOT TIDINESS. Python invalidates cached bytecode on (mtime, size).
+    A mutation writes a file, the test run compiles it, and the restore writes
+    a file of a DIFFERENT size but often within the same mtime granularity - so
+    a stale .pyc can survive in either direction:
+
+      - after a run, the tree behaves as MUTATED while the source is correct,
+        which is how a green suite and a red one disagreed and a broken commit
+        got pushed;
+      - during a run, a mutation may not take effect at all, and the gate
+        reports a pin that was never actually exercised.
+
+    The second is the dangerous one: a gate that silently stops mutating still
+    prints ok. So caches are purged around every mutation, and the subprocess
+    is told not to write new ones.
+    """
+    for cache in ROOT.rglob("__pycache__"):
+        for f in cache.glob("*"):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+        try:
+            cache.rmdir()
+        except OSError:
+            pass
+
+
 def _run(name, target, tests, old, new, failures):
     original = target.read_text(encoding="utf-8")
     if old not in original:
@@ -268,14 +298,17 @@ def _run(name, target, tests, old, new, failures):
         print(f"  FAIL {name} (anchor missing)")
         return
     try:
+        _purge_bytecode()
         target.write_text(original.replace(old, new, 1), encoding="utf-8")
         result = subprocess.run(
             [sys.executable, "-m", "unittest", tests],
             capture_output=True, text=True, cwd=ROOT,
-                env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+                env={**os.environ, "PYTHONPATH": str(ROOT / "src"),
+                 "PYTHONDONTWRITEBYTECODE": "1"},
         )
     finally:
         target.write_text(original, encoding="utf-8")
+        _purge_bytecode()
     if result.returncode == 0:
         failures.append(f"{name}: DISABLED BUT NO TEST FAILED")
     print(f"  {'ok  ' if result.returncode else 'FAIL'} {name}")
@@ -295,13 +328,15 @@ def main():
             result = subprocess.run(
                 [sys.executable, "-m", "unittest", "tests.test_letter"],
                 capture_output=True, text=True, cwd=ROOT,
-            env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+            env={**os.environ, "PYTHONPATH": str(ROOT / "src"),
+                 "PYTHONDONTWRITEBYTECODE": "1"},
             )
             if result.returncode == 0:
                 failures.append(f"{name}: DISABLED BUT NO TEST FAILED")
             print(f"  {'ok  ' if result.returncode else 'FAIL'} {name}")
     finally:
         SRC.write_text(original, encoding="utf-8")
+        _purge_bytecode()
 
     if failures:
         print("\nMUTATION GATE FAILED\n")
