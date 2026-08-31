@@ -94,6 +94,30 @@ ALB_TOKEN=123456789:AA...
 ALB_SURFACE=THE-ID-FROM-ABOVE
 ```
 
+## Onboarding an agent that already has a doorbell
+
+**If the agent you are waking already handles inter-agent mail, the transport
+working is not enough — the agent has to know this bridge exists.**
+
+Its knock is a different line from any other doorbell convention, and points at
+a different directory. An agent with an existing sweep will receive the ALB
+knock, fail to match it, run its usual check, find nothing, and reasonably
+conclude the bridge is broken. Everything will have worked.
+
+Before the first live message: give the agent `docs/agent-setup.md`, or the
+equivalent in whatever form your agent takes instructions. It needs one line and
+one path — the knock it will receive, and the inbox to read.
+
+**Do not unify the two by pointing `--root` at an existing mail directory.** The
+bridge creates private state in its root — offset, lock, ledger, dead letters,
+canary log — and a shared mail directory should not inherit that file's umask,
+backup story or lifecycle. Two stores is the shipped design; one store is the
+integrated pattern described in `architecture.md`, and it is not shipped.
+
+**One bot per agent.** The platform permits exactly one consumer per token, so
+sharing a bot between agents is not a configuration choice you have — it is a
+conflict. Each agent gets its own bot, its own state root, and its own pane.
+
 ## Day-0, in order
 
 The ordering is the content. Do these in sequence.

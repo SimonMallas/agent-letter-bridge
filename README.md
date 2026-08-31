@@ -68,6 +68,10 @@ python3 -m venv ~/.alb/venv && ~/.alb/venv/bin/pip install .
 # then point your unit file at ~/.alb/venv/bin/alb — see examples/
 ```
 
+Waking an agent that already handles other mail? It needs to know this bridge
+exists — see [`docs/agent-setup.md`](docs/agent-setup.md). The transport working
+is not the same as the agent recognising the knock.
+
 **Read [`docs/operations.md`](docs/operations.md) first.** You need four things
 that are not in this repo — a bot token, your own chat id, an `allowlist.json`,
 and a surface id for the ring — and **the bridge delivers nothing until the
