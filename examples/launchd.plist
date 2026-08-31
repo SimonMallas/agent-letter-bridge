@@ -23,8 +23,12 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>/opt/homebrew/bin/python3</string>
-    <string>/ABSOLUTE/PATH/TO/agent-letter-bridge/alb</string>
+    <!-- A DEDICATED VENV, not a pipx shim and not the git checkout. pipx's
+         internal layout is not an operations contract; a venv you created
+         next to your state directory is. Create it with:
+           python3 -m venv ~/.alb/venv
+           ~/.alb/venv/bin/pip install /path/to/checkout -->
+    <string>/ABSOLUTE/PATH/TO/.alb/venv/bin/alb</string>
     <string>--config</string>
     <string>/ABSOLUTE/PATH/TO/bridge.env</string>
     <string>--root</string>

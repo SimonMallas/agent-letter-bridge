@@ -8,7 +8,7 @@ Injected text arrives at an agent as authoritative user input, so the payload is
 a fixed, innocuous, operator-authored line. Anything richer is keyboard
 prompt-injection.
 """
-from letter import store
+from alb.letter import store
 
 # Fixed and content-free. Never interpolate anything into this.
 # Says what to do and names nothing the operator may not have. The earlier

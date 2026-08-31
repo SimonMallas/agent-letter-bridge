@@ -15,7 +15,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from letter import store  # noqa: E402
+from alb.letter import store  # noqa: E402
 
 
 class Envelope(unittest.TestCase):

@@ -15,7 +15,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from fake_platform import FakePlatform  # noqa: E402
-from poller import loop  # noqa: E402
+from alb.poller import loop  # noqa: E402
 
 
 def update(uid, chat, text):
@@ -75,7 +75,7 @@ class PollerBehaviour(unittest.TestCase):
         """THE INVARIANT. Acking an update whose letter never landed loses the
         message permanently once the platform's retention window passes."""
         platform = FakePlatform([update(7, "111", "hello")])
-        with mock.patch("letter.store.os.link", side_effect=OSError("disk full")):
+        with mock.patch("alb.letter.store.os.link", side_effect=OSError("disk full")):
             with self.assertRaises(OSError):
                 self._run(platform)
         self.assertIsNone(platform.staged, "acked an update that never landed")
@@ -202,7 +202,7 @@ class PollerIsStructurallyIncapable(unittest.TestCase):
         )
 
     def test_the_poller_package_contains_no_forbidden_capability(self):
-        for path in (ROOT / "src" / "poller").rglob("*.py"):
+        for path in (ROOT / "src" / "alb" / "poller").rglob("*.py"):
             tree = ast.parse(path.read_text(encoding="utf-8"))
             names = set()
             for node in ast.walk(tree):

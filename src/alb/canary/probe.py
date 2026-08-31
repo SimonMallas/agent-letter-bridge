@@ -16,9 +16,9 @@ import json
 import pathlib
 import time
 
-from allowlist import gate
-from letter import store
-from send import reply
+from alb.allowlist import gate
+from alb.letter import store
+from alb.send import reply
 
 
 class NoCanaryTarget(Exception):

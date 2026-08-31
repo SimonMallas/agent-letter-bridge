@@ -8,7 +8,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from watchdog import health  # noqa: E402
+from alb.watchdog import health  # noqa: E402
 
 
 class FreshnessIsLiveness(unittest.TestCase):
@@ -52,7 +52,7 @@ class WatchdogCannotRestartAnything(unittest.TestCase):
 
     def test_the_watchdog_package_has_no_process_control(self):
         forbidden = ("subprocess", "popen", "system", "kill", "execv", "signal")
-        for path in (ROOT / "src" / "watchdog").rglob("*.py"):
+        for path in (ROOT / "src" / "alb" / "watchdog").rglob("*.py"):
             tree = ast.parse(path.read_text(encoding="utf-8"))
             names = set()
             for node in ast.walk(tree):

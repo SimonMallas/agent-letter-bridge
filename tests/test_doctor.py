@@ -6,7 +6,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from doctor import checks  # noqa: E402
+from alb.doctor import checks  # noqa: E402
 
 
 class DoctorBoundary(unittest.TestCase):
@@ -49,7 +49,7 @@ class DoctorBoundary(unittest.TestCase):
         """No network capability at all: a doctor that polls is the very thing
         it exists to detect."""
         forbidden = ("urllib", "http", "socket", "requests", "getupdates")
-        for path in (ROOT / "src" / "doctor").rglob("*.py"):
+        for path in (ROOT / "src" / "alb" / "doctor").rglob("*.py"):
             tree = ast.parse(path.read_text(encoding="utf-8"))
             names = set()
             for node in ast.walk(tree):

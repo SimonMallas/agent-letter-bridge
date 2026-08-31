@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Agent Letter Bridge - your agents, reachable from your phone, as durable mail.
 
 A message from your chat app becomes a durable file on disk BEFORE it is
@@ -28,15 +27,11 @@ import pathlib
 import sys
 import time
 
-HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE / "src"))
-sys.path.insert(0, str(HERE))
-
-from adapters.cmux import transport as cmux_transport  # noqa: E402
-from adapters.telegram import api  # noqa: E402
-from bridge import run, singleton  # noqa: E402
-from poller import loop  # noqa: E402
-from send import reply  # noqa: E402
+from alb.adapters.cmux import transport as cmux_transport
+from alb.adapters.telegram import api
+from alb.bridge import run, singleton
+from alb.poller import loop
+from alb.send import reply
 
 
 @contextlib.contextmanager
@@ -74,8 +69,8 @@ def main(argv=None):
     # Status reads files only: no config, no token, no network. It is the
     # thing you run when you want to know whether to worry.
     if args.status:
-        from doctor import checks as _checks
-        from watchdog import health
+        from alb.doctor import checks as _checks
+        from alb.watchdog import health
 
         delivery = _checks.deliverability(pathlib.Path(args.root))
         if not delivery["can_deliver"]:
@@ -108,7 +103,7 @@ def main(argv=None):
     if args.doctor:
         import os
         import subprocess
-        from doctor import checks
+        from alb.doctor import checks
         listing = subprocess.run(["ps", "-Ao", "uid,pid,command"],
                                  capture_output=True, text=True).stdout.splitlines()
         print(checks.summary(listing, os.getpid(), pathlib.Path(args.root), dict(os.environ)))
@@ -129,7 +124,7 @@ def main(argv=None):
         (root / name).mkdir(parents=True, exist_ok=True)
 
     if args.canary:
-        from canary import probe
+        from alb.canary import probe
         try:
             rid = probe.run(api.Telegram(config["ALB_TOKEN"]), root)
         except probe.NoCanaryTarget as exc:
@@ -218,5 +213,3 @@ def _poll_forever(platform, transport, surface, root, args, config):
         # is only the backoff after a transient failure.
 
 
-if __name__ == "__main__":
-    sys.exit(main())

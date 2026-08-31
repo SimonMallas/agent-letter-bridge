@@ -7,7 +7,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
-from letter import store  # noqa: E402
+from alb.letter import store  # noqa: E402
 
 
 class PublishAndResolve(unittest.TestCase):
@@ -137,13 +137,13 @@ class AtomicPublish(unittest.TestCase):
     def test_a_failed_publish_leaves_no_letter_behind(self):
         """If the link step fails, no letter may appear. A direct write to the
         destination would leave a readable, possibly partial letter."""
-        with mock.patch("letter.store.os.link", side_effect=OSError("disk full")):
+        with mock.patch("alb.letter.store.os.link", side_effect=OSError("disk full")):
             with self.assertRaises(OSError):
                 store.publish(self.inbox, "half a message", {"chat": "1"})
         self.assertEqual(list(self.inbox.glob("*.md")), [])
 
     def test_a_failed_publish_leaves_no_temp_file_behind(self):
-        with mock.patch("letter.store.os.link", side_effect=OSError("disk full")):
+        with mock.patch("alb.letter.store.os.link", side_effect=OSError("disk full")):
             with self.assertRaises(OSError):
                 store.publish(self.inbox, "half a message", {"chat": "1"})
         self.assertEqual(list(self.inbox.iterdir()), [])
@@ -184,7 +184,7 @@ class DeliveredIdsLedger(unittest.TestCase):
 
         The ledger is a fast path, not the only evidence. The letters on disk
         are also evidence, and they outlive the ledger write."""
-        with mock.patch("letter.store._record_delivered",
+        with mock.patch("alb.letter.store._record_delivered",
                         side_effect=OSError("crash after the letter landed")):
             with self.assertRaises(OSError):
                 store.publish_once(self.inbox, self.ledger, "update-1", "hi", {})
@@ -220,7 +220,7 @@ class DeliveredIdsLedger(unittest.TestCase):
         match must be verified against the letter's own recorded update id
         before it is believed.
         """
-        with mock.patch("letter.store.update_token", return_value="collide"):
+        with mock.patch("alb.letter.store.update_token", return_value="collide"):
             first = store.publish_once(self.inbox, self.ledger, "update-1", "one", {})
             self.assertIsNotNone(first)
             self.ledger.unlink(missing_ok=True)  # force the file lookup path
@@ -240,7 +240,7 @@ class DeliveredIdsLedger(unittest.TestCase):
         claim it did - otherwise the redelivery is silently dropped and the
         message is lost, which is the exact failure this project exists to
         prevent."""
-        with mock.patch("letter.store.os.link", side_effect=OSError("disk full")):
+        with mock.patch("alb.letter.store.os.link", side_effect=OSError("disk full")):
             with self.assertRaises(OSError):
                 store.publish_once(self.inbox, self.ledger, "update-1", "hi", {})
 

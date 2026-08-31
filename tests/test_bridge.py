@@ -10,10 +10,9 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-sys.path.insert(0, str(ROOT))
-from bridge import run  # noqa: E402
+from alb.bridge import run  # noqa: E402
 from fake_platform import FakePlatform  # noqa: E402
-from poller import loop  # noqa: E402
+from alb.poller import loop  # noqa: E402
 
 
 class Config(unittest.TestCase):

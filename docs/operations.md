@@ -73,8 +73,19 @@ ALB_SURFACE=THE-ID-FROM-ABOVE
 
 The ordering is the content. Do these in sequence.
 
-1. **Install into an empty directory you choose.** Never drop it next to an
-   existing poller.
+1. **Install.** Clone into an empty directory you choose — never drop it next
+   to an existing poller — then:
+
+   ```sh
+   pipx install .          # or: uv tool install .
+   ```
+
+   For a service, use a dedicated venv instead: a unit file needs an absolute
+   path that belongs to you, not a tool's internal layout.
+
+   ```sh
+   python3 -m venv ~/.alb/venv && ~/.alb/venv/bin/pip install .
+   ```
 2. **Create your own `0600` env file.** Never copy one from an existing plugin.
 3. **Revoke and re-issue the bot token.** This is a **Day-0 gate, not a footnote
    and not incident response** — an inherited bot is the *common* case. Proving

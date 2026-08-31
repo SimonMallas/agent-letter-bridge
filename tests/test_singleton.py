@@ -6,7 +6,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from bridge import singleton  # noqa: E402
+from alb.bridge import singleton  # noqa: E402
 
 
 class OnlyOne(unittest.TestCase):

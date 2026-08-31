@@ -1,0 +1,34 @@
+[build-system]
+# Build-time only. Nothing here is imported at runtime — see the CI gate,
+# which distinguishes the two deliberately.
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-letter-bridge"
+version = "0.1.0.dev0"
+description = "Your agents, reachable from your phone — as durable mail."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+
+# THIS LINE IS A SECURITY PROPERTY, NOT A PREFERENCE.
+#
+# The core holds a messaging token, so the audit a stranger performs before
+# trusting it has to be finishable: clone it, read it, run it. Every dependency
+# added is supply-chain surface in a token-holding daemon, and the moment the
+# docs say "clone and inspect instead", the convenience of a package ecosystem
+# has already been conceded.
+#
+# CI asserts this list stays empty. Do not add to it.
+dependencies = []
+
+[project.optional-dependencies]
+# Development only. Never imported by the shipped code, never a CI gate.
+dev = ["ruff", "mypy"]
+
+[project.scripts]
+alb = "alb.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/alb"]

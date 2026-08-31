@@ -18,7 +18,11 @@ After=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /ABSOLUTE/PATH/TO/agent-letter-bridge/alb \
+# A DEDICATED VENV, not a pipx shim and not the git checkout. pipx's internal
+# layout is not an operations contract; a venv you created next to your state
+# directory is. Create it with:
+#   python3 -m venv ~/.alb/venv && ~/.alb/venv/bin/pip install /path/to/checkout
+ExecStart=/ABSOLUTE/PATH/TO/.alb/venv/bin/alb \
     --config /ABSOLUTE/PATH/TO/bridge.env \
     --root /ABSOLUTE/PATH/TO/state
 

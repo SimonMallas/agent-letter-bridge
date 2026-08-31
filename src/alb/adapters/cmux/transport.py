@@ -14,7 +14,7 @@ Two rules carry the safety here:
 """
 import subprocess
 
-from notifier import ring
+from alb.notifier import ring
 
 CMUX = "cmux"
 

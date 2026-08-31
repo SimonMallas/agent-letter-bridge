@@ -15,7 +15,7 @@ The contract modelled here, which is the platform's and not our wish:
 If this ever needs to differ per layer, that is a signal the layers disagree
 about the platform - which is the bug, not the reason for a second copy.
 """
-from poller import loop
+from alb.poller import loop
 
 
 class FakePlatform:

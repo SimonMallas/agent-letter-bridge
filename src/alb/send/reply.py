@@ -10,8 +10,8 @@ import os
 import pathlib
 import time
 
-from allowlist import gate
-from letter import store
+from alb.allowlist import gate
+from alb.letter import store
 
 
 class NotPermitted(Exception):

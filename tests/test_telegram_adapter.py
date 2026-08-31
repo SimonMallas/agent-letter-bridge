@@ -9,10 +9,9 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(ROOT))
-from adapters.telegram import api  # noqa: E402
-from poller import loop  # noqa: E402
-from send import reply  # noqa: E402
+from alb.adapters.telegram import api  # noqa: E402
+from alb.poller import loop  # noqa: E402
+from alb.send import reply  # noqa: E402
 
 
 def http_error(code):
@@ -92,6 +91,29 @@ class Fetch(unittest.TestCase):
         with mock.patch.object(api, "_request", side_effect=urllib.error.URLError("reset")):
             with self.assertRaises(api.TransientFailure):
                 self.client.fetch(offset=None)
+
+    def test_a_bare_timeout_is_transient_not_a_crash(self):
+        """Found by running the INSTALLED binary against a real bot on a slow
+        network. A read timeout deep in the SSL layer raises TimeoutError
+        directly - it is not wrapped in URLError - so classifying only URLError
+        let it escape as a traceback and kill the bridge.
+
+        Same shape as the last two: I classified the error I had thought of.
+        """
+        with mock.patch.object(api, "_request", side_effect=TimeoutError("timed out")):
+            with self.assertRaises(api.TransientFailure):
+                self.client.fetch(offset=None)
+
+    def test_a_connection_error_is_transient(self):
+        with mock.patch.object(api, "_request", side_effect=ConnectionResetError("reset")):
+            with self.assertRaises(api.TransientFailure):
+                self.client.fetch(offset=None)
+
+    def test_a_bare_timeout_on_send_is_ambiguous(self):
+        """The POST may have arrived. Never auto-retried."""
+        with mock.patch.object(api, "_request", side_effect=TimeoutError("timed out")):
+            with self.assertRaises(reply.AmbiguousOutcome):
+                self.client.send("111", "hello")
 
     def test_a_transient_failure_is_not_mistaken_for_a_conflict(self):
         """Yielding on a network blip would hand the token away for no reason."""

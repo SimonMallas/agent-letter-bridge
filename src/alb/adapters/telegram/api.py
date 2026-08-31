@@ -18,8 +18,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from poller import loop
-from send import reply
+from alb.poller import loop
+from alb.send import reply
 
 class FetchFailed(Exception):
     """The fetch failed for a reason that is NOT a single-consumer conflict.
@@ -108,8 +108,15 @@ class Telegram:
                 # Another consumer holds this token. Yield; never fight for it.
                 raise loop.PlatformConflict("another consumer holds this token") from None
             raise FetchFailed(f"getUpdates failed: HTTP {exc.code}") from None
-        except urllib.error.URLError as exc:
-            raise TransientFailure(f"network: {exc.reason}") from None
+        except OSError as exc:
+            # OSError, not just URLError. A read timeout raised deep in the SSL
+            # layer arrives as a bare TimeoutError and is NOT wrapped, so
+            # classifying only URLError let it escape as a traceback and kill
+            # the bridge - found by running the installed binary on a slow
+            # network. URLError, TimeoutError and ConnectionError are all
+            # OSError, and every one of them means the same thing here: the
+            # network did not cooperate, wait and try again.
+            raise TransientFailure(f"network: {exc}") from None
 
         updates = []
         for item in payload.get("result", []):
@@ -169,10 +176,10 @@ class Telegram:
             if exc.code == 409:
                 raise loop.PlatformConflict("another consumer holds this token") from None
             raise FetchFailed(f"confirm failed: HTTP {exc.code}") from None
-        except urllib.error.URLError as exc:
+        except OSError as exc:
             # The offset stays unpersisted, so the next start re-reads. Safe:
             # the ledger prevents duplicate letters.
-            raise TransientFailure(f"network: {exc.reason}") from None
+            raise TransientFailure(f"network: {exc}") from None
 
     # -- outbound --------------------------------------------------------
 
@@ -186,7 +193,10 @@ class Telegram:
                 raise reply.AmbiguousOutcome(f"server error HTTP {exc.code}") from None
             # 4xx, including 429: the platform definitely did not send it.
             raise reply.DefiniteRefusal(f"refused with HTTP {exc.code}") from None
-        except urllib.error.URLError as exc:
+        except OSError as exc:
             # The POST may have arrived and only the response been lost. This
             # is the textbook ambiguous case and must never be auto-retried.
-            raise reply.AmbiguousOutcome(f"network failure: {exc.reason}") from None
+            # OSError for the same reason as fetch: a bare timeout is not a
+            # URLError, and treating it as fatal would be worse than treating
+            # it as unknown.
+            raise reply.AmbiguousOutcome(f"network failure: {exc}") from None

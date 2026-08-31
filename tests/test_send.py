@@ -11,8 +11,8 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
-from letter import store  # noqa: E402
-from send import reply  # noqa: E402
+from alb.letter import store  # noqa: E402
+from alb.send import reply  # noqa: E402
 
 
 class FakeSender:

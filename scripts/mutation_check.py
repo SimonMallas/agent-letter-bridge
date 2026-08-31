@@ -7,19 +7,20 @@ turn and asserts the suite goes red.
 
 Exit 0 = every invariant is genuinely pinned. Exit 1 = one is not.
 """
+import os
 import pathlib
 import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SRC = ROOT / "src" / "letter" / "store.py"
-SEND = ROOT / "src" / "send" / "reply.py"
-POLL = ROOT / "src" / "poller" / "loop.py"
-NOTIFY = ROOT / "src" / "notifier" / "ring.py"
-ALLOW = ROOT / "src" / "allowlist" / "gate.py"
-TG = ROOT / "adapters" / "telegram" / "api.py"
-CMUX = ROOT / "adapters" / "cmux" / "transport.py"
-BRIDGE = ROOT / "src" / "bridge" / "run.py"
+SRC = ROOT / "src" / "alb" / "letter" / "store.py"
+SEND = ROOT / "src" / "alb" / "send" / "reply.py"
+POLL = ROOT / "src" / "alb" / "poller" / "loop.py"
+NOTIFY = ROOT / "src" / "alb" / "notifier" / "ring.py"
+ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
+TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
+CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
+BRIDGE = ROOT / "src" / "alb" / "bridge" / "run.py"
 
 # invariant -> (file, tests module, old, new)
 EXTRA = {
@@ -75,7 +76,7 @@ EXTRA = {
         "            if exc.code >= 500:", "            if False:"),
     "network failure is ambiguous": (
         TG, "tests.test_telegram_adapter",
-        '            raise reply.AmbiguousOutcome(f"network failure: {exc.reason}") from None',
+        '            raise reply.AmbiguousOutcome(f"network failure: {exc}") from None',
         '            raise reply.DefiniteRefusal("network") from None'),
     "offset sent is last-acked plus one": (
         TG, "tests.test_telegram_adapter",
@@ -121,56 +122,56 @@ EXTRA = {
         "        except urllib.error.HTTPError as exc:"),
     "a transient network failure is not fatal": (
         TG, "tests.test_telegram_adapter",
-        '        except urllib.error.URLError as exc:\n            raise TransientFailure(f"network: {exc.reason}") from None\n\n        updates = []',
-        "        finally:\n            pass\n\n        updates = []"),
+        '        except OSError as exc:',
+        "        except ZeroDivisionError as exc:"),
     "one bridge per state directory": (
-        ROOT / "src" / "bridge" / "singleton.py", "tests.test_singleton",
+        ROOT / "src" / "alb" / "bridge" / "singleton.py", "tests.test_singleton",
         "            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)", "            pass"),
     "the probe matches an executable, not a mention": (
-        ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
+        ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_doctor_probe",
         "        head = argv_for_match[:2]", "        head = argv_for_match"),
     "the doctor names what it cannot prove": (
-        ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
+        ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_doctor_probe",
         '    lines.append("  A consumer on ANOTHER MACHINE is not detectable from here.")',
         "    pass"),
     "canary refuses without an allowlisted target": (
-        ROOT / "src" / "canary" / "probe.py", "tests.test_canary",
+        ROOT / "src" / "alb" / "canary" / "probe.py", "tests.test_canary",
         '        raise NoCanaryTarget("no allowlisted chat to send a canary to")',
         '        return "999"'),
     "canary goes through the real send path": (
-        ROOT / "src" / "canary" / "probe.py", "tests.test_canary",
+        ROOT / "src" / "alb" / "canary" / "probe.py", "tests.test_canary",
         "        reply_id = reply.send_reply(", "        reply_id = 'faked'  # noqa\n        _unused = (reply.send_reply,) and ("),
     "canary fixtures never enter the inbox": (
-        ROOT / "src" / "canary" / "probe.py", "tests.test_canary",
+        ROOT / "src" / "alb" / "canary" / "probe.py", "tests.test_canary",
         '    fixtures = root / "state" / "canary"', '    fixtures = root / "inbox"'),
     "the credential check is scoped to this tool": (
-        ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor",
+        ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_doctor",
         "        key.upper().startswith(_OUR_PREFIX)\n        and any(",
         "        any("),
     "the probe finds an env-prefixed invocation": (
-        ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
+        ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_doctor_probe",
         '        if argv and pathlib.PurePath(argv[0]).name == "env":',
         "        if False:"),
     "an undeliverable bridge is not reported as healthy": (
-        ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
+        ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_doctor_probe",
         '        lines.append("*** NOTHING WILL BE DELIVERED ***")', "        pass"),
     "a missing allowlist means it cannot deliver": (
-        ROOT / "src" / "doctor" / "checks.py", "tests.test_doctor_probe",
+        ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_doctor_probe",
         '    if not path.is_file():\n        return {"can_deliver": False,',
         '    if False:\n        return {"can_deliver": False,'),
     "letters carry the routing envelope": (
-        ROOT / "src" / "letter" / "store.py", "tests.test_envelope",
+        ROOT / "src" / "alb" / "letter" / "store.py", "tests.test_envelope",
         '    if "id" in meta:\n        meta["id"] = letter_id',
         "    if False:\n        meta[\"id\"] = letter_id"),
     "the envelope precedes platform fields": (
-        ROOT / "src" / "letter" / "store.py", "tests.test_envelope",
+        ROOT / "src" / "alb" / "letter" / "store.py", "tests.test_envelope",
         "    out = {k: meta[k] for k in ENVELOPE_ORDER if k in meta}", "    out = {}"),
     "the id timestamp is dashed for the shared parser": (
-        ROOT / "src" / "letter" / "store.py", "tests.test_envelope",
+        ROOT / "src" / "alb" / "letter" / "store.py", "tests.test_envelope",
         'stamp = time.strftime("%Y-%m-%dT%H%M%S")',
         'stamp = time.strftime("%Y%m%dT%H%M%S")'),
     "an empty value is a bare key": (
-        ROOT / "src" / "letter" / "store.py", "tests.test_envelope",
+        ROOT / "src" / "alb" / "letter" / "store.py", "tests.test_envelope",
         'lines.append(f"{key}: {text}" if text else f"{key}:")',
         'lines.append(f"{key}: {text}")'),
     "it runs without a multiplexer": (
@@ -181,11 +182,17 @@ EXTRA = {
         '        _record_ring(root, "disabled", "no ALB_SURFACE configured; mail lands, nothing rings")',
         "        pass"),
     "the letter's NAME is made durable, not just its bytes": (
-        ROOT / "src" / "letter" / "store.py", "tests.test_letter",
+        ROOT / "src" / "alb" / "letter" / "store.py", "tests.test_letter",
         "        _fsync_dir(inbox)", "        pass"),
     "the claim's NAME is made durable": (
         SEND, "tests.test_send",
         "    _fsync_dir(path.parent)", "    pass"),
+    "the dependency gate itself can fail": (
+        ROOT / "scripts" / "deps_check.py", "tests.test_deps_gate",
+        "        if deps:", "        if False:"),
+    "a smuggled manifest is refused": (
+        ROOT / "scripts" / "deps_check.py", "tests.test_deps_gate",
+        "        if (ROOT / name).exists():", "        if False:"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
@@ -233,6 +240,7 @@ def _run(name, target, tests, old, new, failures):
         result = subprocess.run(
             [sys.executable, "-m", "unittest", tests],
             capture_output=True, text=True, cwd=ROOT,
+                env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
         )
     finally:
         target.write_text(original, encoding="utf-8")
@@ -254,7 +262,8 @@ def main():
             SRC.write_text(original.replace(old, new, 1), encoding="utf-8")
             result = subprocess.run(
                 [sys.executable, "-m", "unittest", "tests.test_letter"],
-                capture_output=True, text=True, cwd=SRC.parents[2],
+                capture_output=True, text=True, cwd=ROOT,
+            env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
             )
             if result.returncode == 0:
                 failures.append(f"{name}: DISABLED BUT NO TEST FAILED")

@@ -10,8 +10,8 @@ import pathlib
 import stat
 import time
 
-from notifier import ring
-from poller import loop
+from alb.notifier import ring
+from alb.poller import loop
 
 # ALB_SURFACE is deliberately NOT required. Running without a multiplexer is a
 # supported way to use this: mail lands durably and nothing pings, and the

@@ -56,7 +56,16 @@ The invariants are the product; the code is how they are kept.
 ## Run it
 
 ```sh
-./alb --config bridge.env --root ~/.alb --once
+pipx install .                                  # or: uv tool install .
+alb --config bridge.env --root ~/.alb --once
+```
+
+Running it as a service? Use a **dedicated venv** rather than the pipx shim —
+a unit file needs an absolute path that is yours, not a tool's internal layout:
+
+```sh
+python3 -m venv ~/.alb/venv && ~/.alb/venv/bin/pip install .
+# then point your unit file at ~/.alb/venv/bin/alb — see examples/
 ```
 
 **Read [`docs/operations.md`](docs/operations.md) first.** You need four things

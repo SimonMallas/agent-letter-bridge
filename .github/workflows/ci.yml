@@ -19,21 +19,31 @@ jobs:
       - name: Privacy scan
         run: python3 scripts/privacy_scan.py
 
-      - name: Assert zero third-party runtime dependencies
+      # Asserts the PROPERTY (no runtime dependencies) rather than the
+      # absence of packaging. A build backend is install-time and never
+      # imported by the running daemon; a runtime dependency is. The gate
+      # explains that distinction so nobody bans pyproject.toml again.
+      - name: Dependency gate
+        run: python3 scripts/deps_check.py
+
+      # A wheel that imports cleanly is proved by INSTALLING it, not by the
+      # suite - which runs from the source tree so mutations stay visible.
+      - name: Install smoke test
         run: |
-          for f in requirements.txt requirements-dev.txt pyproject.toml \
-                   setup.py setup.cfg Pipfile Pipfile.lock poetry.lock uv.lock; do
-            if [ -f "$f" ]; then
-              echo "Dependency manifest $f present - core must stay stdlib-only." >&2
-              exit 1
-            fi
-          done
-          echo "no dependency manifest: core is stdlib-only"
+          python3 -m venv /tmp/albvenv
+          /tmp/albvenv/bin/pip install --quiet .
+          /tmp/albvenv/bin/alb --help > /dev/null
+          /tmp/albvenv/bin/python -m alb --help > /dev/null
+          echo "wheel installs and both entry points run"
 
       - name: Tests
         run: python3 -m unittest discover -s tests -v
+        env:
+          PYTHONPATH: src
 
       # A test that still passes with an invariant disabled is coverage without
       # proof. This breaks each invariant in turn and asserts the suite goes red.
       - name: Mutation gate
         run: python3 scripts/mutation_check.py
+        env:
+          PYTHONPATH: src

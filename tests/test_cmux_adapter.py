@@ -6,9 +6,8 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(ROOT))
-from adapters.cmux import transport  # noqa: E402
-from notifier import ring  # noqa: E402
+from alb.adapters.cmux import transport  # noqa: E402
+from alb.notifier import ring  # noqa: E402
 
 
 class Delivery(unittest.TestCase):

@@ -7,8 +7,8 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from canary import probe  # noqa: E402
-from send import reply  # noqa: E402
+from alb.canary import probe  # noqa: E402
+from alb.send import reply  # noqa: E402
 
 
 class FakeSender:
