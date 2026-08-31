@@ -85,8 +85,11 @@ to use tmux; an unsupported value is refused rather than silently defaulted.
 
 ## Status
 
-**Pre-release.** Run end to end against real bots on macOS and Linux, including
-by someone other than its author. Not published, and not formally audited — see
+**Pre-release.** Inbound delivery, ringing and bounded replies have been
+exercised live against real bots on macOS and Linux, cmux and tmux, including by
+someone other than the author. **Automated coverage still uses fakes** — the
+suite proves the invariants, the live runs prove the transports, and those are
+different claims. Not published, and not formally audited; see
 `docs/threat-model.md` for what is and is not claimed.
 
 ## What you need
