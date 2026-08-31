@@ -73,6 +73,30 @@ def _ordered(meta):
     return out
 
 
+def _fsync_dir(path):
+    """Make a directory ENTRY durable, not just a file's contents.
+
+    fsync on a file guarantees its bytes survive a crash. It says nothing about
+    the name that points at them. Without this, a letter can survive a hard
+    crash with its contents intact and no directory entry - an unlinked letter,
+    which is a lost message, which is the one thing this is built to prevent.
+
+    Best-effort: on filesystems that refuse to fsync a directory this is a
+    no-op rather than a failure, because losing the ability to deliver is worse
+    than losing this guarantee.
+    """
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
 def _serialise(meta, body):
     lines = ["---"]
     for key, value in _ordered(meta).items():
@@ -168,6 +192,9 @@ def publish(inbox, body, meta, update_id=None):
         # link() refuses to overwrite, so a duplicate id can never clobber a
         # letter that already exists.
         os.link(temp, dest)
+        # The link is the moment the letter becomes real, so the NAME must be
+        # made durable here - not just the bytes it points at.
+        _fsync_dir(inbox)
     except BaseException:
         temp.unlink(missing_ok=True)
         raise

@@ -45,6 +45,21 @@ def _reply_id(letter_id, text):
     return digest[:24]
 
 
+def _fsync_dir(path):
+    """Make a directory entry durable. Best-effort: a filesystem that refuses
+    is a lost guarantee, not a lost send."""
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
 def _claim(state, reply_id):
     """O_EXCL claim BEFORE the send. Exclusive creation is the whole mechanism:
     a second attempt cannot create the same file and so cannot send."""
@@ -58,6 +73,14 @@ def _claim(state, reply_id):
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump({"reply_id": reply_id, "outcome": "in_flight",
                    "attempted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, fh)
+        fh.flush()
+        os.fsync(fh.fileno())
+
+    # The claim's NAME must survive a crash, not just its contents. This claim
+    # is the only thing standing between a replay and a double-post: if it is
+    # lost while the send it recorded already happened, the retry posts again -
+    # which is precisely what claiming before sending exists to prevent.
+    _fsync_dir(path.parent)
     return path
 
 

@@ -8,6 +8,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 from letter import store  # noqa: E402
@@ -75,6 +76,28 @@ class BoundedReply(unittest.TestCase):
         with self.assertRaises(reply.NotPermitted):
             self._send(sender)
         self.assertEqual(sender.calls, [])
+
+    def test_the_claim_directory_is_fsynced_so_the_claim_survives(self):
+        """Same class as the letter's directory fsync, and the consequence is
+        worse. The claim is what stops a replay double-posting. If its NAME is
+        not durable, a crash can lose the claim while the send it recorded has
+        already happened - and the retry double-posts, which is exactly what
+        claim-before-send exists to prevent."""
+        import os as _os
+        synced_dirs = []
+        real_fsync = _os.fsync
+
+        def spy(fd):
+            try:
+                if _os.fstat(fd).st_mode & 0o040000:
+                    synced_dirs.append(fd)
+            except OSError:
+                pass
+            return real_fsync(fd)
+
+        with mock.patch.object(reply.os, "fsync", side_effect=spy):
+            self._send(FakeSender())
+        self.assertTrue(synced_dirs, "the claim's directory entry was never made durable")
 
     def test_the_same_reply_cannot_be_sent_twice(self):
         """Claim before send. A replay or restart refuses rather than

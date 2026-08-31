@@ -108,6 +108,32 @@ class AtomicPublish(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_the_directory_is_fsynced_so_the_NAME_is_durable(self):
+        """Found by an outside reviewer, and it touches the central claim.
+
+        fsync on the file makes its CONTENTS durable. It does not make the
+        directory entry durable, so after a hard crash a letter can exist with
+        its contents intact and no name pointing at it. An unlinked letter is a
+        lost message - the one thing this is supposed to prevent.
+
+        The link is the moment the letter becomes real, so the directory must
+        be fsynced after it.
+        """
+        synced_dirs = []
+        real_fsync = store.os.fsync
+
+        def spy(fd):
+            try:
+                if store.os.fstat(fd).st_mode & 0o040000:  # S_IFDIR
+                    synced_dirs.append(fd)
+            except OSError:
+                pass
+            return real_fsync(fd)
+
+        with mock.patch.object(store.os, "fsync", side_effect=spy):
+            store.publish(self.inbox, "body", {"chat_id": "1"})
+        self.assertTrue(synced_dirs, "the directory was never fsynced: the name may not survive")
+
     def test_a_failed_publish_leaves_no_letter_behind(self):
         """If the link step fails, no letter may appear. A direct write to the
         destination would leave a readable, possibly partial letter."""

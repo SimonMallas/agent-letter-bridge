@@ -9,6 +9,18 @@ disabled — proved by mutation, not merely asserted.
 
 ## Durability
 
+**A letter's NAME is made durable, not only its bytes.** `fsync` on a file
+guarantees its contents survive a crash and says nothing about the directory
+entry pointing at them. Without a directory `fsync` after the link, a letter can
+survive with its contents intact and no name — an unlinked letter, which is a
+lost message. The same applies to an outbound claim, where losing the name
+permits the double-post that claiming exists to prevent.
+
+**The ledger, the offset and the health files are deliberately NOT fsynced.**
+Losing any of them degrades to re-reading, which the letters-plus-dedup path
+makes harmless. Paying a sync on every write to protect a fast path would be
+cost without a guarantee.
+
 **Letters are authoritative. Rings only accelerate.**
 A ring is not a read, not a handled, not a turn-start. With the notifier absent
 or dead, mail still lands on disk and nothing pings the terminal. That is

@@ -180,6 +180,12 @@ EXTRA = {
         BRIDGE, "tests.test_bridge",
         '        _record_ring(root, "disabled", "no ALB_SURFACE configured; mail lands, nothing rings")',
         "        pass"),
+    "the letter's NAME is made durable, not just its bytes": (
+        ROOT / "src" / "letter" / "store.py", "tests.test_letter",
+        "        _fsync_dir(inbox)", "        pass"),
+    "the claim's NAME is made durable": (
+        SEND, "tests.test_send",
+        "    _fsync_dir(path.parent)", "    pass"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
