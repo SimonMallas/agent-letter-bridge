@@ -148,6 +148,9 @@ def main(argv=None):
 
     # Replying is on the binary the operator starts, not a Python import they
     # have to reconstruct at 3am.
+    # Where letters actually live, for every subcommand that reads one.
+    mail = pathlib.Path(args.mail_root or config.get("ALB_MAIL_ROOT") or root)
+
     if args.reply_to:
         if not args.text:
             print("alb: --reply-to needs --text", file=sys.stderr)
@@ -156,7 +159,12 @@ def main(argv=None):
             rid = reply.send_reply(
                 api.Telegram(config["ALB_TOKEN"]), root / "inbox", root / "state",
                 root / "allowlist.json", args.reply_to, args.text,
-                searched=[root / "inbox", root / "processed"])
+                # The SAME mailbox the poller writes to, including processed,
+                # because a letter is filed there before anyone replies. In
+                # integrated mode the letter is not under --root at all, and
+                # searching only there refuses a reply to a letter that plainly
+                # exists - the dogfood send bug in a new place.
+                searched=[mail / "inbox", mail / "processed"])
         except reply.AmbiguousOutcome as exc:
             print(f"alb: AMBIGUOUS - dead-lettered for a human, NOT retried: {exc}",
                   file=sys.stderr)
@@ -197,6 +205,7 @@ def _poll_forever(platform, transport, surface, root, args, config):
                 sender=config.get("ALB_FROM", "telegram-bridge"),
                 recipient=config.get("ALB_TO", "agent"),
                 mail_root=args.mail_root or config.get("ALB_MAIL_ROOT") or None,
+                bus_binary=config.get("ALB_BUS_BINARY") or None,
             )
         except loop.PlatformConflict as exc:
             # A conflict is a YIELD, not an error: exit 0 so the token's holder

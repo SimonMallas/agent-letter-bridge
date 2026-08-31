@@ -101,10 +101,108 @@ class MailRootIsLettersOnly(unittest.TestCase):
         recipient, kind, letter_id = ring.call_args[0][:3]
         self.assertEqual(recipient, "grok-build")
         self.assertEqual(kind, "info")
+        # And the id of the letter that was actually published. Asserting only
+        # the recipient and type would pass while ringing about the wrong
+        # letter, which reads as a delivered knock and resolves to nothing.
+        published = [p.stem for p in (self.mail / "inbox").glob("*.md")]
+        self.assertIn(letter_id, published)
 
     def test_the_standalone_notifier_is_not_used_in_integrated_mode(self):
         """Two injects is two Enters."""
         self._cycle(FakePlatform([update(1, "111", "hi")]))  # NoTransport asserts
+
+
+class ReplyFindsLettersWhereTheyLive(unittest.TestCase):
+    """Grok's block: until this is one code path, "outbound is alb --reply-to"
+    is a sentence the binary does not implement.
+
+    The poller writes to the mailbox; the send path searched only the private
+    root. In integrated mode that refuses a reply to a letter that plainly
+    exists - the dogfood send bug in a new place.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = pathlib.Path(self.tmp.name)
+        self.root = run.prepare_root(base / "private")
+        self.mail = base / "shared" / "seat"
+        (self.mail / "inbox").mkdir(parents=True)
+        (self.mail / "processed").mkdir(parents=True)
+        (self.root / "allowlist.json").write_text(
+            json.dumps({"chats": ["111"]}), encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _publish(self):
+        with mock.patch.object(run, "_bus_ring"):
+            run.run_once(FakePlatform([update(1, "111", "hi")]), None, "",
+                         self.root, mail_root=self.mail, recipient="grok-build")
+        return [p.stem for p in (self.mail / "inbox").glob("*.md")][0]
+
+    def test_a_reply_finds_a_letter_in_the_mailbox(self):
+        from alb.send import reply
+        letter_id = self._publish()
+        sent = []
+        sender = type("S", (), {"send": lambda s, c, t: sent.append((c, t))})()
+        reply.send_reply(sender, self.mail / "inbox", self.root / "state",
+                         self.root / "allowlist.json", letter_id, "a reply",
+                         searched=[self.mail / "inbox", self.mail / "processed"])
+        self.assertEqual(sent[0][0], "111")
+
+    def test_a_reply_finds_a_letter_after_it_has_been_filed(self):
+        """bus file moves the letter to processed before anyone replies."""
+        from alb.send import reply
+        letter_id = self._publish()
+        for f in (self.mail / "inbox").glob("*.md"):
+            f.rename(self.mail / "processed" / f.name)
+        sent = []
+        sender = type("S", (), {"send": lambda s, c, t: sent.append((c, t))})()
+        reply.send_reply(sender, self.mail / "inbox", self.root / "state",
+                         self.root / "allowlist.json", letter_id, "a reply",
+                         searched=[self.mail / "inbox", self.mail / "processed"])
+        self.assertEqual(sent[0][0], "111")
+
+
+class TheHealthFileMustNotLie(unittest.TestCase):
+    """The helper exits 0 whether the knock was submitted, merely pasted, or
+    had no live surface at all. Trusting the exit code means reporting a
+    delivered ring for a pane that is gone - and the ring health file is the
+    ONLY tell that a doorbell has stopped working."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = pathlib.Path(self.tmp.name)
+        self.root = run.prepare_root(base / "private")
+        self.mail = base / "shared" / "seat"
+        (self.mail / "inbox").mkdir(parents=True)
+        (self.root / "allowlist.json").write_text(
+            json.dumps({"chats": ["111"]}), encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _cycle_with_helper_saying(self, output):
+        completed = mock.Mock(returncode=0, stdout=output, stderr="")
+        with mock.patch.object(run.subprocess, "run", return_value=completed):
+            run.run_once(FakePlatform([update(1, "111", "hi")]),
+                         None, "", self.root,
+                         mail_root=self.mail, recipient="grok-build")
+        return json.loads((self.root / "state" / "ring-health.json").read_text())
+
+    def test_a_submitted_knock_is_recorded_as_delivered(self):
+        record = self._cycle_with_helper_saying(
+            "bus: doorbell submitted to grok-build on SOME-UUID")
+        self.assertEqual(record["state"], "ok")
+
+    def test_no_live_surface_is_not_recorded_as_delivered(self):
+        record = self._cycle_with_helper_saying("bus: no_live_surface for grok-build")
+        self.assertEqual(record["state"], "failing")
+        self.assertIn("no_live_surface", record["reason"])
+
+    def test_pasted_but_not_submitted_is_not_delivered(self):
+        record = self._cycle_with_helper_saying("bus: pasted_not_submitted")
+        self.assertEqual(record["state"], "failing")
 
 
 class StandaloneIsUnchanged(unittest.TestCase):

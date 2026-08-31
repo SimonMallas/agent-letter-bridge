@@ -26,7 +26,7 @@ REQUIRED = ("ALB_TOKEN",)
 # did not exist, and their deployment diverged from their config in silence. A
 # key that looks like it did something is worse than one that errors.
 KNOWN = ("ALB_TOKEN", "ALB_SURFACE", "ALB_FROM", "ALB_TO", "ALB_NOTIFIER",
-         "ALB_MAIL_ROOT")
+         "ALB_MAIL_ROOT", "ALB_BUS_BINARY")
 
 # Transports that exist. Naming one that does not is refused rather than
 # defaulted, because defaulting is what let a deployment believe it had
@@ -127,6 +127,14 @@ def write_private(path, text):
     os.replace(tmp, path)
 
 
+class RingNotDelivered(Exception):
+    """The helper ran without submitting a knock.
+
+    Not fatal - letters are authoritative - but it must be recorded as a
+    failure rather than swallowed into a success.
+    """
+
+
 def prepare_mail_root(mail_root):
     """Create ONLY what letters need, in a directory that may not be ours.
 
@@ -156,8 +164,19 @@ def _bus_ring(recipient, kind, letter_id, binary=None):
     Integrated mode may assume the helper exists: it is only reachable by
     pointing at a letterbox, which implies one is installed.
     """
-    subprocess.run([binary or BUS_BINARY, "ring", recipient, kind, letter_id],
-                   check=True, capture_output=True)
+    result = subprocess.run(
+        [binary or BUS_BINARY, "ring", recipient, kind, letter_id],
+        capture_output=True, text=True)
+
+    # THE EXIT CODE IS NOT THE OUTCOME. The helper exits 0 whether the knock
+    # was submitted, merely pasted into a pane without being submitted, or had
+    # no live surface at all. Trusting the code would record a delivered ring
+    # for a pane that is gone - and this record is the only tell that a
+    # doorbell has stopped working, so it must not lie.
+    output = f"{result.stdout}\n{result.stderr}"
+    if result.returncode != 0 or "doorbell submitted" not in output:
+        raise RingNotDelivered(output.strip().splitlines()[-1] if output.strip()
+                               else f"helper exited {result.returncode}")
 
 
 def _record_ring(root, state, reason):
@@ -169,7 +188,8 @@ def _record_ring(root, state, reason):
 
 
 def run_once(platform, transport, surface, root,
-             sender="telegram-bridge", recipient="agent", mail_root=None):
+             sender="telegram-bridge", recipient="agent", mail_root=None,
+             bus_binary=None):
     """One cycle. Returns the letters published.
 
     A conflict propagates: the caller exits cleanly so the token's holder keeps
@@ -239,7 +259,7 @@ def run_once(platform, transport, surface, root,
             # The letterbox's own doorbell, so it matches every skill that
             # already exists there. The standalone notifier is NOT also used:
             # two injects would be two submissions.
-            _bus_ring(recipient, "info", published[-1])
+            _bus_ring(recipient, "info", published[-1], binary=bus_binary)
         else:
             ring.notify(transport, surface, mail / "inbox", published[-1])
     except Exception as exc:

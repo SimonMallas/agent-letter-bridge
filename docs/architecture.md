@@ -48,12 +48,10 @@ for different senders.
 That is correct for a standalone install and it is the shipped default — this
 bridge must work when nothing else is present.
 
-**The integrated pattern is supported but not shipped in v0.1:** point the
-bridge at the other system's inbox and have it write that system's letter
-format, so there is one store, one sweep and one set of tooling. The adapter
-seam exists for exactly this — the letter writer is a seam, not a fixed
-behaviour. This is not speculative; it is how the authors' own deployment has
-run for weeks.
+**Integrated mode ships.** `--mail-root` points letter publication at the other
+system's inbox, in the standard envelope, so there is one store, one sweep and
+one set of tooling — while `--root` keeps every private file where it belongs.
+The two are deliberately separate settings: mail may travel, state may not.
 
 Until that adapter ships, the doorbell names the store it means ("the bridge
 inbox") rather than a product, because in two-store mode "check your letterbox"

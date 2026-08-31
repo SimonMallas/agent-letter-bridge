@@ -238,12 +238,16 @@ EXTRA = {
         "    prepare_root(mail_root)"),
     "integrated mode rings through the letterbox helper": (
         BRIDGE, "tests.test_mail_root",
-        '            _bus_ring(recipient, "info", published[-1])',
+        '            _bus_ring(recipient, "info", published[-1], binary=bus_binary)',
         '            ring.notify(transport, surface, mail / "inbox", published[-1])'),
     "standalone keeps its own knock and store": (
         BRIDGE, "tests.test_mail_root",
         "    integrated = mail_root is not None and pathlib.Path(mail_root) != root",
         "    integrated = True"),
+    "the ring outcome is parsed, not assumed from the exit code": (
+        BRIDGE, "tests.test_mail_root",
+        '    if result.returncode != 0 or "doorbell submitted" not in output:',
+        "    if result.returncode != 0:"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
