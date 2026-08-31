@@ -149,7 +149,12 @@ def run_once(platform, transport, surface, root,
         # letter was the one the instruction missed.
         root / "state" / "delivered.json",
         root / "allowlist.json",
-        health_path=root / "state" / "health.json",
+        # NOT here. The heartbeat is what a supervisor reads as "this process
+        # is working", and a poll is not a completed cycle: consumption is only
+        # transmitted afterwards. Writing it here meant a confirm failure left
+        # a fresh heartbeat behind, so a bridge that had consumed nothing
+        # looked healthy. The cycle claims liveness, below, once it is done.
+        health_path=None,
         processed=root / "processed",
         sender=sender,
         recipient=recipient,
@@ -162,6 +167,11 @@ def run_once(platform, transport, surface, root,
     confirm = getattr(platform, "confirm", None)
     if confirm is not None:
         confirm()
+
+    # Only now: fetched, letters durable, and the platform told. A cycle that
+    # raised before this point leaves the previous heartbeat, which is the
+    # honest signal - nothing completed.
+    loop._write_heartbeat(root / "state" / "health.json")
 
     if not published:
         return published

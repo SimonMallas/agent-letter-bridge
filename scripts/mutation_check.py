@@ -225,6 +225,13 @@ EXTRA = {
         SEND, "tests.test_send",
         'DESTINATION_KEYS = ("telegram_chat_id", "chat_id")',
         'DESTINATION_KEYS = ("chat_id", "telegram_chat_id")'),
+    "persistence does not move back into ack": (
+        TG, "tests.test_offset_state_machine",
+        "        if self._acked is None or update_id > self._acked:\n            self._acked = update_id",
+        "        if self._acked is None or update_id > self._acked:\n            self._acked = update_id\n            self._save_offset()"),
+    "a failed cycle does not claim liveness": (
+        BRIDGE, "tests.test_offset_state_machine",
+        '    loop._write_heartbeat(root / "state" / "health.json")', "    pass"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
