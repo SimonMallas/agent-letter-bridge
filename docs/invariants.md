@@ -41,12 +41,6 @@ That order is not arbitrary. Ledger-before-publish fails toward
 *duplicate-with-evidence*; ledger-first would silently skip a redelivered letter
 that never landed. Do not "simplify" it.
 
-**Leases renew with margin.**
-A lease renewed at its expiry is already lost. The worst-case loop bound must
-stay under **TTL/3**, and startup fails fast if it does not — not a warning three
-days later. Without the number the invariant is untestable: a mutation test
-cannot bite on "margin".
-
 ## Privilege separation
 
 **The poller is structurally incapable of ringing.**
@@ -104,6 +98,12 @@ The platform send has no idempotency key, so ambiguity cannot be resolved by
 trying again. A definite refusal (for example a rate limit) is the narrow
 carve-out and is not ambiguous.
 
+**A missing mailbox is refused, never invented.**
+`--mail-root` names a directory that already belongs to some agent; one that
+does not exist is nobody's, so it is a typo. Creating it would put every letter
+into a tree nothing sweeps while the doorbell sends the real agent to an inbox
+that stays empty.
+
 ## Operational
 
 **A platform conflict is a yield, not an error.**
@@ -111,9 +111,12 @@ The losing consumer exits cleanly so the holder runs — but a clean exit under 
 restart-on-crash-only policy is how a poller dies silently, so the exit
 discipline must be stated wherever it is used.
 
-**Liveness is visible from outside.**
-A health heartbeat is written after *every* poll, so freshness equals liveness and
-a supervisor needs no cooperation from the process to judge it.
+**Liveness means a COMPLETED cycle, not a poll.**
+The heartbeat is written only after fetch, durable write and platform confirm
+have all succeeded, so freshness equals "the whole path works" and a supervisor
+needs no cooperation from the process to judge it. It was once written per poll,
+which meant a bridge whose confirm failed every cycle — consuming nothing —
+still looked healthy. A poll is not a completed cycle.
 
 **Supervision is not monitoring.**
 Restarting is the **service manager's** job. The watchdog **reports only**.

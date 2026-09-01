@@ -325,3 +325,30 @@ class TheHelperIsAskedForOnlyWhenMissing(Base):
         console = ScriptedConsole(["n", "print", ""], ["123456:TOKEN"])
         wizard.init(self.root, console, helper_found=lambda name: None)
         self.assertFalse(any("helper" in q.lower() for q in console.asked))
+
+
+class InitCatchesWhatTheRuntimeWouldRefuse(Base):
+    """Review findings. init's promise (Kimi's constraint, pinned) is that a
+    config written by setup passes the loader's own checks. Two inputs broke
+    the spirit of that promise silently: a mailbox path that does not exist,
+    and an empty token."""
+
+    def test_a_mailbox_that_does_not_exist_downgrades_loudly(self):
+        """The runtime now refuses to invent a mailbox, so a config naming a
+        ghost path would fail at first run - hours after the operator walked
+        away believing the install was done. init is the moment the human is
+        still present, so it is the moment to say so."""
+        console, result = self.run_init(
+            answers=["y", str(self.root / "no-such-seat"), "an-agent", "print", ""])
+        self.assertEqual(result["mode"], "standalone")
+        transcript = console.transcript.lower()
+        self.assertIn("does not exist", transcript)
+        self.assertIn("re-run", transcript)
+        self.assertNotIn("ALB_MAIL_ROOT",
+                         (self.root / "bridge.env").read_text(encoding="utf-8"))
+
+    def test_an_empty_token_is_named_before_the_operator_walks_away(self):
+        console, _ = self.run_init(answers=["n", "print", ""], secrets=("",))
+        transcript = console.transcript.lower()
+        self.assertIn("no token", transcript)
+        self.assertIn("refuse to start", transcript)

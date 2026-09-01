@@ -274,3 +274,48 @@ class StandaloneIsUnchanged(unittest.TestCase):
         self.assertEqual(len(rung), 1)
         self.assertIn("bridge inbox", rung[0])
         bus.assert_not_called()
+
+
+class AMailboxIsNotInvented(unittest.TestCase):
+    """Found in review, by reading prepare_mail_root as a stranger.
+
+    mkdir(parents=True) meant a typo'd --mail-root silently created a fresh,
+    empty mailbox tree. Letters then land in a directory no agent sweeps while
+    the doorbell tells the real agent to check an inbox that stays empty -
+    "knock lands, agent finds nothing", built out of one wrong character, with
+    no error anywhere.
+
+    A mailbox is, by definition, a directory that already belongs to some
+    agent. If it does not exist, it is nobody's, and inventing it cannot be
+    what the operator meant.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.base = pathlib.Path(self.tmp.name)
+        self.root = run.prepare_root(self.base / "alb")
+        (self.root / "allowlist.json").write_text(
+            json.dumps({"chats": ["111"]}), encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_missing_mail_root_is_refused_not_created(self):
+        ghost = self.base / "shared" / "no-such-seat"
+        with self.assertRaises(run.ConfigError) as caught:
+            run.run_once(FakePlatform([update(1, "111", "hi")]), None, "",
+                         self.root, mail_root=ghost, recipient="an-agent")
+        self.assertIn(str(ghost), str(caught.exception))
+        self.assertFalse(ghost.exists(), "the refusal must not create the path either")
+
+    def test_inbox_and_processed_are_still_created_inside_a_real_mailbox(self):
+        """The refusal is about the mailbox, not its subdirectories - those are
+        ours to add, and requiring the agent to pre-create them would push our
+        layout onto every letterbox."""
+        seat = self.base / "shared" / "seat"
+        seat.mkdir(parents=True)
+        with mock.patch.object(run, "_bus_ring"):
+            run.run_once(FakePlatform([update(1, "111", "hi")]), None, "",
+                         self.root, mail_root=seat, recipient="an-agent")
+        self.assertTrue((seat / "inbox").is_dir())
+        self.assertEqual(len(list((seat / "inbox").glob("*.md"))), 1)

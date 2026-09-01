@@ -56,9 +56,11 @@ reaching the wrong chat.
 The token appears in no log line, no error message, no process argument, and no
 test fixture.
 
-### 9. Leases renew with margin
+### 9. Single consumer per state directory
 
-Worst-case loop bound under TTL/3; startup fails fast otherwise.
+An exclusive `flock` per `--root`, released by the kernel when the process
+dies. There are no leases and no TTLs in this design — nothing renewable to
+mis-renew, and a crash cannot leave a stale lock behind.
 
 ## Coverage required
 

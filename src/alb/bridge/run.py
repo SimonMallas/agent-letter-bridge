@@ -178,10 +178,25 @@ def prepare_mail_root(mail_root):
 
     So: inbox and processed if missing, nothing else, and the parent's
     permissions are left exactly as found.
+
+    AND THE MAILBOX ITSELF MUST ALREADY EXIST. A mailbox is by definition a
+    directory that belongs to some agent; one that does not exist is nobody's,
+    so a missing path here is a typo, not a request to create it. Inventing it
+    would put every letter into a tree no agent sweeps while the doorbell sends
+    the real agent to an inbox that stays empty - "knock lands, agent finds
+    nothing", built out of one wrong character, with no error anywhere.
     """
     mail_root = pathlib.Path(mail_root)
+    if not mail_root.is_dir():
+        raise ConfigError(
+            f"mail root {mail_root} does not exist. A mailbox belongs to an "
+            f"agent that already has one, so this is refused rather than "
+            f"created - letters written into an invented directory would land "
+            f"where nothing sweeps, silently. Check the path, or remove "
+            f"--mail-root / ALB_MAIL_ROOT to run standalone."
+        )
     for name in ("inbox", "processed"):
-        (mail_root / name).mkdir(parents=True, exist_ok=True)
+        (mail_root / name).mkdir(exist_ok=True)
     return mail_root
 
 

@@ -276,8 +276,11 @@ EXTRA = {
         '    loop._write_heartbeat(root / "state" / "health.json")', "    pass"),
     "the mailbox never receives private state": (
         BRIDGE, "tests.test_mail_root",
-        '    for name in ("inbox", "processed"):\n        (mail_root / name).mkdir(parents=True, exist_ok=True)',
+        '    for name in ("inbox", "processed"):\n        (mail_root / name).mkdir(exist_ok=True)',
         "    prepare_root(mail_root)"),
+    "a missing mailbox is refused, not invented": (
+        BRIDGE, "tests.test_mail_root",
+        "    if not mail_root.is_dir():", "    if False:"),
     "integrated mode rings through the letterbox helper": (
         BRIDGE, "tests.test_mail_root",
         '            _bus_ring(recipient, "info", published[-1], binary=bus_binary)',

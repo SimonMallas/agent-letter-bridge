@@ -123,6 +123,16 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None):
         console.say("Example: research-bot")
         recipient = console.ask("  participant name", "").strip()
 
+    # A ghost path is caught HERE, while the human is still present. The
+    # runtime refuses to invent a mailbox, so a config naming one would fail at
+    # first run - hours after the operator walked away believing the install
+    # was done. Same loud downgrade as a blank, with the reason named.
+    if integrated and mailbox and not pathlib.Path(mailbox).expanduser().is_dir():
+        console.say()
+        console.say(f"  {mailbox} does not exist. A mailbox belongs to an agent")
+        console.say("  that already has one, so it will not be invented.")
+        mailbox = ""
+
     if integrated and mailbox and recipient:
         summary["mode"] = "integrated"
         summary["mail_root"] = mailbox
@@ -156,6 +166,12 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None):
     console.say("the token first - one consumer per token is enforced by the")
     console.say("platform, and an old token cannot be proven unused.")
     token = console.ask_secret("  token (not echoed): ").strip()
+    if not token:
+        # Say it NOW, not at first run. The file is still written - the rest of
+        # the boilerplate is real either way - but the operator leaves knowing
+        # exactly what is missing rather than discovering it at 3am.
+        console.say("  no token entered. The file is written without one, and the")
+        console.say("  bridge will refuse to start until ALB_TOKEN is filled in.")
 
     env_path = root / "bridge.env"
     if env_path.exists():
