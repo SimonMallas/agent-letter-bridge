@@ -2,10 +2,23 @@
 
 **Your agents, reachable from your phone — as durable mail.**
 
+<!-- LAUNCH GATE: the doorbell GIF goes here, and nothing is announced
+     anywhere until it does. A message arrives on a phone; a letter file
+     appears in the inbox; THEN the knock types itself into the pane.
+     (assets/doorbell.gif — to be recorded against a clean demo root.) -->
+
 Agent Letter Bridge connects a chat app to AI agents on your own machine. An
 incoming message becomes a durable file on disk **before** it is acknowledged and
 **before** any agent is notified. The file is the source of truth; the
 notification only makes it faster.
+
+Most tools in this space deliver an external message **as the agent's input** —
+typed into its terminal, or handed to its session as a prompt. This one delivers
+it as a **durable, deduplicated, enveloped letter**, written to disk before the
+platform is even told the message was received. The message body never enters
+the composer; the optional knock is one fixed, contentless line. How that
+differs from each neighbouring tool, checked against their code and docs rather
+than asserted: [`docs/COMPARE.md`](docs/COMPARE.md).
 
 > **Messages outlive the crash of any single process.**
 
@@ -26,6 +39,13 @@ is an accelerator, and every accelerator is allowed to fail.
 - **Not [Agent Letterbox](https://github.com/SimonMallas/agent-letterbox-cmux).**
   Letterbox is where mail rests between agents on one machine. Letter Bridge is
   how mail crosses in from outside. Different products, legible relationship.
+- **Not injection-proof, and we will not claim it.** The body never enters
+  the composer, which removes the *delivery* path where a stranger's text
+  becomes the agent's next command. But the knock is still one typed line, and
+  a letter's body is still untrusted text once an agent chooses to read it.
+  The allowlist is the trust boundary, here as in every tool of this class —
+  the difference is what arrives when it passes: a letter to open, not a
+  command already running.
 - **Not a proxy or interceptor.** The bridge never *interprets* content or turns
   it into action, and the untrusted poller never inspects content for routing or
   ringing. (It is not "never reads" — the outbound helper necessarily reads a
