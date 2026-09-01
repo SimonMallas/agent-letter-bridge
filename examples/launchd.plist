@@ -7,8 +7,11 @@
   `python3` may resolve to a different interpreter than the one you tested
   with. That failure looks like "the bot is dead" and costs a morning.
 
-  Run `alb --doctor --root ...` to see which interpreter is actually resolving
-  and whether cmux can be found.
+  Run the doctor against your state directory to see which interpreter is
+  actually resolving and whether cmux can be found. The exact command is in
+  INSTALL.md - it is not written out here because a double hyphen is illegal
+  inside an XML comment, and a comment that quietly breaks the file is a worse
+  trade than a comment that points at the docs.
 
   Replace: /ABSOLUTE/PATH/TO with your own paths, and the interpreter with the
   output of `which python3` in a shell where the bridge works.
@@ -70,8 +73,8 @@
          chmod 600 ~/Library/LaunchAgents/agent-letter-bridge.plist
        Copy both values from a shell that IS inside cmux
        (`env | grep ^CMUX_SOCKET`). They go stale when cmux restarts,
-       and a stale capability fails the same silent way - check
-       `alb --status` rather than assuming.
+       and a stale capability fails the same silent way - check the
+       bridge's status rather than assuming (see INSTALL.md).
 
        PATH must include the cmux binary either way. -->
   <key>EnvironmentVariables</key>

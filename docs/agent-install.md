@@ -224,7 +224,12 @@ the last outcome; it is not proof the pane received anything.
 file you looked at.** "The command exited 0" is not the same claim.
 
 If **you** are the agent being woken (integrated, same pane): do not sweep the
-inbox the instant `--once` publishes. The doorbell helper waits before Enter.
+inbox the instant `--once` publishes. The letter is durable before the knock is
+typed, and **[integrated]** your letterbox helper deliberately pauses between
+pasting the line and pressing Enter, which widens the gap further. That pause
+belongs to the helper, not to this bridge — do not quote a number for it, and
+do not expect the same gap in standalone mode, where the adapter does not
+pause at all.
 You will file the letter, then receive a knock for mail that is already gone,
 and the operator will think the bell is broken. Wait for the knock, then
 sweep. That delay is not a failed ring.

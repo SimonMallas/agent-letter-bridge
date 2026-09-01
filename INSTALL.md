@@ -307,7 +307,7 @@ and the usual fix people reach for (a longer timeout) is not the cause. Running
 the bridge in a cmux pane avoids the problem entirely.
 
 **If you are sitting in the agent's pane** (you installed this onto
-yourself): the knock arrives a couple of seconds after the letter is written.
+yourself): the knock arrives after the letter is written, not with it.
 If you read and file the letter in that window, you will then get a doorbell
 for mail that is already gone. Wait for the knock before sweeping. Do not
 treat that delay as a failed ring.
