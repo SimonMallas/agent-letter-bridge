@@ -180,7 +180,7 @@ def summary(process_listing, self_pid, root, environ):
         lines.append(f"  {delivery['reason']}")
         lines.append("  This is fail-closed behaviour working correctly, and it is")
         lines.append("  also indistinguishable from a dead bot. Add your chat id to")
-        lines.append("  the allowlist - see docs/operations.md, Day-0.")
+        lines.append("  the allowlist - see INSTALL.md, step 7.")
         lines.append("")
     else:
         lines.append(f"DELIVERY: {delivery['reason']}")

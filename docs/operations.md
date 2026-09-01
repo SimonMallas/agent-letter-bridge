@@ -2,6 +2,10 @@
 
 Written for a stranger at 3am with nobody to ask.
 
+**Installing for the first time? Read [`../INSTALL.md`](../INSTALL.md) instead.**
+This page is reference: it explains why each thing is the way it is, and what
+to do when it breaks. It is not ordered as a walkthrough.
+
 ## Before Day-0: the four things you need
 
 None of these are in the repo, and the bridge cannot work without them.

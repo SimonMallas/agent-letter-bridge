@@ -53,29 +53,27 @@ fetch and write causes redelivery, never loss.
 Read [`docs/invariants.md`](docs/invariants.md) before trusting this with a token.
 The invariants are the product; the code is how they are kept.
 
-## Run it
+## Install
+
+**Start here: [`INSTALL.md`](INSTALL.md)** — one numbered path from nothing to a
+working bridge, about 15 minutes, with the checkpoints that catch the failures
+that otherwise look like something else.
+
+Installing it with a CLI agent rather than by hand? Give the agent
+[`docs/agent-install.md`](docs/agent-install.md) — the same install written as a
+brief, with the boundaries an agent needs and a human infers.
+
+The short version, once you know the shape:
 
 ```sh
 pipx install .                                  # or: uv tool install .
 alb --config bridge.env --root ~/.alb --once
 ```
 
-Running it as a service? Use a **dedicated venv** rather than the pipx shim —
-a unit file needs an absolute path that is yours, not a tool's internal layout:
-
-```sh
-python3 -m venv ~/.alb/venv && ~/.alb/venv/bin/pip install .
-# then point your unit file at ~/.alb/venv/bin/alb — see examples/
-```
-
-Waking an agent that already handles other mail? It needs to know this bridge
-exists — see [`docs/agent-setup.md`](docs/agent-setup.md). The transport working
-is not the same as the agent recognising the knock.
-
-**Read [`docs/operations.md`](docs/operations.md) first.** You need four things
-that are not in this repo — a bot token, your own chat id, an `allowlist.json`,
-and a surface id for the ring — and **the bridge delivers nothing until the
-allowlist exists**. That doc tells you how to get each one.
+**It will deliver nothing until an allowlist exists.** That is deliberate and it
+is the step people skip. You need four things that are not in this repo — a bot
+token, your own chat id, an `allowlist.json`, and (optionally) a pane id for the
+ring. `INSTALL.md` walks you through getting each one.
 
 If nothing arrives, run `alb --doctor --root ~/.alb`. A fail-closed allowlist is
 indistinguishable from a dead bot, so the doctor tells you which you have.
@@ -84,8 +82,13 @@ It refuses to start on a missing, world-readable or incomplete config. That is
 deliberate: a bridge that starts wrong is harder to diagnose at 3am than one
 that will not start at all.
 
-**The ring requires a multiplexer** — cmux or tmux. Set `ALB_NOTIFIER=tmux`
-to use tmux; an unsupported value is refused rather than silently defaulted.
+**The ring is optional and requires a multiplexer** — cmux or tmux, selected
+with `ALB_NOTIFIER`. Without one the bridge still runs: mail lands durably,
+nothing pings, and `alb --status` reports the ring as `disabled` rather than
+leaving you guessing.
+
+Reference and failure modes: [`docs/operations.md`](docs/operations.md).
+Waking an agent that already handles other mail: [`docs/agent-setup.md`](docs/agent-setup.md).
 
 ## Status
 

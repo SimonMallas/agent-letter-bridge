@@ -1,7 +1,8 @@
 # For the agent being woken
 
-Written for the agent, not the operator. If you are setting this up, read
-`operations.md` first — this page assumes the bridge already runs.
+Written for the agent, not the operator. **This page assumes the bridge already
+runs.** If you are the one installing it, read
+[`agent-install.md`](agent-install.md) instead — then come back here.
 
 ## The knock
 
