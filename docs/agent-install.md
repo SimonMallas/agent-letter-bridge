@@ -250,9 +250,14 @@ python3 -m venv ~/.alb/venv
 ~/.alb/venv/bin/pip install .
 ```
 
-Then the launchd/systemd unit in [`../examples/`](../examples/), with every
-path absolute, including `PATH` so `cmux`/`tmux` resolve. Restart-on-crash
-only — a clean `409` yield must stay down.
+Then keep it running in the way the notifier allows. **Under cmux this means a
+dedicated cmux pane, not launchd** — cmux refuses connections from processes it
+did not start, so a LaunchAgent delivers durable mail and never rings, however
+correct the rest of the unit is. Integrated mode does not exempt you: addressing
+a cmux pane is not being inside cmux. Under tmux, or with no ring, the unit in
+[`../examples/`](../examples/) is right: every path absolute, including `PATH`
+so `cmux`/`tmux` resolve. Restart-on-crash only — a clean `409` yield must stay
+down.
 
 Foreground is acceptable for a first live hour:
 

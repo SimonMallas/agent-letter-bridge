@@ -306,12 +306,15 @@ Make it a service with the templates in [`examples/`](examples/), using the
 dedicated-venv path from Step 2. Prove it: send a message *without* running
 `--once` again. Only that is a live bell.
 
-**If you use cmux, read the comment at the top of
-[`examples/launchd.plist`](examples/launchd.plist) before writing a unit
-file.** cmux refuses connections from processes it did not start, and a
-LaunchAgent is one of those — mail lands, the ring records `no_live_surface`,
-and the usual fix people reach for (a longer timeout) is not the cause. Running
-the bridge in a cmux pane avoids the problem entirely.
+**If you use cmux, the bridge process must be born inside cmux to ring.**
+cmux refuses connections from processes it did not start, and a LaunchAgent is
+one of those — mail lands, the ring records `no_live_surface`, and the usual
+fix people reach for (a longer timeout) is not the cause. This applies in
+integrated mode too: being *addressed to* a cmux pane does not put the bridge
+*inside* cmux. So under cmux the working shape is the bridge running in its own
+dedicated pane; launchd gives you durable mail only. Proven live on the first
+outside install, both ways round. Details and the (discouraged) workaround:
+the comment at the top of [`examples/launchd.plist`](examples/launchd.plist).
 
 **If you are sitting in the agent's pane** (you installed this onto
 yourself): the knock arrives after the letter is written, not with it.
