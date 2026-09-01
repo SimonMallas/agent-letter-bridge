@@ -93,7 +93,10 @@ that will not start at all.
 **The ring is optional and requires a multiplexer** — cmux or tmux, selected
 with `ALB_NOTIFIER`. Without one the bridge still runs: mail lands durably,
 nothing pings, and `alb --status` reports the ring as `disabled` rather than
-leaving you guessing.
+leaving you guessing. Adapters are small files behind a written contract
+([`docs/adapter-contract.md`](docs/adapter-contract.md)); a Herdr adapter is
+planned, and will ship when there is a live workspace to prove the knock
+against — untested transports do not ship here.
 
 Reference and failure modes: [`docs/operations.md`](docs/operations.md).
 Waking an agent that already handles other mail: [`docs/agent-setup.md`](docs/agent-setup.md).
