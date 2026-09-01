@@ -247,6 +247,10 @@ ls ~/.alb/inbox/          # [integrated] ls the agent's inbox instead
 **Expect:** `alb: fetched 1 · published 1`, and one `.md` file containing your
 message.
 
+The first poll after setup will publish **every** message Telegram was
+holding, not just the last one. Three real hellos become three letters in
+one cycle. That is catch-up, not echo, and not the bot talking to itself.
+
 **Nothing there?** Run `alb --doctor --root ~/.alb`. Nearly always the
 allowlist (Step 3) or a token another process is already polling (Step 3).
 
@@ -283,12 +287,30 @@ working. Only a real knock proves the transport.
 
 ### Then leave it running
 
+`--once` was a test. It exits. If you stop here, the next message from your
+phone sits at Telegram and **no bell rings**. That is not a broken ring; it is
+an install that was never turned on.
+
 ```sh
 alb --config ~/.alb/bridge.env --root ~/.alb
 ```
 
 Make it a service with the templates in [`examples/`](examples/), using the
-dedicated-venv path from Step 2.
+dedicated-venv path from Step 2. Prove it: send a message *without* running
+`--once` again. Only that is a live bell.
+
+**If you use cmux, read the comment at the top of
+[`examples/launchd.plist`](examples/launchd.plist) before writing a unit
+file.** cmux refuses connections from processes it did not start, and a
+LaunchAgent is one of those — mail lands, the ring records `no_live_surface`,
+and the usual fix people reach for (a longer timeout) is not the cause. Running
+the bridge in a cmux pane avoids the problem entirely.
+
+**If you are sitting in the agent's pane** (you installed this onto
+yourself): the knock arrives a couple of seconds after the letter is written.
+If you read and file the letter in that window, you will then get a doorbell
+for mail that is already gone. Wait for the knock before sweeping. Do not
+treat that delay as a failed ring.
 
 ---
 

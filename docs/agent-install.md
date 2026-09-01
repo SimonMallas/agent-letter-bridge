@@ -204,6 +204,10 @@ alb --config ~/.alb/bridge.env --root ~/.alb --once
 bot, run one cycle, and confirm both that the cycle reported
 `published 1` **and** that a `.md` file appeared in the inbox.
 
+If they already sent several messages before the first poll, expect
+`published N` and N letters. That is Telegram's backlog emptying, not
+echoes. Do not tell the human the bot duplicated their texts.
+
 **Test 2 — an unlisted sender is denied.** Ask the human whether they want this
 tested; it needs a second sender. Expect `denied 1 (allowlist)` in the cycle
 report and no letter. The sender sees nothing — that is the point — but the
@@ -218,6 +222,42 @@ the last outcome; it is not proof the pane received anything.
 
 **Do not report the install as complete until Test 1 has actually produced a
 file you looked at.** "The command exited 0" is not the same claim.
+
+If **you** are the agent being woken (integrated, same pane): do not sweep the
+inbox the instant `--once` publishes. The doorbell helper waits before Enter.
+You will file the letter, then receive a knock for mail that is already gone,
+and the operator will think the bell is broken. Wait for the knock, then
+sweep. That delay is not a failed ring.
+
+---
+
+## Step 8.5 — Leave it running. `--once` is not a bridge.
+
+`--once` exits. After it exits, nothing polls and nothing rings. New messages
+wait at the platform until the next cycle. **Do not tell the human they have
+Telegram access while only `--once` has been run.** That is the failure this
+step exists to prevent.
+
+If they want a live bell, start the process and keep it started:
+
+```sh
+python3 -m venv ~/.alb/venv
+~/.alb/venv/bin/pip install .
+```
+
+Then the launchd/systemd unit in [`../examples/`](../examples/), with every
+path absolute, including `PATH` so `cmux`/`tmux` resolve. Restart-on-crash
+only — a clean `409` yield must stay down.
+
+Foreground is acceptable for a first live hour:
+
+```sh
+~/.alb/venv/bin/alb --config ~/.alb/bridge.env --root ~/.alb
+```
+
+Confirm with `alb --status --root ~/.alb` that the heartbeat is moving while
+nobody is running `--once`. Then ask the human to send a message **without**
+you polling by hand. Only that proves the bell.
 
 ---
 
@@ -244,7 +284,9 @@ an unrun test is not a passed one.
 | `409 Conflict` | another consumer holds this token; the human must re-issue it |
 | refuses to start | config not `600`, or an unknown key |
 | mail lands, no knock | stale pane id after a multiplexer restart |
+| mail lands, launchd ring is `no_live_surface` | cmux denies processes not started inside it. Best fix: run the bridge in a cmux pane, or use tmux. Copying `CMUX_SOCKET_CAPABILITY` into the unit also works, but it is a bearer token that can type into panes and a plist is usually world-readable — see `examples/launchd.plist`. A longer timeout does not fix this and never did. |
 | knock lands, agent finds nothing | Step 9 was skipped |
+| nothing rings until someone runs `--once` | Step 8.5 skipped — the process is not running |
 
 Report the symptom and what you checked. **Do not disable a check to get past
 it** — every refusal in this tool exists because something failing silently once
