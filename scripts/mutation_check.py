@@ -21,6 +21,8 @@ ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
 TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
 BRIDGE = ROOT / "src" / "alb" / "bridge" / "run.py"
+WIZARD = ROOT / "src" / "alb" / "setup" / "wizard.py"
+DISCOVER = ROOT / "src" / "alb" / "setup" / "discover.py"
 
 # invariant -> (file, tests module, old, new)
 EXTRA = {
@@ -66,6 +68,27 @@ EXTRA = {
         POLL, "tests.test_poller",
         "                result.duplicate += 1",
         "                result.denied += 1"),
+    "setup writes a deny-all allowlist": (
+        WIZARD, "tests.test_setup",
+        '    chats = _chat_ids(console, token, chat_id_reader)',
+        '    chats = _chat_ids(console, token, chat_id_reader) or ["111"]'),
+    "setup never overwrites an existing file": (
+        WIZARD, "tests.test_setup",
+        "    if allow_path.exists():", "    if False:"),
+    "setup does not reach the network unless asked": (
+        WIZARD, "tests.test_setup",
+        '    if choice != "read" or reader is None:', "    if False:"),
+    "setup asks for the token without echo": (
+        WIZARD, "tests.test_setup",
+        '    token = console.ask_secret("  token (not echoed): ").strip()',
+        '    token = console.ask("  token: ").strip()'),
+    "the chat id lookup sends no offset": (
+        DISCOVER, "tests.test_setup_discover",
+        '{"timeout": 0}', '{"timeout": 0, "offset": 1}'),
+    "the chat id lookup returns chat not from": (
+        DISCOVER, "tests.test_setup_discover",
+        '        chat = message.get("chat") or {}',
+        '        chat = message.get("from") or {}'),
     "deny still consumes the update": (
         POLL, "tests.test_poller",
         '        platform.ack(item["update_id"])\n\n    # Only after a poll',

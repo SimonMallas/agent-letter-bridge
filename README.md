@@ -67,16 +67,24 @@ The short version, once you know the shape:
 
 ```sh
 pipx install .                                  # or: uv tool install .
-alb --config bridge.env --root ~/.alb --once
+alb --init --root ~/.alb                        # creates the files, asks for the rest
+alb --config ~/.alb/bridge.env --root ~/.alb --once
 ```
 
-**It will deliver nothing until an allowlist exists.** That is deliberate and it
-is the step people skip. You need four things that are not in this repo — a bot
-token, your own chat id, an `allowlist.json`, and (optionally) a pane id for the
-ring. `INSTALL.md` walks you through getting each one.
+`--init` creates the state directory, a mode-600 config and a **deny-all**
+allowlist, then asks you for the things no program can derive: your bot token,
+whether your agent already has a mailbox, and your chat id — which it will
+either read for you, or print the command for you to run, your choice. It never
+invents an allowlist entry, never overwrites a file, and never touches the
+network unless you ask it to.
+
+**It will deliver nothing until a chat id is in that allowlist.** That is
+deliberate and it is the step people skip.
 
 If nothing arrives, run `alb --doctor --root ~/.alb`. A fail-closed allowlist is
-indistinguishable from a dead bot, so the doctor tells you which you have.
+indistinguishable from a dead bot, so the doctor tells you which you have. Each
+cycle also reports itself — `fetched 2 · published 1 · denied 1 (allowlist)` —
+so a working deny is visible to you without being visible to the sender.
 
 It refuses to start on a missing, world-readable or incomplete config. That is
 deliberate: a bridge that starts wrong is harder to diagnose at 3am than one

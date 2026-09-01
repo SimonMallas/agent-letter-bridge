@@ -4,6 +4,13 @@ A message from your chat app becomes a durable file on disk BEFORE it is
 acknowledged and BEFORE any agent is notified. The file is the source of truth;
 the notification only makes it faster.
 
+SET IT UP
+  alb --init --root ~/.alb    creates the state directory, a mode-600 config
+                              and a DENY-ALL allowlist, then asks for what no
+                              program can derive. Never invents an allowlist
+                              entry, never overwrites a file, and never reaches
+                              the platform unless you ask it to.
+
 RUN IT
   alb --config bridge.env --root ~/.alb        both flags are required
   The env file must be mode 600 and set ALB_TOKEN. ALB_SURFACE is optional:
@@ -58,6 +65,9 @@ def main(argv=None):
     parser.add_argument("--mail-root", default=None,
                         help="publish letters here instead (integrated mode); "
                              "private state always stays under --root")
+    parser.add_argument("--init", action="store_true",
+                        help="create the state directory, a mode-600 config and a "
+                             "deny-all allowlist, asking for what cannot be derived")
     parser.add_argument("--once", action="store_true", help="one cycle, then exit")
     parser.add_argument("--canary", action="store_true",
                         help="prove the send path is alive; sends to your own chat")
@@ -70,6 +80,12 @@ def main(argv=None):
     parser.add_argument("--text", help="reply body, with --reply-to")
     parser.add_argument("--interval", type=float, default=2.0)
     args = parser.parse_args(argv)
+
+    # Setup runs before there is a config to load, which is the whole point:
+    # it is what creates one. It never reads a token from anywhere, and never
+    # reaches the platform unless the operator asks it to in that moment.
+    if args.init:
+        return _init(args)
 
     # Status reads files only: no config, no token, no network. It is the
     # thing you run when you want to know whether to worry.
@@ -195,6 +211,50 @@ def main(argv=None):
 
     with lock_guard(lock):
         return _poll_forever(platform, transport, surface, root, args, config)
+
+
+class Console:
+    """Questions to a person at a terminal.
+
+    ask_secret is a separate method rather than a flag on ask, so that the
+    no-echo path is a different call and cannot be reached by accident with the
+    wrong argument.
+    """
+
+    def say(self, text=""):
+        print(text)
+
+    def ask(self, question, default=""):
+        answer = input(f"{question}: " if not question.endswith(": ") else question)
+        return answer if answer.strip() else default
+
+    def ask_secret(self, question):
+        import getpass
+        return getpass.getpass(question)
+
+
+def _init(args):
+    """alb --init. Interactive by definition."""
+    from alb.setup import discover, wizard
+
+    if not sys.stdin.isatty():
+        # Refuse rather than consume a pipe. Every question here has a
+        # consequence a script cannot consent to on someone's behalf, and the
+        # token prompt would silently read whatever was piped in.
+        print("alb: --init asks questions and needs a terminal", file=sys.stderr)
+        return 2
+
+    try:
+        summary = wizard.init(
+            args.root, Console(),
+            chat_id_reader=discover.read_chat_ids,
+            panes=discover.list_panes(),
+        )
+    except KeyboardInterrupt:
+        # Ctrl-C during setup must not leave a token half-written.
+        print("\nalb: setup cancelled", file=sys.stderr)
+        return 1
+    return 0 if summary else 1
 
 
 def _report(cycle, once):

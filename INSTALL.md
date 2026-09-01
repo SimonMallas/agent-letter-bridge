@@ -22,10 +22,13 @@ other agents on this machine?**
 | Letters land in | a directory this bridge owns | the inbox it already sweeps |
 | The knock | a new line it must learn | the doorbell it already knows |
 | You must teach the agent | yes — one line, one path | no |
-| Extra flag | none | `--mail-root <its inbox>` |
+| Setup asks you for | nothing extra | that inbox's path, and the agent's name |
 
 **If in doubt, choose standalone.** It owns everything it touches, so it cannot
-disturb something already running. You can switch later by adding one flag.
+disturb something already running. You can switch later by adding one setting.
+
+`alb init` asks you this in Step 4. It does **not** work it out by looking: an
+inbox existing on your disk is not you asking for letters to be put in it.
 
 Steps marked **[integrated]** or **[standalone]** apply to one mode only.
 Everything else applies to both.
@@ -75,21 +78,7 @@ bin directory — run `pipx ensurepath` and open a new terminal.
 
 ---
 
-## Step 3 — Create your state directory
-
-This holds everything private: the allowlist, the lock, the dedup ledger, the
-read offset, health files and dead letters.
-
-```sh
-mkdir -p ~/.alb && chmod 700 ~/.alb
-```
-
-**One agent, one directory.** Waking two agents means two directories, two bots
-and two bridges. See [Step 10](#step-10--optional-a-second-agent).
-
----
-
-## Step 4 — Make a bot and get its token
+## Step 3 — Make the bot and get its token
 
 In Telegram, message **@BotFather**, send `/newbot`, and follow the prompts.
 It returns a token like `123456789:AAH...`.
@@ -97,54 +86,90 @@ It returns a token like `123456789:AAH...`.
 **If you inherited this bot from anything — another tool, an old script, a
 teammate — revoke and re-issue the token now** (`/revoke` in BotFather, or
 `/token` for a fresh one). The platform allows exactly one consumer per token.
-Proving that nothing else is holding an old token is the one thing nobody can
-do; re-issuing makes it true by construction.
+Proving nothing else is holding an old token is the one thing nobody can do;
+re-issuing makes it true by construction.
 
-Keep the token in your clipboard for Step 6.
+**This step cannot be automated and never will be.** BotFather is a
+conversation you are in.
 
----
-
-## Step 5 — Get your own chat id
-
-Send your new bot any message — "hello" is fine. Then:
-
-```sh
-curl -s "https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates" \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"][0]["message"]["chat"]["id"])'
-```
-
-**Expect:** a number, e.g. `1460856861`. That is your chat id.
-
-**Empty result?** You did not message the bot, or you messaged a different one.
-Send it a message and run the command again. It is read-only and consumes
-nothing, so it is safe to repeat.
-
-> **This command deliberately reads `chat.id`, not `from.id`.** In a direct
-> message the two are the same number, so a wrong recipe appears to work — and
-> then denies everything the first time you use a group. Use the command as
-> written.
+Then message your new bot once — anything, "hello" is fine. You need a message
+to exist for the next step.
 
 ---
 
-## Step 6 — Write the config file
+## Step 4 — Run `alb init`
 
 ```sh
-cat > ~/.alb/bridge.env <<'EOF'
-ALB_TOKEN=PASTE_YOUR_TOKEN_HERE
-EOF
-chmod 600 ~/.alb/bridge.env
+alb --init --root ~/.alb
 ```
 
-`chmod 600` is not advisory — **the bridge refuses to start on a world-readable
-config**, because a bridge that starts wrong is harder to diagnose at 3am than
-one that will not start at all.
+This does every remaining piece of setup that is typing rather than judgement:
+creates the state directory `0700`, writes `bridge.env` at `0600`, and writes
+`allowlist.json` at `0600` **denying everyone**.
 
-Other settings you may add later, once the basics work:
+It asks you four things:
+
+**1. Does your agent already have an inbox it sweeps?** Blank for standalone —
+that's the safe answer, and it's the right one unless you specifically want
+letters delivered into an existing inter-agent mailbox.
+
+**2. Your bot token.** Not echoed as you type, not shown again, and never
+accepted as a command-line argument — a flag would put your token in shell
+history.
+
+**3. How to get your chat id — `read` or `print`.** Both are real options:
+
+| | what happens | what you can then say |
+| --- | --- | --- |
+| `read` | one `getUpdates` call with your token; shows the ids it found; you pick yours | the wrong-id trap is impossible — it reads `chat.id` by construction |
+| `print` | prints the command for you to run yourself | setup never touched the network at all |
+
+`read` consumes nothing — it sends no offset, so your messages stay queued for
+the bridge to collect properly later. Pick whichever you prefer; neither is the
+safe answer for everybody.
+
+**4. Your agent's pane, if you want the ring.** It lists the panes it can see.
+**It will not pick one** — a listing can't tell which pane holds your agent, and
+a knock typed into the wrong pane lands in someone else's session. Copy the id
+into `bridge.env` as `ALB_SURFACE`.
+
+### What it will not do
+
+It never invents an allowlist entry, never overwrites a file that already
+exists, never reaches the platform unless you choose `read`, and never picks a
+pane or a mailbox for you. Re-running it on a working bridge is safe: it keeps
+what is there and tells you what it kept.
+
+### Checkpoint
+
+```sh
+alb --doctor --root ~/.alb
+```
+
+If you chose `print`, this will say **nothing will be delivered** — correct, and
+the allowlist is still empty. Add your chat id to `~/.alb/allowlist.json`:
+
+```json
+{"chats": ["YOUR_CHAT_ID"]}
+```
+
+then run `--doctor` again and expect `DELIVERY: 1 chat(s) permitted`.
+
+**Do not skip this.** A correctly-working fail-closed allowlist is
+**indistinguishable from a dead bot** — both produce silence. `--doctor` is the
+only thing that tells you which one you have. It reads files only: no token,
+no network.
+
+---
+
+## Step 5 — What `init` wrote, if you want to change it later
+
+`~/.alb/bridge.env`, mode `600`:
 
 | Key | Meaning | Default |
 | --- | --- | --- |
 | `ALB_TOKEN` | your bot token | **required** |
-| `ALB_SURFACE` | the pane to knock on (Step 8) | none — ring disabled |
+| `ALB_SURFACE` | the pane to knock on | none — ring disabled |
 | `ALB_NOTIFIER` | `cmux` or `tmux` | `cmux` |
 | `ALB_TO` | who the letter is addressed to | `agent` |
 | `ALB_FROM` | who the letter is from | `telegram-bridge` |
@@ -152,62 +177,42 @@ Other settings you may add later, once the basics work:
 | `ALB_BUS_BINARY` | **[integrated]** your doorbell helper | `bus.sh` |
 
 An unknown key — including a typo like `ALB_NOTIFER` — is **refused by name**
-rather than ignored. A setting that appears to have worked but was never read is
-worse than an error; a real deployment ran for days believing it had selected a
-transport that nothing was reading.
+rather than ignored. So is an `ALB_SURFACE` still set to a placeholder from
+this document: a fake pane id fails silently forever, because ring failures are
+deliberately swallowed so a dead notifier never costs a letter.
+
+`chmod 600` is not advisory either — the bridge refuses to start on a
+world-readable config. A bridge that starts wrong is harder to diagnose at 3am
+than one that will not start at all.
 
 ---
 
-## Step 7 — Write the allowlist. Nothing works before this.
-
-**This is the one thing standing between a stranger and your agents, and the
-bridge delivers nothing at all until it exists.**
-
-```sh
-echo '{"chats": ["YOUR_CHAT_ID_FROM_STEP_5"]}' > ~/.alb/allowlist.json
-chmod 600 ~/.alb/allowlist.json
-```
-
-The list is exact-match and **fail-closed**: missing, empty, malformed, or the
-wrong shape all deny everything, and there is no setting that opens it.
-
-**The id must be a string in quotes**, as above.
-
-### Checkpoint — do this now, not later
-
-```sh
-alb --doctor --root ~/.alb
-```
-
-**Expect:** it reports the allowlist as present and valid.
-
-Do not skip this. A correctly-working fail-closed allowlist is
-**indistinguishable from a dead bot** — both produce silence. `--doctor` is the
-only thing that tells you which one you have. It reads files only: no token, no
-network.
-
----
-
-## Step 8 — Optional: set up the ring
+## Step 6 — Optional: the ring, if you skipped it
 
 The ring types a line into your agent's terminal pane so it notices mail
 immediately. **It is an accelerator, not a delivery mechanism.** Skip it and
 mail still lands durably — `alb --status` will report the ring as `disabled`
 with a reason, so a missing bell is never confused with a broken one.
 
-Find your agent's pane id:
+`alb init` lists your panes in Step 4. To find them again yourself:
 
 ```sh
 cmux --id-format uuids tree --all                                       # cmux
 tmux list-panes -a -F '#{pane_id} #{session_name}:#{window_index}.#{pane_index}'   # tmux
 ```
 
-Add to `~/.alb/bridge.env`:
+Add the id to `~/.alb/bridge.env`:
 
 ```
-ALB_SURFACE=THE-ID-FROM-ABOVE
+ALB_SURFACE=<the id of your agent's pane>
 ALB_NOTIFIER=tmux          # only if you use tmux; cmux is the default
 ```
+
+**Paste a real id, not the line above.** Placeholder values are refused by
+name, because a fake pane id is the one wrong setting that produces no error
+anywhere: ring failures are swallowed on purpose so a dead notifier never costs
+a letter. Not setting `ALB_SURFACE` at all is fully supported and reports
+itself as `disabled`.
 
 **[integrated] Skip `ALB_SURFACE` entirely.** Your doorbell helper resolves the
 recipient's pane itself. Set `ALB_TO` to the agent's exact participant name
@@ -219,7 +224,7 @@ instead — that is who the doorbell is addressed to.
 
 ---
 
-## Step 9 — First run, and the two tests that matter
+## Step 7 — First run, and the tests that matter
 
 **[integrated]** add `--mail-root ~/path/to/the/agents/inbox` to every command below.
 
@@ -227,8 +232,8 @@ instead — that is who the doorbell is addressed to.
 alb --config ~/.alb/bridge.env --root ~/.alb --once
 ```
 
-**Expect:** it exits cleanly. `--once` runs a single cycle, so nothing is left
-running yet.
+**Expect:** a line like `alb: fetched 0 · published 0`. `--once` runs a single
+cycle and reports what it did, so a run that found nothing still says so.
 
 ### Test 1 — a listed sender produces a letter
 
@@ -239,17 +244,25 @@ alb --config ~/.alb/bridge.env --root ~/.alb --once
 ls ~/.alb/inbox/          # [integrated] ls the agent's inbox instead
 ```
 
-**Expect:** one `.md` file containing your message.
+**Expect:** `alb: fetched 1 · published 1`, and one `.md` file containing your
+message.
 
 **Nothing there?** Run `alb --doctor --root ~/.alb`. Nearly always the
-allowlist (Step 7) or a token another process is already polling (Step 4).
+allowlist (Step 3) or a token another process is already polling (Step 3).
 
 ### Test 2 — an unlisted sender produces silence
 
 Have someone else message the bot, or temporarily put a wrong id in the
 allowlist and message it yourself.
 
-**Expect:** no new letter, and no error. Silence is the correct result.
+**Expect:** no new letter, no error, and `alb: fetched 1 · published 0 · denied
+1 (allowlist)`.
+
+The *sender* gets total silence — that is the security property. You, at the
+terminal, get told the gate did it. Those two things being different is
+deliberate: an operator who cannot tell a working deny from a dead bridge
+eventually widens the allowlist to find out.
+
 **Restore the allowlist afterwards.**
 
 ### Test 3 — the ring, if you set one up
@@ -279,7 +292,7 @@ dedicated-venv path from Step 2.
 
 ---
 
-## Step 10 — Tell the agent
+## Step 8 — Tell the agent
 
 **[standalone] Do this before the first real message.** The transport working is
 not the same as the agent recognising the knock. An agent that already handles
@@ -294,18 +307,18 @@ and the knock is the one it already knows.
 
 ---
 
-## Step 10b — Optional: a second agent
+## Step 9 — Optional: a second agent
 
 **One bot per agent.** This is not a preference — the platform permits exactly
 one consumer per token, so sharing a bot between two agents is a conflict, not
 a configuration. Each agent needs:
 
-- its own bot and token (Step 4)
+- its own bot and token (Step 3)
 - its own state directory (Step 3)
 - its own pane id, or its own `ALB_TO` in integrated mode
 - its own running bridge
 
-Repeat Steps 3–9 with a different directory, e.g. `~/.alb/grok`.
+Repeat Steps 3–7 with a different directory, e.g. `~/.alb/grok`.
 
 ---
 
@@ -326,11 +339,11 @@ any time, including on a machine you are not sure about.
 
 | Symptom | Almost always |
 | --- | --- |
-| Mail arrives, no ring | pane id stale after a multiplexer restart — re-pin (Step 8) |
-| Nothing arrives at all | allowlist missing or wrong id — run `--doctor` (Step 7) |
-| `409 Conflict` | something else is polling this token — re-issue it (Step 4) |
-| Refuses to start | config not `600`, or an unknown/misspelled key (Step 6) |
-| Agent gets the knock, finds nothing | it was never told about the bridge (Step 10) |
+| Mail arrives, no ring | pane id stale after a multiplexer restart — re-pin (Step 5) |
+| Nothing arrives at all | allowlist missing or wrong id — run `--doctor` (Step 3) |
+| `409 Conflict` | something else is polling this token — re-issue it (Step 3) |
+| Refuses to start | config not `600`, or an unknown/misspelled key (Step 5) |
+| Agent gets the knock, finds nothing | it was never told about the bridge (Step 8) |
 
 Deeper failures, unit files, moving machines and the 3am page:
 [`docs/operations.md`](docs/operations.md).

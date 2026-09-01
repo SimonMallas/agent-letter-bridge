@@ -9,6 +9,9 @@ to do when it breaks. It is not ordered as a walkthrough.
 ## Before Day-0: the four things you need
 
 None of these are in the repo, and the bridge cannot work without them.
+`alb --init` collects the last three and creates the files; this section is what
+it is collecting and why each one matters. Read it if setup asked you something
+you did not expect.
 
 **1. A bot token.** In your chat app, talk to `@BotFather`, send `/newbot`, and
 follow the prompts. It gives you a token like `123456789:AA...`. **If you
@@ -91,11 +94,12 @@ cmux --id-format uuids tree --all
 Take the id of the pane holding your agent. It is pinned, so **re-pin it after
 any multiplexer restart** — see below.
 
-Your `bridge.env`, mode `600`:
+Your `bridge.env`, mode `600` — `alb --init` writes this for you, and the rest
+of this section is what it wrote:
 
 ```
 ALB_TOKEN=123456789:AA...
-ALB_SURFACE=THE-ID-FROM-ABOVE
+ALB_SURFACE=<the id of your agent's pane>
 ```
 
 ## Integrated mode: letters into a mailbox you already sweep
@@ -160,8 +164,11 @@ conflict. Each agent gets its own bot, its own state root, and its own pane.
 
 The ordering is the content. Do these in sequence.
 
-1. **Install.** Clone into an empty directory you choose — never drop it next
-   to an existing poller — then:
+1. **Install and initialise.** Clone into an empty directory you choose — never
+   drop it next to an existing poller — then install and run `alb --init
+   --root <your state dir>`, which creates the directory 0700, `bridge.env`
+   0600, and a deny-all `allowlist.json` 0600. It refuses to run without a
+   terminal, so it cannot be fed answers by a script.
 
    ```sh
    pipx install .          # or: uv tool install .

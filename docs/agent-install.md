@@ -26,11 +26,11 @@ delivers nothing.
 
 | You may | You may **not** |
 | --- | --- |
-| install the package, create directories, set modes | create or edit `allowlist.json` from a value you inferred |
+| run `alb --init` and let it create the files | create or edit `allowlist.json` from a value you inferred |
 | write `bridge.env` from values the human gave you | put a token in a transcript, log, commit, or message |
 | run `--doctor`, `--status`, `--once` | run `--canary` or `--reply-to` without being asked — both send |
 | read letters in the inbox | commit anything under the state directory |
-| report what failed and why | conclude "installed" without the Step 9 checkpoints passing |
+| report what failed and why | conclude "installed" without the Step 8 checkpoints passing |
 
 **The allowlist is a security control, not configuration.** It is the only thing
 between a stranger and this machine's agents. Write exactly the id the human
@@ -53,8 +53,10 @@ not print it, quote it back for confirmation, or include it in a summary.
   the doorbell that agent already recognises. You need its inbox path and its
   exact participant name.
 
-Do not decide this by inspecting the filesystem. An inbox existing does not mean
-the operator wants letters delivered into it.
+**Do not decide this by inspecting the filesystem.** An inbox existing does not
+mean the operator wants letters delivered into it. There is deliberately no
+detector in the tool for the same reason — `alb init` asks this question too,
+and you will need their answer to it either way.
 
 ---
 
@@ -91,108 +93,81 @@ python3 -m venv ~/.alb/venv && ~/.alb/venv/bin/pip install .
 
 ---
 
-## Step 3 — State directory
-
-```sh
-mkdir -p ~/.alb && chmod 700 ~/.alb
-```
-
-Use a per-agent path if more than one agent is being set up: `~/.alb/<agent>`.
-Everything private lives here and **nothing private goes anywhere else** — that
-separation is load-bearing, so do not relocate individual files.
-
----
-
-## Step 4 — ASK: the bot token
+## Step 3 — ASK: the bot token
 
 > "I need a bot token. In Telegram, message @BotFather, send `/newbot`, and
 > paste me the token it gives you. **If this bot already existed for anything
 > else, please revoke and re-issue the token first** — the platform allows one
-> consumer per token, and I cannot prove an old one isn't still being polled."
+> consumer per token, and I cannot prove an old one isn't still being polled.
+> Then send the bot any message, so there is one for setup to find."
 
 You cannot do this step. BotFather is an interactive chat the human is in.
 
-When you receive the token: write it to the file in Step 6 and do not repeat it.
+**Do not repeat the token back.** Not in a summary, not to confirm it, not in a
+log. It is a live credential.
 
 ---
 
-## Step 5 — ASK: the chat id
+## Step 4 — ASK: how the human wants their chat id obtained
 
-Give the human this command to run, with their token:
+`alb init` offers two routes and both are legitimate. Put the choice to them:
 
-```sh
-curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates" \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"][0]["message"]["chat"]["id"])'
-```
+> "Setup can read your chat id itself — one `getUpdates` call with your token,
+> which consumes nothing — or it can print the command for you to run. Reading
+> it removes a real trap: the payload has a second, nearly identical id that
+> silently denies everything. Printing it means setup never touches the
+> network. Which?"
 
-> "Message the bot anything first, then run this and paste me the number."
-
-You may run it yourself **only if the human has already given you the token and
-asked you to**. It is read-only and consumes nothing.
-
-If the result is empty, they have not messaged the bot yet. Ask again rather
-than searching elsewhere for an id.
-
-> Use `chat.id`, exactly as the command does — not `from.id`. In a direct
-> message they are the same number, so a wrong value passes this step and then
-> denies everything the first time a group is used.
+If they have no preference, say `print` is the more conservative default and
+let them confirm. **Do not choose silently.**
 
 ---
 
-## Step 6 — Config
+## Step 5 — Run `alb init`
 
 ```sh
-cat > ~/.alb/bridge.env <<'EOF'
-ALB_TOKEN=<the token>
-EOF
-chmod 600 ~/.alb/bridge.env
+alb --init --root ~/.alb
 ```
 
-**`600` is enforced, not advised** — the bridge refuses to start on a
-world-readable config.
+It is interactive and refuses to run without a terminal, so **you cannot pipe
+answers into it**. If you are not driving a terminal the human can see, hand
+them the command and the answers, and wait.
 
-Add only keys you were given values for. Valid keys, and nothing else:
+It creates the state directory `0700`, `bridge.env` `0600`, and
+`allowlist.json` `0600` **denying everyone**. It will not overwrite anything
+that already exists, and it reports what it kept.
 
-```
-ALB_TOKEN ALB_SURFACE ALB_NOTIFIER ALB_TO ALB_FROM ALB_MAIL_ROOT ALB_BUS_BINARY
-```
-
-An unknown key — including a misspelling — is **refused by name**. Do not work
-around a refusal by removing the check; the refusal is the feature. A setting
-that is silently ignored is the failure this prevents.
-
-**[integrated]** set `ALB_MAIL_ROOT` to the agent's inbox and `ALB_TO` to its
-exact participant name.
+**Do not create these files yourself instead.** They have modes that matter and
+`init` sets them at creation, not afterwards.
 
 ---
 
-## Step 7 — Allowlist. Nothing is delivered before this exists.
-
-```sh
-echo '{"chats": ["<the id from Step 5>"]}' > ~/.alb/allowlist.json
-chmod 600 ~/.alb/allowlist.json
-```
-
-The id is a **string in quotes**. The gate is exact-match and fail-closed:
-missing, empty, malformed or wrong-shaped all deny everything, and there is no
-setting that opens it.
-
-**Checkpoint — run it, do not assume it:**
+## Step 6 — Confirm the allowlist, do not invent it
 
 ```sh
 alb --doctor --root ~/.alb
 ```
 
-It must report the allowlist present and valid. A working fail-closed allowlist
-and a dead bot both produce silence; `--doctor` is what distinguishes them.
-Reads files only — no token, no network.
+- `DELIVERY: n chat(s) permitted` → the gate is armed. Continue.
+- `NOTHING WILL BE DELIVERED` → expected if the human chose `print`. Ask them
+  for the number their command returned and put **exactly that** in
+  `~/.alb/allowlist.json` as `{"chats": ["<id>"]}`, then re-run `--doctor`.
+
+**If you do not have an id from the human, stop and ask.** An allowlist entry
+you found in a chat log, a git history, or another config file is not an
+allowlist entry. This file is the only thing between a stranger and the agents
+on this machine.
+
+`--doctor` reads files only: no token, no network. Run it freely.
 
 ---
 
-## Step 8 — ASK: the ring
+## Step 7 — ASK: the ring
 
 > "Do you want a knock typed into a terminal pane when mail arrives? If so, I
 > need the pane id of the agent's terminal."
+
+`alb init` lists them for you. To list them again:
 
 ```sh
 cmux --id-format uuids tree --all                                       # cmux
@@ -203,7 +178,10 @@ You may list panes. **Do not choose one.** You cannot tell from a listing which
 pane holds the agent the human means, and a knock typed into the wrong pane
 lands in someone else's session.
 
-Then set `ALB_SURFACE`, and `ALB_NOTIFIER=tmux` if applicable.
+Then set `ALB_SURFACE` to the id **they** name, and `ALB_NOTIFIER=tmux` if
+applicable. A placeholder value is refused by name — do not put one there as a
+"to be filled in later", because a fake pane id is the one setting that fails
+silently forever.
 
 **Optional throughout.** Without it, mail lands durably and nothing pings;
 `--status` reports the ring as `disabled` with a reason. If the human is unsure,
@@ -214,7 +192,7 @@ from `ALB_TO`.
 
 ---
 
-## Step 9 — Verify. All three, by running them.
+## Step 8 — Verify. All three, by running them.
 
 **[integrated]** add `--mail-root <inbox>` to each command.
 
@@ -223,10 +201,14 @@ alb --config ~/.alb/bridge.env --root ~/.alb --once
 ```
 
 **Test 1 — a listed sender produces a letter.** Ask the human to message the
-bot, run one cycle, and confirm a `.md` file appeared in the inbox.
+bot, run one cycle, and confirm both that the cycle reported
+`published 1` **and** that a `.md` file appeared in the inbox.
 
-**Test 2 — an unlisted sender produces silence.** Ask the human whether they
-want this tested; it needs a second sender. Expect no letter and no error.
+**Test 2 — an unlisted sender is denied.** Ask the human whether they want this
+tested; it needs a second sender. Expect `denied 1 (allowlist)` in the cycle
+report and no letter. The sender sees nothing — that is the point — but the
+report is how you can tell a working gate from a dead bridge without
+dismantling the gate to find out.
 
 **Test 3 — the ring, if configured.** Ask the human to message the bot and
 **watch their pane**. Only they can confirm this. You cannot verify it from
@@ -239,7 +221,7 @@ file you looked at.** "The command exited 0" is not the same claim.
 
 ---
 
-## Step 10 — Hand over
+## Step 9 — Hand over
 
 **[standalone]** If the agent being woken is not you, give it
 [`agent-setup.md`](agent-setup.md) before the first real message. Its knock is a
@@ -262,7 +244,7 @@ an unrun test is not a passed one.
 | `409 Conflict` | another consumer holds this token; the human must re-issue it |
 | refuses to start | config not `600`, or an unknown key |
 | mail lands, no knock | stale pane id after a multiplexer restart |
-| knock lands, agent finds nothing | Step 10 was skipped |
+| knock lands, agent finds nothing | Step 9 was skipped |
 
 Report the symptom and what you checked. **Do not disable a check to get past
 it** — every refusal in this tool exists because something failing silently once
