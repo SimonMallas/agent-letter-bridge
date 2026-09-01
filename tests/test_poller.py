@@ -225,3 +225,83 @@ class PollerIsStructurallyIncapable(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CycleCounts(unittest.TestCase):
+    """What the OPERATOR can see, without changing what the sender sees.
+
+    A denied sender gets silence, and that is the security property. But the
+    operator standing at the terminal sees the same nothing whether the gate is
+    working or the bridge is dead - so the only lever they can find is the
+    allowlist, and the fix they reach for is to widen it. Reporting the deny to
+    the operator removes the reason to dismantle the deny.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        self.inbox = self.root / "inbox"
+        self.inbox.mkdir()
+        self.ledger = self.root / "delivered.json"
+        self.allow = self.root / "allowlist.json"
+        self.allow.write_text(json.dumps({"chats": ["111"]}), encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _run(self, platform):
+        return loop.poll_once(platform, self.inbox, self.ledger, self.allow)
+
+    def test_the_result_is_still_a_list_of_published_ids(self):
+        """Every existing caller treats this as a list. Counts are carried
+        alongside, never instead - a return type that broke len() or truthiness
+        would be a refactor pretending to be a report."""
+        result = self._run(FakePlatform([update(1, "111", "hi")]))
+        self.assertIsInstance(result, list)
+        self.assertEqual(len(result), 1)
+        self.assertTrue(result)
+
+    def test_a_denied_update_is_counted(self):
+        result = self._run(FakePlatform([update(1, "999", "stranger")]))
+        self.assertEqual(result.fetched, 1)
+        self.assertEqual(result.published, 0)
+        self.assertEqual(result.denied, 1)
+
+    def test_an_allowed_update_is_counted(self):
+        result = self._run(FakePlatform([update(1, "111", "hi")]))
+        self.assertEqual(result.fetched, 1)
+        self.assertEqual(result.published, 1)
+        self.assertEqual(result.denied, 0)
+
+    def test_a_mixed_batch_counts_both(self):
+        result = self._run(FakePlatform([
+            update(1, "111", "mine"),
+            update(2, "999", "stranger"),
+            update(3, "111", "mine again"),
+        ]))
+        self.assertEqual(result.fetched, 3)
+        self.assertEqual(result.published, 2)
+        self.assertEqual(result.denied, 1)
+
+    def test_a_duplicate_is_counted_apart_from_a_deny(self):
+        """A redelivered update publishes nothing, and that is dedup working.
+        Counting it as denied would send an operator to the allowlist to
+        explain a number the allowlist did not cause."""
+        platform = FakePlatform([update(1, "111", "hi")])
+        self._run(platform)
+        again = self._run(FakePlatform([update(1, "111", "hi")]))
+        self.assertEqual(again.fetched, 1)
+        self.assertEqual(again.published, 0)
+        self.assertEqual(again.denied, 0)
+        self.assertEqual(again.duplicate, 1)
+
+    def test_an_idle_cycle_counts_nothing(self):
+        result = self._run(FakePlatform([]))
+        self.assertEqual((result.fetched, result.published, result.denied), (0, 0, 0))
+
+    def test_the_counts_never_carry_who_was_denied(self):
+        """The deny count is a number. A denied chat id is a record of everyone
+        who messaged the bot, which is a log the operator did not ask for and a
+        stranger did not consent to - Hermes named this directly."""
+        result = self._run(FakePlatform([update(1, "999", "stranger")]))
+        self.assertNotIn("999", repr(vars(result)) + repr(result))

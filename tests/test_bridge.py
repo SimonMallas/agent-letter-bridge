@@ -89,6 +89,47 @@ class Config(unittest.TestCase):
         with self.assertRaises(run.ConfigError):
             run.load_config(self.path)
 
+    def test_a_placeholder_surface_is_refused_by_name(self):
+        """This build ran for days with ALB_SURFACE=PLACEHOLDER. Every ring
+        failed and nothing said so: ring failures are swallowed on purpose so a
+        dead notifier never costs a letter, which makes a fake surface the one
+        wrong value that produces no signal anywhere.
+
+        Unset is a supported configuration and reports 'disabled'. A surface
+        that was never real is not a configuration, it is an unfinished edit."""
+        for value in ("PLACEHOLDER", "placeholder", "CHANGEME", "TODO",
+                      "THE-ID-FROM-ABOVE", "<your-pane-id>", "your-pane-id"):
+            with self.subTest(value=value):
+                self._write(f"ALB_TOKEN=1:x\nALB_SURFACE={value}\n")
+                with self.assertRaises(run.ConfigError) as caught:
+                    run.load_config(self.path)
+                message = str(caught.exception)
+                self.assertIn("ALB_SURFACE", message)
+                self.assertIn(value, message)
+                self.assertIn("unset", message.lower())
+
+    def test_an_unset_surface_is_still_allowed(self):
+        """The refusal must not take the documented no-multiplexer path with
+        it. Running without a ring is supported and reports itself."""
+        self._write("ALB_TOKEN=1:x\n")
+        self.assertEqual(run.load_config(self.path).get("ALB_SURFACE", ""), "")
+
+    def test_an_empty_surface_is_still_allowed(self):
+        """ALB_SURFACE= is falsy everywhere downstream and already reports the
+        ring as disabled with a reason, so it is honest rather than silent.
+        Refusing it would break an operator who commented out their pane id."""
+        self._write("ALB_TOKEN=1:x\nALB_SURFACE=\n")
+        self.assertEqual(run.load_config(self.path)["ALB_SURFACE"], "")
+
+    def test_a_real_looking_surface_is_accepted(self):
+        """The refusal is a named list, not a heuristic. A pane id that merely
+        looks unusual must not be rejected - a false refusal at install is the
+        same class of harm as a false accept."""
+        for value in ("%1", "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "main:0.1"):
+            with self.subTest(value=value):
+                self._write(f"ALB_TOKEN=1:x\nALB_SURFACE={value}\n")
+                self.assertEqual(run.load_config(self.path)["ALB_SURFACE"], value)
+
     def test_an_unknown_setting_is_refused_not_ignored(self):
         """A dogfood install set ALB_NOTIFIER=tmux. Nothing read it, and the
         bridge reported success - so the operator believed a selection had

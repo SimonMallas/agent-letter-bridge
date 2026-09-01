@@ -54,10 +54,22 @@ EXTRA = {
         NOTIFY, "tests.test_notifier",
         "    transport.deliver(surface, DOORBELL_LINE)",
         "    transport.deliver(surface, DOORBELL_LINE + store.resolve(inbox, letter_id).body)"),
+    "a placeholder surface is refused": (
+        BRIDGE, "tests.test_bridge",
+        "    if surface and surface.lower().strip(\"<>\") in PLACEHOLDER_SURFACES:",
+        "    if False:"),
+    "a deny is counted for the operator": (
+        POLL, "tests.test_poller",
+        "        else:\n            result.denied += 1",
+        "        else:\n            pass"),
+    "a duplicate is not counted as a deny": (
+        POLL, "tests.test_poller",
+        "                result.duplicate += 1",
+        "                result.denied += 1"),
     "deny still consumes the update": (
         POLL, "tests.test_poller",
         '        platform.ack(item["update_id"])\n\n    # Only after a poll',
-        '        if published:\n            platform.ack(item["update_id"])\n\n    # Only after a poll'),
+        '        if result:\n            platform.ack(item["update_id"])\n\n    # Only after a poll'),
     "every completed poll writes a heartbeat": (
         POLL, "tests.test_poller",
         "    if health_path is not None:\n        _write_heartbeat(health_path)",

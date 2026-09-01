@@ -197,6 +197,43 @@ def main(argv=None):
         return _poll_forever(platform, transport, surface, root, args, config)
 
 
+def _report(cycle, once):
+    """What the cycle did, for the operator standing at the terminal.
+
+    A denied sender is told nothing - that is the security property and it is
+    untouched. But the operator sees the same nothing whether the gate is
+    working or the bridge is dead, and the only lever that looks relevant to
+    them is the allowlist. This is the difference between an operator who can
+    see the deny working and one who widens it to find out.
+
+    Counts only. A denied chat id printed here would be a log of everyone who
+    messaged the bot: not asked for by the operator, not consented to by the
+    sender.
+    """
+    fetched = getattr(cycle, "fetched", len(cycle))
+    denied = getattr(cycle, "denied", 0)
+    duplicate = getattr(cycle, "duplicate", 0)
+
+    parts = [f"fetched {fetched}", f"published {len(cycle)}"]
+    if denied:
+        # Named, because "denied 1" alone sends an operator looking for a
+        # network fault. The allowlist is the cause and saying so is what stops
+        # it being dismantled.
+        parts.append(f"denied {denied} (allowlist)")
+    if duplicate:
+        # Deliberately distinct from a deny. Both publish nothing; only one of
+        # them is the gate, and an operator sent to the allowlist to explain a
+        # duplicate will widen it for no reason.
+        parts.append(f"duplicate {duplicate} (already delivered)")
+
+    # A quiet cycle prints on --once and stays quiet when running as a daemon:
+    # a service that logs a line per idle long-poll buries the cycles that
+    # matter. --once is a person asking a question and deserves an answer even
+    # when the answer is nothing.
+    if once or fetched:
+        print("alb: " + " · ".join(parts))
+
+
 def _poll_forever(platform, transport, surface, root, args, config):
     while True:
         try:
@@ -224,8 +261,7 @@ def _poll_forever(platform, transport, surface, root, args, config):
             print(f"alb: fetch failed: {exc}", file=sys.stderr)
             return 1
 
-        if published:
-            print(f"alb: {len(published)} letter(s)")
+        _report(published, args.once)
         if args.once:
             return 0
         # NO SLEEP ON SUCCESS. getUpdates already blocked for up to the poll

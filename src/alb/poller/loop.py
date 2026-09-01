@@ -44,6 +44,31 @@ def _write_heartbeat(path):
     os.replace(tmp, path)
 
 
+class Cycle(list):
+    """The published letter ids, plus what happened to everything else.
+
+    A list subclass rather than a new return type: every caller already treats
+    this as the letters published, and a report is not a reason to change what
+    a cycle returns.
+
+    The counts exist for the OPERATOR, and only the operator. A denied sender
+    still gets silence - that is the security property and it is untouched.
+    What changes is that the person at the terminal can tell a working deny
+    from a dead bridge, because those look identical today and the only lever
+    that looks relevant is the allowlist. An operator who cannot see the gate
+    working eventually removes it.
+
+    Counts are NUMBERS, never identities. A denied chat id would be a record of
+    everyone who messaged the bot: a log the operator never asked for, about
+    people who never consented to it.
+    """
+
+    fetched = 0
+    published = 0
+    denied = 0
+    duplicate = 0
+
+
 def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
               processed=None, sender="telegram-bridge", recipient="agent"):
     """Fetch pending updates and durably record the permitted ones.
@@ -57,8 +82,9 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
     # already handled.
     searched = [inbox] + ([processed] if processed else [])
 
-    published = []
+    result = Cycle()
     for item in platform.fetch(offset=None):
+        result.fetched += 1
         chat_id = item.get("chat_id")
 
         # Fail-closed. A denied sender produces no letter, no error and no
@@ -86,7 +112,16 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
                 searched=searched,
             )
             if letter_id is not None:
-                published.append(letter_id)
+                result.append(letter_id)
+                result.published += 1
+            else:
+                # Already published, and dedup said so. Counted apart from a
+                # deny: both publish nothing, but only one of them is the
+                # allowlist, and an operator sent to the allowlist to explain a
+                # number the allowlist did not cause will widen it for nothing.
+                result.duplicate += 1
+        else:
+            result.denied += 1
 
         # ONLY NOW, and for denied updates too. For a permitted update the
         # letter is on disk, so the platform may forget it. For a denied one
@@ -98,4 +133,4 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
     if health_path is not None:
         _write_heartbeat(health_path)
 
-    return published
+    return result

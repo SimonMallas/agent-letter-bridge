@@ -33,6 +33,23 @@ KNOWN = ("ALB_TOKEN", "ALB_SURFACE", "ALB_FROM", "ALB_TO", "ALB_NOTIFIER",
 # selected tmux for days while nothing read the setting.
 NOTIFIERS = ("cmux", "tmux")
 
+# Surface values that are an unfinished edit rather than a pane. This build ran
+# for days on ALB_SURFACE=PLACEHOLDER: every ring failed, and because ring
+# failures are swallowed on purpose so a dead notifier never costs a letter,
+# nothing anywhere said so. Not having a surface is supported and reports
+# itself; having a surface that was never real is the one value that produces
+# no signal at all.
+#
+# A NAMED LIST, deliberately, not a heuristic. A pane id is an opaque string
+# from someone else's multiplexer, so anything cleverer would eventually refuse
+# a real one - and a false refusal at install costs the same trust as a false
+# accept. Values here are the placeholders our own docs and examples contain.
+PLACEHOLDER_SURFACES = frozenset({
+    "placeholder", "changeme", "change-me", "todo", "tbd", "xxx",
+    "the-id-from-above", "your-pane-id", "<your-pane-id>",
+    "pane-id", "<pane-id>", "surface-id", "<surface-id>",
+})
+
 
 class ConfigError(Exception):
     """Refuse loudly at startup rather than fail obscurely at 3am."""
@@ -73,6 +90,21 @@ def load_config(path):
         raise ConfigError(
             f"unsupported ALB_NOTIFIER {notifier!r}. Available: "
             f"{', '.join(NOTIFIERS)}."
+        )
+
+    # Compared case-folded and stripped of the angle brackets a doc placeholder
+    # is usually written in. Empty is NOT here: it is falsy everywhere
+    # downstream and already reports the ring as disabled with a reason, which
+    # is honest. This refusal is for values that look like a pane and are not.
+    surface = config.get("ALB_SURFACE", "").strip()
+    if surface and surface.lower().strip("<>") in PLACEHOLDER_SURFACES:
+        raise ConfigError(
+            f"ALB_SURFACE is set to {surface!r}, which is a placeholder from the "
+            f"documentation rather than a pane id. Ring failures are swallowed "
+            f"so that a dead notifier never costs a letter, which means this "
+            f"value would fail silently forever. Either pin a real pane id, or "
+            f"leave ALB_SURFACE unset - unset is supported, and reports the "
+            f"ring as disabled instead of pretending to have one."
         )
 
     unknown = [key for key in config if key not in KNOWN]
