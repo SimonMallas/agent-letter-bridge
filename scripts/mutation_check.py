@@ -89,6 +89,13 @@ EXTRA = {
         DISCOVER, "tests.test_setup_discover",
         '        chat = message.get("chat") or {}',
         '        chat = message.get("from") or {}'),
+    "saying yes without both details is not silently downgraded": (
+        WIZARD, "tests.test_setup",
+        '        integrated = False\n        mailbox = recipient = ""',
+        '        pass'),
+    "the helper is asked for only when it is missing": (
+        WIZARD, "tests.test_setup",
+        '        if not found:', '        if True:'),
     "deny still consumes the update": (
         POLL, "tests.test_poller",
         '        platform.ack(item["update_id"])\n\n    # Only after a poll',

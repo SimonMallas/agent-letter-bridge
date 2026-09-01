@@ -109,9 +109,16 @@ creates the state directory `0700`, writes `bridge.env` at `0600`, and writes
 
 It asks you four things:
 
-**1. Does your agent already have an inbox it sweeps?** Blank for standalone —
-that's the safe answer, and it's the right one unless you specifically want
-letters delivered into an existing inter-agent mailbox.
+**1. Does this agent already receive mail from other agents on this machine?**
+A yes/no — you do not need a path to answer it. `n` (the default) gives you
+standalone, which is the right answer unless you specifically want letters
+delivered into an existing inter-agent mailbox.
+
+Say yes and it asks two more: the directory containing that inbox, and the
+agent's registered participant name. **Both are required.** Leave either blank
+and it writes a standalone config and tells you it did — it will not hand you
+something that looks integrated and is not. It also asks for your letterbox
+helper's path, but only if that helper is not already on `PATH`.
 
 **2. Your bot token.** Not echoed as you type, not shown again, and never
 accepted as a command-line argument — a flag would put your token in shell

@@ -38,6 +38,7 @@ WHAT IT WILL NOT DO, and why each one is a refusal rather than an omission:
 import json
 import os
 import pathlib
+import shutil
 
 DIR_MODE = 0o700
 FILE_MODE = 0o600
@@ -62,7 +63,11 @@ def _write_private(path, text):
     os.chmod(path, FILE_MODE)
 
 
-def init(root, console, chat_id_reader=None, panes=None):
+def _yes(answer):
+    return answer.strip().lower() in ("y", "yes")
+
+
+def init(root, console, chat_id_reader=None, panes=None, helper_found=None):
     """Create the boilerplate under `root`, asking for what cannot be derived.
 
     `console` supplies say / ask / ask_secret, so the questions are testable
@@ -89,20 +94,60 @@ def init(root, console, chat_id_reader=None, panes=None):
 
     # 2. Standalone or integrated. Asked, because the answer is about intent
     #    and no filesystem check can see intent.
-    console.say("Does the agent already have an inbox it sweeps for mail from")
-    console.say("other agents on this machine? If so, letters can be delivered")
-    console.say("there instead of to a second directory it would have to learn.")
-    console.say("Leave blank for a directory this bridge owns.")
-    mailbox = console.ask("  path to that inbox's parent, or blank", "").strip()
+    #
+    #    SMALL QUESTION FIRST. This was one prompt carrying mode, path and name
+    #    at once, and it failed on the first integrated install: the operator
+    #    had already decided on integrated, ran this, and got a standalone
+    #    config because the prompt did not read as the thing they had decided.
+    #    Three keys were then added by hand. Nothing errored at any point.
+    #    A question that can be answered without knowing a path gets asked
+    #    first; the path is only wanted once the answer is yes.
+    console.say("Does this agent already receive mail from other agents on")
+    console.say("this machine - an inbox it already sweeps?")
+    console.say("  yes - letters go there, and the knock is the doorbell it")
+    console.say("        already knows. Nothing new for it to learn.")
+    console.say("  no  - this bridge gets its own directory. Safe default.")
+    integrated = _yes(console.ask("  y/N", "n"))
 
+    mailbox = ""
     recipient = ""
-    if mailbox:
+    if integrated:
+        console.say()
+        console.say("The directory that CONTAINS that inbox - not the inbox")
+        console.say("itself. Example: ~/mail/agents/<agent-name>")
+        mailbox = console.ask("  mailbox directory", "").strip()
+
+        console.say()
+        console.say("The doorbell is addressed by name, so this has to be the")
+        console.say("name the agent is registered under, not a display name.")
+        console.say("Example: research-bot")
+        recipient = console.ask("  participant name", "").strip()
+
+    if integrated and mailbox and recipient:
         summary["mode"] = "integrated"
         summary["mail_root"] = mailbox
+    elif integrated:
+        # SAY SO. Falling back silently is the original defect wearing a
+        # different hat: the operator answered yes, and would leave believing
+        # they had an integrated bridge.
+        integrated = False
+        mailbox = recipient = ""
         console.say()
-        console.say("The doorbell is addressed by name, so it has to be the name")
-        console.say("that agent is registered under - not a display name.")
-        recipient = console.ask("  the agent's participant name", "").strip()
+        console.say("  Both the directory and the name are needed for that, and")
+        console.say("  one was blank. Writing a STANDALONE config instead.")
+        console.say("  Re-run init to set up the mailbox once you have both.")
+
+    # The letterbox helper. Not a flag: a flag is a thing every operator must
+    # consider, and almost none of them have to. It is asked for only when
+    # integrated mode needs it and it is not already on PATH.
+    helper = ""
+    if integrated:
+        found = (helper_found or shutil.which)("bus.sh")
+        if not found:
+            console.say()
+            console.say("Integrated mode rings through your letterbox's own")
+            console.say("doorbell helper, and bus.sh is not on PATH here.")
+            helper = console.ask("  path to the helper", "").strip()
 
     # 3. The token. Never echoed, never an argument, never printed back.
     console.say()
@@ -124,6 +169,8 @@ def init(root, console, chat_id_reader=None, panes=None):
             lines.append(f"ALB_MAIL_ROOT={mailbox}\n")
         if recipient:
             lines.append(f"ALB_TO={recipient}\n")
+        if helper:
+            lines.append(f"ALB_BUS_BINARY={helper}\n")
         _write_private(env_path, "".join(lines))
         summary["created"].append(str(env_path))
 
