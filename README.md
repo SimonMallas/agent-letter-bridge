@@ -35,6 +35,19 @@ That is what makes this a front door rather than a pipe. Whatever you build
 behind it — today's agent, tomorrow's memory system — inherits records
 instead of scrollback. The input side of your setup is settled once.
 
+The context economics follow from the same split. The body never enters the
+agent's context window until the agent chooses to read it — the knock is one
+contentless line — and it can be re-read at full fidelity after a
+compaction, because a letter is storage outside the window. What a session
+forgets, the inbox still knows.
+
+Memory systems get the same service. Underneath every one of them —
+vault-based, RAG, graph, whatever comes next — sits the same need: durable,
+addressable, re-readable records of what was actually said. A letter already
+is one. Point any memory system at the inbox and it has its ground truth: no
+scraper, no export, no plugin. We are deliberately only the storage half —
+the records are ours, the librarian can be anyone's.
+
 Durability is the supporting property, not the pitch: your phone keeps your
 copy, and the letter is your agent's — still on disk after a crash, a
 restart or a compaction, which is how a resurrected agent gets its context
