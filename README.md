@@ -15,10 +15,13 @@ notification only makes it faster.
 Most tools in this space deliver an external message **as the agent's input** —
 typed into its terminal, or handed to its session as a prompt. This one delivers
 it as a **durable, deduplicated, enveloped letter**, written to disk before the
-platform is even told the message was received. The message body never enters
-the composer; the doorbell is one fixed, contentless line. How that
-differs from each neighbouring tool, checked against their code and docs rather
-than asserted: [`docs/COMPARE.md`](docs/COMPARE.md).
+platform is even told the message was received. That buys you three things:
+a context window that stays clean, because the doorbell is one contentless
+line and the body enters only when the agent chooses to read it; messages
+that survive compaction at full fidelity, because a letter lives outside the
+session; and a growing archive of records — who, when, what, verified
+sender — that any memory system can take as ground truth. Delivery that
+behaves like memory, not like typing.
 
 > **Messages outlive the crash of any single process.**
 
@@ -71,6 +74,9 @@ back.
   it into action, and the untrusted poller never inspects content for routing or
   ringing. (It is not "never reads" — the outbound helper necessarily reads a
   reply body in order to send it. We state the exact claim, not a flattering one.)
+- **Not asserted, checked.** Every claim of difference from the neighbouring
+  tools was verified against their current code and docs before being made:
+  [`docs/COMPARE.md`](docs/COMPARE.md).
 - **Not a hosted service.** There is no Bridge-operated service; your token is
   stored locally and sent only to your chosen platform's API, from your own
   machine. Inbound and outbound messages necessarily traverse that platform —
