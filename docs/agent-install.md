@@ -183,9 +183,11 @@ applicable. A placeholder value is refused by name — do not put one there as a
 "to be filled in later", because a fake pane id is the one setting that fails
 silently forever.
 
-**Optional throughout.** Without it, mail lands durably and nothing pings;
-`--status` reports the ring as `disabled` with a reason. If the human is unsure,
-skip it — it can be added later without touching anything else.
+**The bridge delivers without it, but nobody is told** — mail lands durably
+and sits until something sweeps. Treat a ring-less install as the exception
+that needs a reason (an agent that sweeps on its own schedule), not the
+default. `--status` reports the ring as `disabled` with a reason. It can be
+added later without touching anything else.
 
 **[integrated]** do not set `ALB_SURFACE`. The doorbell helper resolves the pane
 from `ALB_TO`.

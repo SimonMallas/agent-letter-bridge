@@ -16,7 +16,7 @@ Most tools in this space deliver an external message **as the agent's input** �
 typed into its terminal, or handed to its session as a prompt. This one delivers
 it as a **durable, deduplicated, enveloped letter**, written to disk before the
 platform is even told the message was received. The message body never enters
-the composer; the optional knock is one fixed, contentless line. How that
+the composer; the knock is one fixed, contentless line. How that
 differs from each neighbouring tool, checked against their code and docs rather
 than asserted: [`docs/COMPARE.md`](docs/COMPARE.md).
 
@@ -131,10 +131,13 @@ It refuses to start on a missing, world-readable or incomplete config. That is
 deliberate: a bridge that starts wrong is harder to diagnose at 3am than one
 that will not start at all.
 
-**The ring is optional and requires a multiplexer** — cmux or tmux, selected
-with `ALB_NOTIFIER`. Without one the bridge still runs: mail lands durably,
-nothing pings, and `alb --status` reports the ring as `disabled` rather than
-leaving you guessing. Adapters are small files behind a written contract
+**The ring is what makes the bridge live**, and it needs a multiplexer — cmux
+or tmux, selected with `ALB_NOTIFIER`. Mail without a bell is a dead drop:
+delivered, safe, and unread until someone thinks to look. What the design
+guarantees is that the ring may *fail* without costing a letter — never that
+you would want to run without one. If you must (no multiplexer, an agent that
+sweeps on its own schedule), the bridge still delivers and `alb --status` says
+the ring is `disabled` rather than leaving you guessing. Adapters are small files behind a written contract
 ([`docs/adapter-contract.md`](docs/adapter-contract.md)); a Herdr adapter is
 planned, and will ship when there is a live workspace to prove the knock
 against — untested transports do not ship here.
@@ -155,11 +158,11 @@ different claims. Not published, and not formally audited; see
 
 - **Python 3.11+.** Standard library only, zero third-party runtime
   dependencies.
-- **A terminal multiplexer — optional.** cmux or tmux, selected with
-  `ALB_NOTIFIER`. The ring works by typing a
-  line into a pane, so a pane must exist to type into. **Without one the bridge
-  still runs**: mail lands durably and nothing pings, and `alb --status` reports
-  the ring as `disabled` rather than leaving you guessing.
+- **A terminal multiplexer — cmux or tmux** — selected with `ALB_NOTIFIER`.
+  The ring types a line into a pane, so a pane must exist to type into.
+  Expect to want this: without it mail lands durably and *nobody is told*.
+  The bridge runs regardless, and `alb --status` reports the ring as
+  `disabled` rather than leaving you guessing.
 - **A CLI agent** sitting in that pane.
 - **A bot** on your chat platform.
 

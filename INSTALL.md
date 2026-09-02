@@ -194,12 +194,15 @@ than one that will not start at all.
 
 ---
 
-## Step 6 — Optional: the ring, if you skipped it
+## Step 6 — The ring: do this unless you have a reason not to
 
 The ring types a line into your agent's terminal pane so it notices mail
-immediately. **It is an accelerator, not a delivery mechanism.** Skip it and
-mail still lands durably — `alb --status` will report the ring as `disabled`
-with a reason, so a missing bell is never confused with a broken one.
+immediately — **it is what makes the bridge feel alive.** Without it, letters
+land durably and sit unread until something sweeps: a dead drop, not a dead
+loss. The design's promise is narrower than "optional": the ring may *fail*
+without costing a letter. Skip it only if your agent checks its own mail on a
+schedule; `alb --status` reports the ring as `disabled` with a reason, so a
+missing bell is never confused with a broken one.
 
 `alb init` lists your panes in Step 4. To find them again yourself:
 

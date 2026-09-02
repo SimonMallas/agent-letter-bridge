@@ -283,9 +283,10 @@ def _chat_ids(console, token, reader):
 def _offer_ring(console, panes, summary):
     """List panes if we were given any. Never pick one."""
     console.say()
-    console.say("The ring types a line into a terminal pane when mail arrives.")
-    console.say("It is optional: without it mail still lands and nothing pings,")
-    console.say("and --status reports the ring as disabled rather than broken.")
+    console.say("The ring types a line into a terminal pane when mail arrives -")
+    console.say("it is what makes the bridge feel alive. Without it, letters land")
+    console.say("durably and sit unread until something sweeps. Skip only if your")
+    console.say("agent checks its own mail; --status will say disabled, not broken.")
 
     if panes:
         console.say("Panes I can see:")
