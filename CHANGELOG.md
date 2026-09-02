@@ -7,7 +7,41 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-Pre-release. Not yet published for general use.
+## [0.1.0] — 2026-09-02
+
+First complete release. Private until the repository owner flips it; the
+version marks "finished", not "published".
+
+### Highlights since the pre-release notes below
+- `alb --init`: interactive setup that owns every boilerplate step — 0700
+  state directory, mode-600 config, DENY-ALL allowlist — asks only what no
+  program can derive, never overwrites, never invents an allowlist entry,
+  never touches the network unless explicitly asked, and ends by starting
+  the bridge in its own cmux pane (or printing the exact command when it
+  cannot).
+- Integrated mode (`--mail-root`): letters delivered into a mailbox the
+  bridge does not own, private state strictly separated, ring through the
+  mailbox's own doorbell helper with the outcome parsed rather than assumed.
+  A missing mailbox is refused, never invented.
+- Cycle report: `fetched N · published N · denied N (allowlist)` — the deny
+  visible to the operator while the sender still hears silence; duplicates
+  counted apart from denials. Counts, never identities.
+- Refusals grown from live installs: placeholder `ALB_SURFACE` values
+  refused by name; unknown config keys refused; `--version` answers without
+  a state directory.
+- Two install routes: `INSTALL.md` for people, `docs/agent-install.md` as a
+  brief for a CLI agent installing on someone's behalf — the latter hardened
+  by three real agent wrong-turns the same day they happened.
+- `docs/COMPARE.md`: the field, checked against each tool's current code and
+  docs, our own limitations stated first, every citation dated.
+- Verified live by three agents — Claude Code, Grok Build, Codex — including
+  a full phone → letter → doorbell → read → reply loop, and an install
+  performed end-to-end by the agent itself from the docs.
+
+### Proven by
+277 tests, 85 mutation-pinned invariants (each proved by disabling it and
+watching the suite go red), privacy and dependency gates in pre-commit and
+CI, and the live deployments above.
 
 ### Added
 - Durable-letter store: atomic publish, two-fence parsing, exact-id resolution,
