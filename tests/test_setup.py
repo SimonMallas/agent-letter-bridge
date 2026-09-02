@@ -67,6 +67,17 @@ class Base(unittest.TestCase):
         # that has a letterbox installed and not on one that does not - so the
         # suite would pass or fail depending on whose laptop it ran on.
         kw.setdefault("helper_found", lambda name: "/usr/local/bin/bus.sh")
+        # HERMETIC BY DEFAULT, learned the loud way: the first run of this
+        # suite after the resident offer landed created 359 real cmux
+        # workspaces on the maintainer's machine, because these defaults fell
+        # through to the real environment (cmux_born read the session's env,
+        # the offer defaulted to yes, and the real cmux was invoked). A test
+        # that can touch the operator's multiplexer is not a test. Every real
+        # side effect is stubbed here; a test that WANTS the offer opts in.
+        kw.setdefault("cmux_born", lambda: False)
+        kw.setdefault("bridge_running", lambda root: False)
+        kw.setdefault("start_pane", lambda title, command: (_ for _ in ()).throw(
+            AssertionError("start_pane reached without an explicit test override")))
         console = ScriptedConsole(answers, list(secrets))
         result = wizard.init(self.root, console, **kw)
         return console, result
@@ -209,7 +220,10 @@ class TheSecretNeverLands(Base):
         """ask_secret, not ask. A token echoed into a terminal is a token in a
         scrollback buffer."""
         console = ScriptedConsole(["n", "print", ""], ["123456:TOKEN"])
-        wizard.init(self.root, console)
+        self.run_init(answers=None)  # not used; kept for symmetry
+        wizard.init(self.root / "echo-check", console,
+                    helper_found=lambda name: "x", cmux_born=lambda: False,
+                    bridge_running=lambda root: False)
         self.assertEqual(console.secrets, [])
 
     def test_the_token_is_never_printed_back(self):
@@ -308,7 +322,9 @@ class TheHelperIsAskedForOnlyWhenMissing(Base):
         (mailbox / "inbox").mkdir(parents=True)
         console = ScriptedConsole(["y", str(mailbox), "an-agent"] + answers,
                                   ["123456:TOKEN"])
-        result = wizard.init(self.root, console, helper_found=which)
+        result = wizard.init(self.root, console, helper_found=which,
+                             cmux_born=lambda: False,
+                             bridge_running=lambda root: False)
         return console, result
 
     def test_a_helper_on_the_path_is_not_asked_about(self):
@@ -323,7 +339,8 @@ class TheHelperIsAskedForOnlyWhenMissing(Base):
 
     def test_a_standalone_install_never_asks_about_the_helper(self):
         console = ScriptedConsole(["n", "print", ""], ["123456:TOKEN"])
-        wizard.init(self.root, console, helper_found=lambda name: None)
+        wizard.init(self.root, console, helper_found=lambda name: None,
+                    cmux_born=lambda: False, bridge_running=lambda root: False)
         self.assertFalse(any("helper" in q.lower() for q in console.asked))
 
 
@@ -352,3 +369,79 @@ class InitCatchesWhatTheRuntimeWouldRefuse(Base):
         transcript = console.transcript.lower()
         self.assertIn("no token", transcript)
         self.assertIn("refuse to start", transcript)
+
+
+class TheResidentOffer(Base):
+    """init ends by offering to start the bridge - the gap both real installs
+    stalled in. Kimi's review shaped every branch here:
+
+    - the offer appears ONLY when init itself is cmux-born, because pane
+      creation obeys the same born-inside ACL as the ring; an offer whose
+      precondition is invisible becomes a reported failure that looks like
+      a product bug
+    - consent means seeing the exact command and title BEFORE answering,
+      and the report after names what started and how to stop it
+    - the printed fallback is byte-identical to what the pane would run
+    - re-run safety is the flock, never a pane-name detector
+    """
+
+    def _init(self, answers, started=None, **kw):
+        started = started if started is not None else []
+        kw.setdefault("cmux_born", lambda: True)
+        kw.setdefault("bridge_running", lambda root: False)
+        kw.setdefault("start_pane", lambda title, command: started.append((title, command)) or "SURFACE-NEW")
+        console = ScriptedConsole(answers, ["123456:TOKEN"])
+        result = wizard.init(self.root, console, **kw)
+        return console, result, started
+
+    def test_yes_starts_the_bridge_in_a_new_pane(self):
+        console, result, started = self._init(["n", "print", "y"])
+        self.assertEqual(len(started), 1)
+        title, command = started[0]
+        self.assertIn("DO NOT CLOSE", title)
+        self.assertIn(f"--root {self.root}", command)
+        self.assertIn(f"--config {self.root}/bridge.env", command)
+
+    def test_the_command_is_shown_before_the_question(self):
+        """Consent to a named thing, not to "start services?"."""
+        console, _, started = self._init(["n", "print", "y"])
+        transcript = console.transcript
+        self.assertIn("alb --config", transcript[:transcript.index("It can start now")])
+
+    def test_the_report_names_the_surface_and_the_stop_path(self):
+        console, _, _ = self._init(["n", "print", "y"])
+        out = console.transcript
+        self.assertIn("SURFACE-NEW", out)
+        self.assertIn("close", out.lower())
+
+    def test_no_prints_the_identical_command_instead(self):
+        console, _, started = self._init(["n", "print", "no"])
+        self.assertEqual(started, [])
+        self.assertIn(f"alb --config {self.root}/bridge.env --root {self.root}",
+                      console.transcript)
+
+    def test_not_cmux_born_skips_the_question_and_says_why(self):
+        console, _, started = self._init(["n", "print", ""],
+                                         cmux_born=lambda: False)
+        self.assertEqual(started, [])
+        self.assertFalse(any("start the bridge now" in q for q in console.asked))
+        out = console.transcript.lower()
+        self.assertIn("inside a cmux pane", out)
+        self.assertIn("alb --config", console.transcript)
+
+    def test_a_running_bridge_skips_the_offer_entirely(self):
+        console, _, started = self._init(["n", "print", ""],
+                                         bridge_running=lambda root: True)
+        self.assertEqual(started, [])
+        self.assertIn("already running", console.transcript.lower())
+
+    def test_default_is_yes(self):
+        console, _, started = self._init(["n", "print", ""])
+        self.assertEqual(len(started), 1)
+
+    def test_a_failed_start_degrades_to_the_printed_command(self):
+        def boom(title, command):
+            raise RuntimeError("no socket")
+        console, result, _ = self._init(["n", "print", "y"], start_pane=boom)
+        self.assertIn("alb --config", console.transcript)
+        self.assertIn("could not", console.transcript.lower())

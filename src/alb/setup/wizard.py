@@ -67,7 +67,8 @@ def _yes(answer):
     return answer.strip().lower() in ("y", "yes")
 
 
-def init(root, console, chat_id_reader=None, panes=None, helper_found=None):
+def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
+         cmux_born=None, bridge_running=None, start_pane=None):
     """Create the boilerplate under `root`, asking for what cannot be derived.
 
     `console` supplies say / ask / ask_secret, so the questions are testable
@@ -209,8 +210,108 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None):
     # 5. The ring. Listed, never chosen.
     _offer_ring(console, panes, summary)
 
+    # 6. The resident. Both real installs stalled at "--once looks fine" with
+    #    nothing left running - so init finishes the job, or prints exactly
+    #    what remains.
+    _offer_resident(console, root, summary,
+                    cmux_born or _cmux_born,
+                    bridge_running or _bridge_running,
+                    start_pane or _start_pane)
+
     _closing(console, root, summary)
     return summary
+
+
+def _cmux_born():
+    """Is THIS process inside cmux? Pane creation obeys the same born-inside
+    ACL as the ring, so an offer made from a plain terminal is an offer that
+    cannot succeed - the precondition is checked before the question exists."""
+    return bool(os.environ.get("CMUX_SOCKET_PATH") or
+                os.environ.get("CMUX_SOCKET_CAPABILITY"))
+
+
+def _bridge_running(root):
+    """Is a bridge already holding this root's lock? The flock answers the
+    question re-run safety actually asks; detecting a pane by its title would
+    be the mailbox detector in a trench coat, and stays refused."""
+    import fcntl
+    lock_path = pathlib.Path(root) / "bridge.lock"
+    if not lock_path.exists():
+        return False
+    fd = os.open(lock_path, os.O_RDWR)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return False
+    except OSError:
+        return True
+    finally:
+        os.close(fd)
+
+
+def _start_pane(title, command):
+    """Create the dedicated pane. Returns an identifier for the report."""
+    import subprocess
+    result = subprocess.run(
+        ["cmux", "workspace", "create", "--name", title, "--command", command],
+        capture_output=True, text=True, timeout=30)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "cmux refused")
+    return result.stdout.strip() or "created"
+
+
+def _offer_resident(console, root, summary, cmux_born, bridge_running, start_pane):
+    """Finish the install, or hand over exactly what remains.
+
+    The printed command and the pane's command are the same bytes, so both
+    paths converge on the same running bridge. Consent is to a named thing:
+    the command and the title are shown before the question is asked, and the
+    report names what started and how to stop it - a daemon the operator owns
+    but cannot find is what costs trust, not a started process.
+    """
+    command = f"alb --config {root}/bridge.env --root {root}"
+    title = f"\U0001F4EE {pathlib.Path(root).name} bridge \u2014 DO NOT CLOSE"
+
+    console.say()
+    if bridge_running(root):
+        console.say("A bridge for this root is already running - nothing to start.")
+        summary["resident"] = "already running"
+        return
+
+    console.say("The bridge only delivers while it is running. The command:")
+    console.say()
+    console.say(f"  {command}")
+    console.say()
+
+    if not cmux_born():
+        # Same ACL as the ring: a pane created from outside cmux is refused.
+        console.say("Run it from inside a cmux pane (cmux refuses processes")
+        console.say("born outside it, so started from here the bell would not")
+        console.say("work) - or use the service templates in examples/ for")
+        console.say("tmux or ring-less installs.")
+        summary["resident"] = "printed"
+        return
+
+    console.say(f'It can start now, in its own cmux pane titled "{title}".')
+    answer = console.ask("  start the bridge now in its own cmux pane? [Y/n]", "y")
+    if answer.strip().lower() in ("n", "no"):
+        console.say("Not started. Run the command above from a cmux pane when ready.")
+        summary["resident"] = "printed"
+        return
+
+    try:
+        surface = start_pane(title, command)
+    except Exception as exc:  # noqa: BLE001 - degrade to the printed path, never half-start
+        console.say(f"  could not start it: {exc}")
+        console.say("  run the command above from a cmux pane instead.")
+        summary["resident"] = "printed"
+        return
+
+    console.say(f"  started: {surface}")
+    console.say("  To stop it: close that pane. It holds this root's lock, so")
+    console.say("  a second bridge for the same root refuses to start.")
+    summary["resident"] = "started"
+
 
 
 def _chat_ids(console, token, reader):
