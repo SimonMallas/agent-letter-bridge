@@ -1,6 +1,7 @@
 # Agent Letter Bridge
 
-**Your agents, reachable from your phone — as durable mail.**
+**Message the CLI agents on your machine from your phone — and every message
+becomes part of their memory.**
 
 <!-- LAUNCH GATE: the doorbell GIF goes here, and nothing is announced
      anywhere until it does. A message arrives on a phone; a letter file
