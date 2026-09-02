@@ -62,6 +62,24 @@ copy, and the letter is your agent's — still on disk after a crash, a
 restart or a compaction, which is how a resurrected agent gets its context
 back.
 
+## Design
+
+Four processes with deliberately unequal privilege. The separation *is* the
+product.
+
+| Process | Trust | May do | May **never** do |
+| --- | --- | --- | --- |
+| Poller | untrusted | fetch, write letter, then ack | ring, notify, or touch a terminal |
+| Notifier | in-session | ring after a letter exists | carry message content in the ring |
+| Send helper | bounded | reply to a stored letter's origin | originate contact; send on allowlist miss; auto-retry |
+| Watchdog | independent | read mirrored health, report | restart anything; depend on what it monitors |
+
+**Order is the invariant.** Letter to disk → *then* platform ack. A crash between
+fetch and write causes redelivery, never loss.
+
+Read [`docs/invariants.md`](docs/invariants.md) before trusting this with a token.
+The invariants are the product; the code is how they are kept.
+
 ## What this is *not*
 
 - **Not a messaging platform.** It does not send marketing, notifications or
@@ -87,24 +105,6 @@ back.
   stored locally and sent only to your chosen platform's API, from your own
   machine. Inbound and outbound messages necessarily traverse that platform —
   we do not claim otherwise.
-
-## Design
-
-Four processes with deliberately unequal privilege. The separation *is* the
-product.
-
-| Process | Trust | May do | May **never** do |
-| --- | --- | --- | --- |
-| Poller | untrusted | fetch, write letter, then ack | ring, notify, or touch a terminal |
-| Notifier | in-session | ring after a letter exists | carry message content in the ring |
-| Send helper | bounded | reply to a stored letter's origin | originate contact; send on allowlist miss; auto-retry |
-| Watchdog | independent | read mirrored health, report | restart anything; depend on what it monitors |
-
-**Order is the invariant.** Letter to disk → *then* platform ack. A crash between
-fetch and write causes redelivery, never loss.
-
-Read [`docs/invariants.md`](docs/invariants.md) before trusting this with a token.
-The invariants are the product; the code is how they are kept.
 
 ## Install
 
