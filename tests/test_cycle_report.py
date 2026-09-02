@@ -107,3 +107,18 @@ class OneCycleReports(unittest.TestCase):
                 contextlib.redirect_stdout(out):
             cli.main(["--config", str(self.env), "--root", str(self.root), "--once"])
         self.assertEqual(sent, [])
+
+
+class VersionIsAnswerable(unittest.TestCase):
+    """Found by an outside reviewer (Codex, reviewing its own install):
+    alb --version errored demanding --root. A version query needs no state
+    directory - requiring one makes the simplest possible question about the
+    binary fail, which reads as a broken install to anyone checking one."""
+
+    def test_version_needs_no_root(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            with self.assertRaises(SystemExit) as caught:
+                cli.main(["--version"])
+        self.assertEqual(caught.exception.code, 0)
+        self.assertIn("agent-letter-bridge", out.getvalue())

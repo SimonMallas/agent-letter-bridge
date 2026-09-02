@@ -56,10 +56,25 @@ def lock_guard(lock):
         lock.__exit__(None, None, None)
 
 
+def _version():
+    """The installed distribution's version, or the source tree's marker.
+
+    importlib.metadata answers for an installed package; a source checkout
+    that was never installed still deserves an answer rather than a stack
+    trace, so that path degrades to "source"."""
+    try:
+        from importlib.metadata import version
+        return version("agent-letter-bridge")
+    except Exception:  # noqa: BLE001 - any failure means "not installed"
+        return "source"
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="alb", description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--version", action="version",
+                        version=f"agent-letter-bridge {_version()}")
     parser.add_argument("--config", default="", help="path to the env file (mode 600)")
     parser.add_argument("--root", required=True, help="private state directory")
     parser.add_argument("--mail-root", default=None,
