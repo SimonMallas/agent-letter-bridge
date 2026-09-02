@@ -144,7 +144,7 @@ structural reason: this ring is caused by the operator sending a message, so it
 correlates with them being away from the keyboard.
 
 **Concatenation is only dangerous when one side is not a doorbell.** Two rings
-landing together produce a mangled knock, not a hazard — both payloads are fixed
+landing together produce a mangled ring, not a hazard — both payloads are fixed
 and innocuous, which is what the zero-content rule buys. So a pane that never
 sees human keystrokes has the defect's teeth pulled entirely, with no detection
 needed. That is why the dedicated-pane recommendation is the answer rather than

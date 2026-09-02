@@ -13,7 +13,7 @@ it. They may be the same agent, in which case read this one first.
 ## Your brief
 
 Install Agent Letter Bridge so that a message sent from your operator's phone
-becomes a durable letter on this machine, and — optionally — a knock in a
+becomes a durable letter on this machine, and — optionally — a ring in a
 terminal pane.
 
 Work through the steps in order. **Stop at each `ASK` and wait for a human
@@ -49,7 +49,7 @@ not print it, quote it back for confirmation, or include it in a summary.
 
 - **No / don't know → standalone.** Letters go to a directory this bridge owns.
   Safe default: it cannot disturb anything already running.
-- **Yes → integrated.** Letters go into that existing inbox, and the knock is
+- **Yes → integrated.** Letters go into that existing inbox, and the doorbell is
   the doorbell that agent already recognises. You need its inbox path and its
   exact participant name.
 
@@ -164,7 +164,7 @@ on this machine.
 
 ## Step 7 — ASK: the ring
 
-> "Do you want a knock typed into a terminal pane when mail arrives? If so, I
+> "Do you want a ring typed into a terminal pane when mail arrives? If so, I
 > need the pane id of the agent's terminal."
 
 `alb init` lists them for you. To list them again:
@@ -175,7 +175,7 @@ tmux list-panes -a -F '#{pane_id} #{session_name}:#{window_index}.#{pane_index}'
 ```
 
 You may list panes. **Do not choose one.** You cannot tell from a listing which
-pane holds the agent the human means, and a knock typed into the wrong pane
+pane holds the agent the human means, and a ring typed into the wrong pane
 lands in someone else's session.
 
 Then set `ALB_SURFACE` to the id **they** name, and `ALB_NOTIFIER=tmux` if
@@ -226,14 +226,14 @@ the last outcome; it is not proof the pane received anything.
 file you looked at.** "The command exited 0" is not the same claim.
 
 If **you** are the agent being woken (integrated, same pane): do not sweep the
-inbox the instant `--once` publishes. The letter is durable before the knock is
+inbox the instant `--once` publishes. The letter is durable before the doorbell is
 typed, and **[integrated]** your letterbox helper deliberately pauses between
 pasting the line and pressing Enter, which widens the gap further. That pause
 belongs to the helper, not to this bridge — do not quote a number for it, and
 do not expect the same gap in standalone mode, where the adapter does not
 pause at all.
-You will file the letter, then receive a knock for mail that is already gone,
-and the operator will think the bell is broken. Wait for the knock, then
+You will file the letter, then receive a ring for mail that is already gone,
+and the operator will think the bell is broken. Wait for the doorbell, then
 sweep. That delay is not a failed ring.
 
 ---
@@ -276,9 +276,9 @@ you polling by hand. Only that proves the bell.
 ## Step 9 — Hand over
 
 **[standalone]** If the agent being woken is not you, give it
-[`agent-setup.md`](agent-setup.md) before the first real message. Its knock is a
+[`agent-setup.md`](agent-setup.md) before the first real message. Its doorbell is a
 line no existing doorbell convention matches, so an agent with its own sweep
-will receive the knock, find nothing, and reasonably report the bridge broken.
+will receive the doorbell, find nothing, and reasonably report the bridge broken.
 
 **[integrated]** Nothing to hand over.
 
@@ -295,9 +295,9 @@ an unrun test is not a passed one.
 | letters never appear | allowlist missing or wrong id — `--doctor` |
 | `409 Conflict` | another consumer holds this token; the human must re-issue it |
 | refuses to start | config not `600`, or an unknown key |
-| mail lands, no knock | stale pane id after a multiplexer restart |
+| mail lands, no ring | stale pane id after a multiplexer restart |
 | mail lands, launchd ring is `no_live_surface` | cmux denies processes not started inside it. Best fix: run the bridge in a cmux pane, or use tmux. Copying `CMUX_SOCKET_CAPABILITY` into the unit also works, but it is a bearer token that can type into panes and a plist is usually world-readable — see `examples/launchd.plist`. A longer timeout does not fix this and never did. |
-| knock lands, agent finds nothing | Step 9 was skipped |
+| ring lands, agent finds nothing | Step 9 was skipped |
 | nothing rings until someone runs `--once` | Step 8.5 skipped — the process is not running |
 
 Report the symptom and what you checked. **Do not disable a check to get past

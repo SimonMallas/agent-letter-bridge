@@ -20,7 +20,7 @@ other agents on this machine?**
 | --- | --- | --- |
 | Your agent's mail today | nothing, or only this | already has an inter-agent inbox |
 | Letters land in | a directory this bridge owns | the inbox it already sweeps |
-| The knock | a new line it must learn | the doorbell it already knows |
+| The doorbell | a new line it must learn | the doorbell it already knows |
 | You must teach the agent | yes — one line, one path | no |
 | Setup asks you for | nothing extra | that inbox's path, and the agent's name |
 
@@ -137,7 +137,7 @@ safe answer for everybody.
 
 **4. Your agent's pane, if you want the ring.** It lists the panes it can see.
 **It will not pick one** — a listing can't tell which pane holds your agent, and
-a knock typed into the wrong pane lands in someone else's session. Copy the id
+a ring typed into the wrong pane lands in someone else's session. Copy the id
 into `bridge.env` as `ALB_SURFACE`.
 
 ### What it will not do
@@ -176,7 +176,7 @@ no network.
 | Key | Meaning | Default |
 | --- | --- | --- |
 | `ALB_TOKEN` | your bot token | **required** |
-| `ALB_SURFACE` | the pane to knock on | none — ring disabled |
+| `ALB_SURFACE` | the pane to ring on | none — ring disabled |
 | `ALB_NOTIFIER` | `cmux` or `tmux` | `cmux` |
 | `ALB_TO` | who the letter is addressed to | `agent` |
 | `ALB_FROM` | who the letter is from | `telegram-bridge` |
@@ -293,7 +293,7 @@ you have new mail: check the bridge inbox
 **This test cannot be skipped or inferred.** Ring failures are deliberately
 swallowed so a dead notifier never costs a letter — which means **a broken ring
 is silent**. Mail landing with no bell is a failure state, not a quieter mode of
-working. Only a real knock proves the transport.
+working. Only a real ring proves the transport.
 
 ### Then leave it running
 
@@ -320,9 +320,9 @@ outside install, both ways round. Details and the (discouraged) workaround:
 the comment at the top of [`examples/launchd.plist`](examples/launchd.plist).
 
 **If you are sitting in the agent's pane** (you installed this onto
-yourself): the knock arrives after the letter is written, not with it.
+yourself): the doorbell arrives after the letter is written, not with it.
 If you read and file the letter in that window, you will then get a doorbell
-for mail that is already gone. Wait for the knock before sweeping. Do not
+for mail that is already gone. Wait for the doorbell before sweeping. Do not
 treat that delay as a failed ring.
 
 ---
@@ -330,15 +330,15 @@ treat that delay as a failed ring.
 ## Step 8 — Tell the agent
 
 **[standalone] Do this before the first real message.** The transport working is
-not the same as the agent recognising the knock. An agent that already handles
-mail will receive the ALB knock, fail to match it, run its usual sweep, find
+not the same as the agent recognising the doorbell. An agent that already handles
+mail will receive the ALB doorbell, fail to match it, run its usual sweep, find
 nothing, and reasonably conclude the bridge is broken — when everything worked.
 
 Give your agent [`docs/agent-setup.md`](docs/agent-setup.md), or the equivalent
 in whatever form your agent takes instructions.
 
 **[integrated] Nothing to do.** Letters arrive in the inbox it already sweeps
-and the knock is the one it already knows.
+and the doorbell is the one it already knows.
 
 ---
 
@@ -378,7 +378,7 @@ any time, including on a machine you are not sure about.
 | Nothing arrives at all | allowlist missing or wrong id — run `--doctor` (Step 3) |
 | `409 Conflict` | something else is polling this token — re-issue it (Step 3) |
 | Refuses to start | config not `600`, or an unknown/misspelled key (Step 5) |
-| Agent gets the knock, finds nothing | it was never told about the bridge (Step 8) |
+| Agent gets the doorbell, finds nothing | it was never told about the bridge (Step 8) |
 
 Deeper failures, unit files, moving machines and the 3am page:
 [`docs/operations.md`](docs/operations.md).

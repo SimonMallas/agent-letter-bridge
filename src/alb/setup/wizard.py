@@ -26,7 +26,7 @@ WHAT IT WILL NOT DO, and why each one is a refusal rather than an omission:
     dead bot, which is the failure this whole design is organised against.
 
   - It will not choose a pane. A listing cannot say which pane holds the agent
-    the operator meant, and a knock typed into the wrong pane lands in somebody
+    the operator meant, and a ring typed into the wrong pane lands in somebody
     else's session.
 
   - It will not detect a mailbox. Kimi's detect-and-ask is the right shape and
@@ -104,7 +104,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None):
     #    first; the path is only wanted once the answer is yes.
     console.say("Does this agent already receive mail from other agents on")
     console.say("this machine - an inbox it already sweeps?")
-    console.say("  yes - letters go there, and the knock is the doorbell it")
+    console.say("  yes - letters go there, and the doorbell is the doorbell it")
     console.say("        already knows. Nothing new for it to learn.")
     console.say("  no  - this bridge gets its own directory. Safe default.")
     integrated = _yes(console.ask("  y/N", "n"))
@@ -294,7 +294,7 @@ def _offer_ring(console, panes, summary):
             console.say(f"  {entry['id']}  {entry.get('label', '')}".rstrip())
         console.say("Put the id of your agent's pane in bridge.env as ALB_SURFACE.")
         console.say("I am not choosing one: a listing cannot tell me which pane")
-        console.say("holds your agent, and a knock in the wrong pane lands in")
+        console.say("holds your agent, and a ring in the wrong pane lands in")
         console.say("somebody else's session.")
     else:
         console.say("Add ALB_SURFACE to bridge.env when you have a pane id.")

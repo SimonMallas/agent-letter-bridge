@@ -134,20 +134,20 @@ participant name, since that is who the doorbell is addressed to.
 
 **This section is for STANDALONE mode only.** If you used `--mail-root` above,
 none of it applies: letters arrive in the inbox the agent already sweeps and the
-knock is the one they already recognise, so there is nothing to teach.
+ring is the one they already recognise, so there is nothing to teach.
 
 **In standalone mode, if the agent you are waking already handles inter-agent
 mail, the transport working is not enough — the agent has to know this bridge
 exists.**
 
-Its knock is a different line from any other doorbell convention, and points at
+Its doorbell is a different line from any other doorbell convention, and points at
 a different directory. An agent with an existing sweep will receive the ALB
-knock, fail to match it, run its usual check, find nothing, and reasonably
+ring, fail to match it, run its usual check, find nothing, and reasonably
 conclude the bridge is broken. Everything will have worked.
 
 Before the first live message: give the agent `docs/agent-setup.md`, or the
 equivalent in whatever form your agent takes instructions. It needs one line and
-one path — the knock it will receive, and the inbox to read.
+one path — the doorbell it will receive, and the inbox to read.
 
 **Do not unify the two by pointing `--root` at an existing mail directory.** The
 bridge creates private state in its root — offset, lock, ledger, dead letters,
@@ -199,11 +199,11 @@ The ordering is the content. Do these in sequence.
    **silence**. Outbound is not a Day-0 step: the send helper replies only to a
    stored inbound letter, so there is nothing to reply to yet.
 7. **Verify the ring for real, once.** Send yourself a message and watch the
-   knock arrive in the pane. This step cannot be skipped or inferred: the code
+   ring arrive in the pane. This step cannot be skipped or inferred: the code
    deliberately swallows ring failures so a dead notifier never costs a letter —
    which means a broken ring is **silent**. Mail landing with no bell is a
    failure state, not a quieter mode of working. `state/ring-health.json`
-   records the last outcome, but only a real knock proves the transport.
+   records the last outcome, but only a real ring proves the transport.
 8. **Know the rollback** that restores *your* previous consumer.
 
 ### The first-hour allowlist test
@@ -272,7 +272,7 @@ the ring then fails silently — letters keep landing, nothing pings, and
 dies, and it looks exactly like nothing being wrong.
 
 After any multiplexer restart: get the current surface id, update the env file,
-restart the bridge, and send yourself one message to confirm the knock.
+restart the bridge, and send yourself one message to confirm the doorbell.
 
 ## Do not tune the poll interval
 

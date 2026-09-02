@@ -9,7 +9,7 @@ made. That is also why every citation below carries the same date.
 
 **Frame.** Other tools deliver external content as **agent input**. This
 project delivers it as a **durable, deduplicated, enveloped letter** before
-the platform is acknowledged. The letter is the record. A knock, if any, is
+the platform is acknowledged. The letter is the record. A ring, if any, is
 an accelerator and is allowed to fail.
 
 Sources below were read on **2026-09-01**. Re-read them before a public
@@ -17,7 +17,7 @@ launch; these repos move.
 
 ## What we are not claiming
 
-- **Not “zero prompt injection.”** The optional knock still types a short
+- **Not “zero prompt injection.”** The optional ring still types a short
   generic line into a pane and presses Enter. The letter body is still
   untrusted text once an agent reads it. The allowlist is the trust
   boundary, as [nightmux states for itself][nightmux-sec]. The claim that
@@ -34,7 +34,7 @@ launch; these repos move.
 
 ## Limitation that belongs in our column first
 
-**A live knock on cmux only works if the process that rings was started
+**A live ring on cmux only works if the process that rings was started
 inside cmux.** cmux refuses connections from processes that were not
 (`Access denied - only processes started inside cmux can connect`). A
 LaunchAgent can poll Telegram and write letters; it cannot ring unless it
@@ -56,7 +56,7 @@ below, not collapsed into the mux-inject column.
 
 | | Agent Letter Bridge | nightmux | Claude Code Telegram plugin | ccgram / telemux / tg-cli / claude-telegram-mirror |
 |---|---|---|---|---|
-| Inbound becomes | A Markdown letter on disk (`from`/`to`/ids in the envelope), then an optional generic knock | The full Telegram text, typed into the agent pane with `tmux send-keys` | An MCP notification into the live Claude Code **session** (not a mux inject) | The full message or a tagged line, injected into a tmux (or herdr/agterm) pane |
+| Inbound becomes | A Markdown letter on disk (`from`/`to`/ids in the envelope), then an optional generic ring | The full Telegram text, typed into the agent pane with `tmux send-keys` | An MCP notification into the live Claude Code **session** (not a mux inject) | The full message or a tagged line, injected into a tmux (or herdr/agterm) pane |
 | Platform ack | After the letter exists | After `getUpdates` in the daemon (offset file). The pane is the record | After the plugin consumes `getUpdates`. If the wrong process won the poll, the intended session never sees it | After the daemon consumes the update; the pane is the record |
 | Body in the composer? | No | Yes | Body enters the session as a message, not as tmux keys | Yes |
 | Trust boundary | Fail-closed chat-id allowlist; empty list is silence | `allow_users` in `~/.nightmux.json`; [SECURITY.md][nightmux-sec] is explicit that this is the whole product | Pairing (`/telegram:access`); not a chat-id file in the plugin README | Varies. OctopusGarage `telegram-bridge` empty `ALLOWED_USER_IDS` denies; do not assume the others fail-closed without re-reading |

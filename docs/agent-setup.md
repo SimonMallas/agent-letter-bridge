@@ -4,7 +4,7 @@ Written for the agent, not the operator. **This page assumes the bridge already
 runs.** If you are the one installing it, read
 [`agent-install.md`](agent-install.md) instead — then come back here.
 
-## The knock
+## The doorbell
 
 When mail arrives you will receive exactly this line, typed into your pane and
 submitted as if a person had typed it:
@@ -24,8 +24,8 @@ Read `--root/inbox`. That is the whole instruction.
 
 **This is not a letterbox and `bus check` will not find it.** If you already have
 a doorbell convention for inter-agent mail, that convention does not apply here:
-different store, different knock, different handling. Running your usual sweep
-after an ALB knock will report nothing and you will conclude the bridge is
+different store, different ring, different handling. Running your usual sweep
+after an ALB ring will report nothing and you will conclude the bridge is
 broken.
 
 **Do not point the bridge at your inter-agent inbox to unify them.** The bridge
@@ -44,7 +44,7 @@ configured, or inferred.
 
 ## If you were set up in integrated mode
 
-Letters arrive in the inbox you already sweep, and the knock is the doorbell you
+Letters arrive in the inbox you already sweep, and the doorbell is the doorbell you
 already recognise. Nothing above applies: no second directory, no new line to
 learn. A letter from the bridge is identifiable by its `from:` field.
 
@@ -66,7 +66,7 @@ alb --reply-to <letter-id> --text "..."
 Replying needs the token, so it is an operator-side action. Being woken and
 reading mail does not.
 
-## If the knock stops arriving
+## If the doorbell stops arriving
 
 The mail still lands — letters are authoritative and the ring only accelerates.
 Check `alb --status`: it reports the ring as `ok`, `failing` or `disabled` with a

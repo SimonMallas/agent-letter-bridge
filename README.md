@@ -4,7 +4,7 @@
 
 <!-- LAUNCH GATE: the doorbell GIF goes here, and nothing is announced
      anywhere until it does. A message arrives on a phone; a letter file
-     appears in the inbox; THEN the knock types itself into the pane.
+     appears in the inbox; THEN the doorbell types itself into the pane.
      (assets/doorbell.gif — to be recorded against a clean demo root.) -->
 
 Agent Letter Bridge connects a chat app to AI agents on your own machine. An
@@ -16,7 +16,7 @@ Most tools in this space deliver an external message **as the agent's input** �
 typed into its terminal, or handed to its session as a prompt. This one delivers
 it as a **durable, deduplicated, enveloped letter**, written to disk before the
 platform is even told the message was received. The message body never enters
-the composer; the knock is one fixed, contentless line. How that
+the composer; the doorbell is one fixed, contentless line. How that
 differs from each neighbouring tool, checked against their code and docs rather
 than asserted: [`docs/COMPARE.md`](docs/COMPARE.md).
 
@@ -36,7 +36,7 @@ behind it — today's agent, tomorrow's memory system — inherits records
 instead of scrollback. The input side of your setup is settled once.
 
 The context economics follow from the same split. The body never enters the
-agent's context window until the agent chooses to read it — the knock is one
+agent's context window until the agent chooses to read it — the doorbell is one
 contentless line — and it can be re-read at full fidelity after a
 compaction, because a letter is storage outside the window. What a session
 forgets, the inbox still knows.
@@ -62,7 +62,7 @@ back.
   how mail crosses in from outside. Different products, legible relationship.
 - **Not injection-proof, and we will not claim it.** The body never enters
   the composer, which removes the *delivery* path where a stranger's text
-  becomes the agent's next command. But the knock is still one typed line, and
+  becomes the agent's next command. But the doorbell is still one typed line, and
   a letter's body is still untrusted text once an agent chooses to read it.
   The allowlist is the trust boundary, here as in every tool of this class —
   the difference is what arrives when it passes: a letter to open, not a
@@ -139,7 +139,7 @@ you would want to run without one. If you must (no multiplexer, an agent that
 sweeps on its own schedule), the bridge still delivers and `alb --status` says
 the ring is `disabled` rather than leaving you guessing. Adapters are small files behind a written contract
 ([`docs/adapter-contract.md`](docs/adapter-contract.md)); a Herdr adapter is
-planned, and will ship when there is a live workspace to prove the knock
+planned, and will ship when there is a live workspace to prove the doorbell
 against — untested transports do not ship here.
 
 Reference and failure modes: [`docs/operations.md`](docs/operations.md).
