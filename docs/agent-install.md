@@ -165,8 +165,13 @@ alb --doctor --root ~/.alb
 
 **If you do not have an id from the human, stop and ask.** An allowlist entry
 you found in a chat log, a git history, or another config file is not an
-allowlist entry. This file is the only thing between a stranger and the agents
-on this machine.
+allowlist entry — **and a placeholder is worse than nothing.** An agent
+following this document once wrote the literal string `YOUR_CHAT_ID_HERE`
+into the file to move past the step; fail-closed ate it silently, and the
+operator spent the next ten minutes debugging a "dead bot" that was working
+exactly as configured. Write the shape exactly — `{"chats": ["<the id>"]}` —
+a bare array is the wrong shape and also denies everything. This file is the
+only thing between a stranger and the agents on this machine.
 
 `--doctor` reads files only: no token, no network. Run it freely.
 
