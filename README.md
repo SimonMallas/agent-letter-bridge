@@ -23,11 +23,17 @@ session; and a growing archive of records — who, when, what, verified
 sender — that any memory system can take as ground truth. Delivery that
 behaves like memory, not like typing.
 
-> **Messages outlive the crash of any single process.**
+> **More memory than message.**
 
 ## Why this exists
 
-A letter is more than the message. It carries who sent it, when, a verified
+CLI agents don't have phones. The most capable coding agents live in
+terminal panes on a machine, and the moment you stand up from the desk they
+are unreachable — while everything else in your life answers from the phone
+in your pocket. This bridge gives the agents on your machine a messaging
+app: text them from anywhere, and they can answer.
+
+The added edge is what arrives. A letter is more than the message. It carries who sent it, when, a verified
 sender, its platform addressing and an exactly-once guarantee — a record, in
 plain Markdown, that everything downstream can trust: the agent reading it
 now, the memory system ingesting it later, the search that asks what was
