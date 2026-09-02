@@ -124,6 +124,15 @@ queue → Claude monitors). That is a file, not an enveloped letter, and
 Claude stdin. Include it so “file queue” is not a later surprise; do
 not equate the JSONL queue with this project's letters.
 
+## A layout note, not a feature
+
+**Letters are plain Markdown with YAML frontmatter, so tools that read
+Markdown already understand them** — including Obsidian: an inbox inside a
+vault is indexed as notes, with the envelope as properties. That is a property
+of the file format, not an integration, and we claim nothing more. Tools that
+purposefully pipe Telegram into a vault exist (obsidian-telegram-sync,
+LazyLogger), as do vault-based agent-memory systems; this is neither.
+
 ## Relatives that are not Telegram rivals
 
 **tmux-agent-comms** ([law-strange/tmux-agent-comms][tac]). Inter-agent
