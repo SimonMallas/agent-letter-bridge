@@ -24,13 +24,19 @@ than asserted: [`docs/COMPARE.md`](docs/COMPARE.md).
 
 ## Why this exists
 
-The conventional approach fuses transport, durability and attention into one
-process. When that process dies mid-flight — a network flap, a crash, a restart —
-the message is gone, and the platform's retention window is the only thing
-standing between an outage and permanent loss.
+**The app keeps your copy. A letter is your agent's copy.**
 
-This design separates them. The message is written to disk first. Everything else
-is an accelerator, and every accelerator is allowed to fail.
+Your message was never the thing at risk — it is saved on your phone and on the
+platform's servers. What is at risk is the agent's side: an injected message
+lives only in terminal scrollback, so a crash, a restart or a compaction takes
+the agent's record of the conversation with it. A letter survives all three. It
+has restored a crashed agent's context, and it has settled what was actually
+said — those are the uses durability is for.
+
+The conventional approach also fuses transport, durability and attention into
+one process, so one process dying mid-flight can lose a message before any copy
+exists on your machine. This design separates them: the letter is written to
+disk first, and everything else is an accelerator that is allowed to fail.
 
 ## What this is *not*
 
@@ -72,6 +78,15 @@ fetch and write causes redelivery, never loss.
 
 Read [`docs/invariants.md`](docs/invariants.md) before trusting this with a token.
 The invariants are the product; the code is how they are kept.
+
+## Letters are records
+
+A letter carries who, when, what, and a verified sender, exactly once — plain
+Markdown with YAML frontmatter, so tools that read Markdown already understand
+it, and whatever you build on agent memory tomorrow can eat it. Keystrokes
+leave nothing to remember. Replies are addressed to the letter, and the letter
+knows its own way home: the destination is read from the stored envelope, never
+remembered, configured or inferred.
 
 ## Install
 
