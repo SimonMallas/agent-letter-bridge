@@ -48,7 +48,10 @@ not print it, quote it back for confirmation, or include it in a summary.
 > machine — an inter-agent inbox it already sweeps?"
 
 - **No / don't know → standalone.** Letters go to a directory this bridge owns.
-  Safe default: it cannot disturb anything already running.
+  Safe default: it cannot disturb anything already running. **Running inside
+  cmux does NOT make an install integrated** — integrated is about where MAIL
+  goes (an inter-agent letterbox inbox); cmux is only the ring transport, and
+  standalone installs use it too.
 - **Yes → integrated.** Letters go into that existing inbox, and the doorbell is
   the doorbell that agent already recognises. You need its inbox path and its
   exact participant name.
@@ -105,6 +108,13 @@ You cannot do this step. BotFather is an interactive chat the human is in.
 
 **Do not repeat the token back.** Not in a summary, not to confirm it, not in a
 log. It is a live credential.
+
+**And when the human says "got the token — where do you want it?", the answer
+is `alb --init`'s hidden prompt and nowhere else.** Do not tell them to write
+`bridge.env` by hand, and do not invent a key name — the key is `ALB_TOKEN`,
+and a hand-written file with anything else is refused by the loader. This
+mistake has been made by an agent reading this exact document; the file-writing
+belongs to init, which sets the mode at creation.
 
 ---
 
