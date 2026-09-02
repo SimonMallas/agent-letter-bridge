@@ -21,6 +21,7 @@ ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
 TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
 BRIDGE = ROOT / "src" / "alb" / "bridge" / "run.py"
+OUTBOUND = ROOT / "src" / "alb" / "outbound" / "store.py"
 WIZARD = ROOT / "src" / "alb" / "setup" / "wizard.py"
 DISCOVER = ROOT / "src" / "alb" / "setup" / "discover.py"
 
@@ -96,6 +97,22 @@ EXTRA = {
     "the helper is asked for only when it is missing": (
         WIZARD, "tests.test_setup",
         '        if not found:', '        if True:'),
+    "the outbound letter create is the claim": (
+        OUTBOUND, "tests.test_outbound",
+        "    except FileExistsError:\n        raise AlreadyClaimed",
+        "    except FileExistsError:\n        pass\n    if False:\n        raise AlreadyClaimed"),
+    "delivery events never overwrite": (
+        OUTBOUND, "tests.test_outbound",
+        "    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)\n    with os.fdopen(fd, \"w\", encoding=\"utf-8\") as handle:\n        json.dump(payload, handle)",
+        "    fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o600)\n    with os.fdopen(fd, \"w\", encoding=\"utf-8\") as handle:\n        json.dump(payload, handle)"),
+    "in-flight reconciles ambiguous, never clean": (
+        OUTBOUND, "tests.test_outbound",
+        '        verdicts[d.name] = "ambiguous" if "sending" in events else "unsent"',
+        '        verdicts[d.name] = "unsent"'),
+    "the correspondent store is authoritative over the derivation": (
+        OUTBOUND, "tests.test_outbound",
+        "    if origin in table:\n        return table[origin]",
+        "    if False:\n        return table[origin]"),
     "deny still consumes the update": (
         POLL, "tests.test_poller",
         '        platform.ack(item["update_id"])\n\n    # Only after a poll',
