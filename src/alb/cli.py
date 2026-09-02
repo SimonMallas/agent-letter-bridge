@@ -1,4 +1,7 @@
-"""Agent Letter Bridge - your agents, reachable from your phone, as durable mail.
+"""Agent Letter Bridge - message the CLI agents on your machine from your phone.
+
+Every message becomes part of their memory: a durable, deduplicated, enveloped
+letter on disk before the platform is even acknowledged.
 
 A message from your chat app becomes a durable file on disk BEFORE it is
 acknowledged and BEFORE any agent is notified. The file is the source of truth;

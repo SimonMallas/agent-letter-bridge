@@ -4,7 +4,8 @@ It restarts nothing. Restarting is the service manager's job; a monitor with
 authority over what it monitors violates the rule that the monitor never
 depends on the thing it watches.
 
-Freshness equals liveness: the poller writes a heartbeat after EVERY poll, so a
+Freshness equals a COMPLETED CYCLE: the heartbeat is written only after fetch,
+durable publication and platform confirm have all succeeded, so a
 supervisor can judge the process from outside without its cooperation.
 """
 import json

@@ -6,8 +6,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-letter-bridge"
-version = "0.1.0"
-description = "Your agents, reachable from your phone — as durable mail."
+version = "0.1.1"
+description = "Message the CLI agents on your machine from your phone — every message becomes part of their memory."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }

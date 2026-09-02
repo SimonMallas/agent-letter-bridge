@@ -7,10 +7,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-## [0.1.0] — 2026-09-02
+## [0.1.1] — 2026-09-02
 
-First complete release. Private until the repository owner flips it; the
-version marks "finished", not "published".
+First complete release (0.1.0 tagged earlier the same day; 0.1.1 lands the
+findings of a full-repo consistency review performed by an outside agent —
+init writes the pasted pane id before the resident offer reads the config,
+claims scoped to what the envelope actually records, roles-not-processes
+stated honestly, integrated `--mail-root` documented with its true shape, and
+one voice across package metadata, CLI help and docs). Private until the
+repository owner flips it; the version marks "finished", not "published".
 
 ### Highlights since the pre-release notes below
 - `alb --init`: interactive setup that owns every boilerplate step — 0700
@@ -63,4 +68,6 @@ CI, and the live deployments above.
 
 ### Notes
 - The ring requires a multiplexer. There is no notifier that works without one.
-- Verified live against a sacrificial bot; not yet run by anyone but its author.
+- Verified live against a sacrificial bot. (Superseded above: since this note
+  was written, three agents have run it live, including an install performed
+  by the agent itself.)

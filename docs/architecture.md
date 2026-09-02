@@ -10,7 +10,15 @@ A decomposed substrate writes the message to disk first, then notifies. Every
 process after the write is an accelerator, and every accelerator is allowed to
 fail.
 
-## The four processes
+## The four roles
+
+Called roles, not processes, deliberately: in v0.1 the resident bridge runs
+poller, confirm and notifier in one OS process, and the watchdog is a library
+behind `alb --status`. The unequal privilege is enforced at module boundaries
+and proved by tests — the poller code path is never handed a transport, the
+watchdog reads only mirrored state — not by OS isolation. Splitting into real
+processes is possible precisely because letters-on-disk is the only interface,
+but v0.1 does not claim it.
 
 Privilege is deliberately unequal. See `docs/invariants.md` for what each may
 never do, and why each prohibition is testable.

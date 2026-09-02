@@ -175,6 +175,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
         console.say("  bridge will refuse to start until ALB_TOKEN is filled in.")
 
     env_path = root / "bridge.env"
+    env_path_existed = env_path.exists()
     if env_path.exists():
         # Never clobber. Someone re-running this already has a working bridge
         # more often than not, and a silently replaced config is a morning.
@@ -207,8 +208,14 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
             console.say(f"  wrote {allow_path} denying everyone.")
             console.say("  NOTHING IS DELIVERED until a chat id is in it.")
 
-    # 5. The ring. Listed, never chosen.
-    _offer_ring(console, panes, summary)
+    # 5. The ring. Listed, never chosen - but the operator may paste the id
+    #    HERE, so the env carries it before the resident offer loads that env.
+    #    (Found by codex's consistency review: the old order started a
+    #    resident whose ring stayed disabled until a restart nobody mentioned.)
+    surface = _offer_ring(console, panes, summary)
+    if surface and not env_path_existed:
+        with open(env_path, "a", encoding="utf-8") as handle:
+            handle.write(f"ALB_SURFACE={surface}\n")
 
     # 6. The resident. Both real installs stalled at "--once looks fine" with
     #    nothing left running - so init finishes the job, or prints exactly
@@ -293,6 +300,10 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running, start_pan
         return
 
     console.say(f'It can start now, in its own cmux pane titled "{title}".')
+    if summary.get("ring") != "configured":
+        console.say("  Note: no ring is configured, so it would start BELL-LESS -")
+        console.say("  mail lands durably and nothing pings until ALB_SURFACE is")
+        console.say("  added and the bridge restarted.")
     answer = console.ask("  start the bridge now in its own cmux pane? [Y/n]", "y")
     if answer.strip().lower() in ("n", "no"):
         console.say("Not started. Run the command above from a cmux pane when ready.")
@@ -382,7 +393,13 @@ def _chat_ids(console, token, reader):
 
 
 def _offer_ring(console, panes, summary):
-    """List panes if we were given any. Never pick one."""
+    """List panes if we were given any; accept the id the operator pastes.
+
+    Listing without choosing still holds: the operator supplies the id, and a
+    single pane in the listing is still not a choice init may make. Returns
+    the pasted id (or "") so the caller writes it before anything loads the
+    env - the old order started a resident whose ring stayed disabled until a
+    restart nobody mentioned (codex's consistency review, finding 1)."""
     console.say()
     console.say("The ring types a line into a terminal pane when mail arrives -")
     console.say("it is what makes the bridge feel alive. Without it, letters land")
@@ -393,12 +410,17 @@ def _offer_ring(console, panes, summary):
         console.say("Panes I can see:")
         for entry in panes:
             console.say(f"  {entry['id']}  {entry.get('label', '')}".rstrip())
-        console.say("Put the id of your agent's pane in bridge.env as ALB_SURFACE.")
         console.say("I am not choosing one: a listing cannot tell me which pane")
-        console.say("holds your agent, and a ring in the wrong pane lands in")
-        console.say("somebody else's session.")
-    else:
-        console.say("Add ALB_SURFACE to bridge.env when you have a pane id.")
+        console.say("holds your agent, and a doorbell in the wrong pane lands in")
+        console.say("somebody else's session. Paste the id of YOUR agent's pane,")
+        console.say("or leave blank to run without a ring for now.")
+        surface = console.ask("  your agent's pane id (blank to skip)", "").strip()
+        if surface:
+            summary["ring"] = "configured"
+        return surface
+
+    console.say("Add ALB_SURFACE to bridge.env when you have a pane id.")
+    return ""
 
 
 def _closing(console, root, summary):

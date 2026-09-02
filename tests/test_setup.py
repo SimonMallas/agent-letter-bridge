@@ -445,3 +445,42 @@ class TheResidentOffer(Base):
         console, result, _ = self._init(["n", "print", "y"], start_pane=boom)
         self.assertIn("alb --config", console.transcript)
         self.assertIn("could not", console.transcript.lower())
+
+
+class TheRingAsksForItsSurface(Base):
+    """Codex finding 1 (verified): init listed panes, told the operator to
+    edit bridge.env later, then offered to START the bridge - which loads the
+    env NOW. Saying yes produced a resident with the ring disabled until a
+    restart nobody was told about. The ring step now accepts the id the
+    operator pastes (they supply it - listing without choosing still holds)
+    and writes it to the env BEFORE the resident offer reads it."""
+
+    def test_a_pasted_surface_is_written_to_the_env(self):
+        console, result = self.run_init(
+            answers=["n", "print", "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"],
+            panes=[{"id": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "label": "agent"}])
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertIn("ALB_SURFACE=0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", env)
+
+    def test_blank_skips_and_writes_nothing(self):
+        console, result = self.run_init(
+            answers=["n", "print", ""],
+            panes=[{"id": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "label": "agent"}])
+        self.assertNotIn("ALB_SURFACE", (self.root / "bridge.env").read_text(encoding="utf-8"))
+
+    def test_the_id_must_come_from_the_operator_not_the_listing(self):
+        """One pane in the listing is still not a choice init may make."""
+        console, result = self.run_init(
+            answers=["n", "print", ""],
+            panes=[{"id": "only-pane-here", "label": "agent"}])
+        self.assertNotIn("only-pane-here", (self.root / "bridge.env").read_text(encoding="utf-8"))
+
+    def test_the_resident_offer_warns_when_no_ring_is_configured(self):
+        """Starting bell-less must be said at the moment of consent, not
+        discovered from --status later."""
+        console, _, = self.run_init(
+            answers=["n", "print", "", "y"],
+            cmux_born=lambda: True,
+            start_pane=lambda title, command: "S-1")
+        out = console.transcript.lower()
+        self.assertIn("no ring", out)

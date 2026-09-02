@@ -236,7 +236,10 @@ instead — that is who the doorbell is addressed to.
 
 ## Step 7 — First run, and the tests that matter
 
-**[integrated]** add `--mail-root ~/path/to/the/agents/inbox` to every command below.
+**[integrated]** `alb init` already wrote `ALB_MAIL_ROOT` into your config, so no
+extra flag is needed. If you ever pass `--mail-root` by hand, give it the
+directory that CONTAINS the inbox (the mailbox), not the inbox itself — the
+bridge creates `inbox/` and `processed/` inside it.
 
 ```sh
 alb --config ~/.alb/bridge.env --root ~/.alb --once

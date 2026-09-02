@@ -211,7 +211,9 @@ from `ALB_TO`.
 
 ## Step 8 — Verify. All three, by running them.
 
-**[integrated]** add `--mail-root <inbox>` to each command.
+**[integrated]** init already wrote `ALB_MAIL_ROOT`; no flag needed. If passing
+`--mail-root` by hand, it takes the directory CONTAINING the inbox (the
+mailbox), never the inbox itself.
 
 ```sh
 alb --config ~/.alb/bridge.env --root ~/.alb --once

@@ -51,7 +51,9 @@ waiting*, nothing more.
 
 ## What to do
 
-Read `--root/inbox`. That is the whole instruction.
+In standalone mode, read `--root/inbox`. That is the whole instruction.
+(In integrated mode your mail is in the mailbox you already sweep — see the
+integrated section below.)
 
 ## What NOT to do
 

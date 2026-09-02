@@ -20,8 +20,9 @@ platform is even told the message was received. That buys you three things:
 a context window that stays clean, because the doorbell is one contentless
 line and the body enters only when the agent chooses to read it; messages
 that survive compaction at full fidelity, because a letter lives outside the
-session; and a growing archive of records — who, when, what, verified
-sender — that any memory system can take as ground truth. Delivery that
+session; and a growing archive of records — origin, receipt time, content,
+every origin allowlist-verified — that any memory system can take as ground
+truth. Delivery that
 behaves like memory, not like typing.
 
 > **More memory than message.**
@@ -34,12 +35,16 @@ are unreachable — while everything else in your life answers from the phone
 in your pocket. This bridge gives the agents on your machine a messaging
 app: text them from anywhere, and they can answer.
 
-The added edge is what arrives. A letter is more than the message. It carries who sent it, when, a verified
-sender, its platform addressing and an exactly-once guarantee — a record, in
+The added edge is what arrives. A letter is more than the message. It
+carries its origin — the chat it came from, verified against the allowlist —
+when it was received, its platform addressing and an exactly-once
+guarantee — a record, in
 plain Markdown, that everything downstream can trust: the agent reading it
 now, the memory system ingesting it later, the search that asks what was
-said last month. Replies work the same way — addressed to the letter, which
-knows its own way home.
+said last month. Replies are addressed to the letter, which knows its own
+way home — though the durable archive is inbound today: an outbound reply
+leaves an attempt record (id, time, outcome), not a stored letter. Stored
+outbound letters are the first item on v0.2's list.
 
 That is what makes this a front door rather than a pipe. Whatever you build
 behind it — today's agent, tomorrow's memory system — inherits records
@@ -65,10 +70,14 @@ back.
 
 ## Design
 
-Four processes with deliberately unequal privilege. The separation *is* the
-product.
+Four roles with deliberately unequal privilege. The separation *is* the
+product — and in v0.1 it is enforced at module boundaries and proved by
+tests (the poller code path cannot ring; the watchdog reads only mirrored
+state), not by OS process isolation: the resident bridge holds the token and
+the notifier in one process, and `docs/operations.md` states that limit
+plainly rather than letting this table imply more.
 
-| Process | Trust | May do | May **never** do |
+| Role | Trust | May do | May **never** do |
 | --- | --- | --- | --- |
 | Poller | untrusted | fetch, write letter, then ack | ring, notify, or touch a terminal |
 | Notifier | in-session | ring after a letter exists | carry message content in the ring |
@@ -160,7 +169,7 @@ Waking an agent that already handles other mail: [`docs/agent-setup.md`](docs/ag
 
 ## Status
 
-**Pre-release.** Inbound delivery, ringing and bounded replies have been
+**v0.1.0 — finished, privately held.** Inbound delivery, ringing and bounded replies have been
 exercised live against real bots on macOS and Linux, cmux and tmux, including by
 someone other than the author. **Automated coverage still uses fakes** — the
 suite proves the invariants, the live runs prove the transports, and those are
