@@ -334,8 +334,12 @@ not the same as the agent recognising the doorbell. An agent that already handle
 mail will receive the ALB doorbell, fail to match it, run its usual sweep, find
 nothing, and reasonably conclude the bridge is broken — when everything worked.
 
-Give your agent [`docs/agent-setup.md`](docs/agent-setup.md), or the equivalent
-in whatever form your agent takes instructions.
+Give your agent [`docs/agent-setup.md`](docs/agent-setup.md) — in the file it
+reloads every session (its CLAUDE.md / AGENTS.md equivalent), not just pasted
+into a conversation that will be forgotten. Its opening section also states
+what the agent must BE: an agentic model, with unattended permission to read
+the inbox and run the reply command. An agent that must ask a human before
+each action has no phone line — the human is away; that is the premise.
 
 **[integrated] Nothing to do.** Letters arrive in the inbox it already sweeps
 and the doorbell is the one it already knows.

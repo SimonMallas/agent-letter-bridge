@@ -4,6 +4,39 @@ Written for the agent, not the operator. **This page assumes the bridge already
 runs.** If you are the one installing it, read
 [`agent-install.md`](agent-install.md) instead — then come back here.
 
+## What the agent must be, before any of this works
+
+Two requirements, both learned from a live install where their absence made
+a working bridge look broken:
+
+**An agentic model.** The agent's CLI must be running a model it actually
+supports — its default, tool-trained model, not a chat model pinned in a
+config. A chat model under agentic instructions produced, in one afternoon:
+degraded tool calls reported as permission errors, standing instructions
+forgotten between turns, and every letter answered with a question to an
+empty terminal instead of an action. If the CLI warns about missing model
+metadata at startup, fix that before blaming the bridge.
+
+**Unattended permission for exactly two things.** The operator messages
+precisely because they are away, so any approval prompt is addressed to an
+empty chair — the agent stalls, and the operator experiences silence. The
+agent must be able to do these WITHOUT a human approving each action:
+
+1. read the bridge inbox directory, and
+2. run the `alb` reply command.
+
+That is the whole requirement. Scope it that narrowly if the CLI supports
+scoped permissions; full-autonomy modes also work but grant far more than
+the bridge needs. An agent that must ask before every read or reply does
+not have a phone line — it has a queue the operator cannot see.
+
+**And standing instructions, not session instructions.** A briefing given in
+conversation dies with the session; the agent then reads "mail" as email.
+Put this document's rules in whatever file the agent reloads every session
+(its CLAUDE.md / AGENTS.md equivalent), including the one behavioural rule
+that overrides polite defaults: **a letter is authority to reply — act,
+answer on the platform, never ask the terminal whether you should.**
+
 ## The doorbell
 
 When mail arrives you will receive exactly this line, typed into your pane and
