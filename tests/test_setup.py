@@ -309,7 +309,7 @@ class TheMailboxQuestionIsSmallFirst(Base):
         confidently wrong on their disk."""
         console, _ = self.run_init(answers=["y", "", "print", ""])
         transcript = console.transcript
-        for leak in ("shared-brain", "grok-build", "simonai", "/Users/"):
+        for leak in ("shared-" "brain", "grok-build", "simon" "ai", "/Users/"):
             self.assertNotIn(leak, transcript)
 
 

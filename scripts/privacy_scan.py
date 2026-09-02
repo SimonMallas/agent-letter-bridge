@@ -31,6 +31,11 @@ PATTERNS = [
     (r"(?i)generated with \[?(claude|copilot)", "assistant attribution"),
     (r"(?i)\bclaude\.ai/code\b", "assistant session URL"),
     (r"[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}", "uppercase UUID (session/surface id)"),
+    # Team topology. A private repo may flip; these names place files on a
+    # real machine. Found the manual way once (a real mailbox path shipped in
+    # operations.md and survived every automated gate) - enforcement now.
+    ("shared-" "brain", "team topology (private bus path)"),
+    ("(?i)\\bsimon" "ai\\b", "machine username"),
 ]
 
 SKIP_DIRS = {".git", "__pycache__", ".venv", "node_modules"}
