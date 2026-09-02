@@ -281,7 +281,9 @@ eventually widens the allowlist to find out.
 
 ### Test 3 — the ring, if you set one up
 
-Message your bot and **watch the pane**. You should see, typed as if by a
+Message your bot and **watch the pane — an idle one, with nothing half-typed
+in its composer** (the doorbell submits whatever is already there along with
+itself; that is documented behaviour, not a bug to discover on camera). You should see, typed as if by a
 person:
 
 ```
@@ -380,7 +382,7 @@ any time, including on a machine you are not sure about.
 | --- | --- |
 | Mail arrives, no ring | pane id stale after a multiplexer restart — re-pin (Step 5) |
 | Nothing arrives at all | allowlist missing or wrong id — run `--doctor` (Step 3) |
-| `409 Conflict` | something else is polling this token — re-issue it (Step 3) |
+| `409 Conflict` | something else is polling this token — re-issue it (Step 3, the bot) |
 | Refuses to start | config not `600`, or an unknown/misspelled key (Step 5) |
 | Agent gets the doorbell, finds nothing | it was never told about the bridge (Step 8) |
 

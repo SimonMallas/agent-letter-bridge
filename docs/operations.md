@@ -108,7 +108,7 @@ If the agent already has an inter-agent letterbox, point the bridge's **mail**
 at it and leave its **state** where it is:
 
 ```sh
-alb --config bridge.env --root ~/.alb/grok --mail-root ~/shared-brain/bus/grok-build
+alb --config bridge.env --root ~/.alb/research-bot --mail-root ~/mail/agents/research-bot
 ```
 
 Letters land in the existing inbox in the standard envelope, and the ring goes
