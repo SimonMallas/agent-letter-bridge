@@ -24,10 +24,6 @@ than asserted: [`docs/COMPARE.md`](docs/COMPARE.md).
 
 ## Why this exists
 
-A message that arrives as keystrokes is spent the moment it is typed. The
-agent reacts, the scrollback scrolls, and nothing is left for anything else
-to build on.
-
 A letter is more than the message. It carries who sent it, when, a verified
 sender, its platform addressing and an exactly-once guarantee — a record, in
 plain Markdown, that everything downstream can trust: the agent reading it
