@@ -1,0 +1,6 @@
+# file	expectation	property
+accepted/basic.md	accept	bare keys are empty values
+accepted/unicode-body-key.md	accept	unicode and body keys are preserved without metadata injection
+rejected/one-fence.md	reject	closing fence is mandatory
+rejected/trailing-space-fence.md	reject	fence match is byte-exact
+
