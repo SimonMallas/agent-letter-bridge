@@ -181,3 +181,42 @@ class ExactMeansExact(Base):
             retrieval.show(self.mail(), a[:12])
         with self.assertRaises(retrieval.NoSuchLetter):
             retrieval.thread(self.mail(), a[:12])
+
+
+class GroksFourFlags(Base):
+    def test_empty_search_refuses(self):
+        self.poll([update(1, "111", "x", message_id=1)])
+        with self.assertRaises(ValueError):
+            retrieval.search(self.mail(), "")
+        with self.assertRaises(ValueError):
+            retrieval.search(self.mail(), "   ")
+
+    def test_a_malformed_letter_is_skipped_not_fatal(self):
+        [a] = self.poll([update(1, "111", "good letter", message_id=1)])
+        (self.root / "inbox" / "broken.md").write_text("---\nno closing fence")
+        rows = retrieval.list_letters(self.mail())
+        self.assertEqual([r["id"] for r in rows], [a])
+
+    def test_export_does_not_follow_symlinks(self):
+        [a] = self.poll([update(1, "111", "q", message_id=1)])
+        secret = self.root / "secret.txt"
+        secret.write_text("private bytes")
+        link = self.root / "inbox" / f"link-{a}.md"
+        os.symlink(secret, link)
+        dest = self.root / "e.tar"
+        retrieval.export_thread(self.mail(), self.root / "state", a, dest)
+        with tarfile.open(dest) as tar:
+            for m in tar.getmembers():
+                self.assertFalse(m.issym() or m.islnk())
+                self.assertNotIn("secret", m.name)
+
+    def test_export_round_trips_the_letter_bytes(self):
+        """Grok flag 4: 'byte-identical' was an overclaim - names were
+        checked, not contents. Now the contents are."""
+        [a] = self.poll([update(1, "111", "the exact body", message_id=1)])
+        src = (self.root / "inbox" / f"{a}.md").read_bytes()
+        dest = self.root / "e.tar"
+        retrieval.export_thread(self.mail(), self.root / "state", a, dest)
+        with tarfile.open(dest) as tar:
+            got = tar.extractfile(f"letters/{a}.md").read()
+        self.assertEqual(got, src)

@@ -9,7 +9,7 @@ import pathlib
 import tarfile
 
 from alb.letter import store
-from alb.letter.store import NoSuchLetter  # re-exported for callers
+from alb.letter.store import NoSuchLetter, MalformedLetter  # re-exported
 
 
 def _rows(mail_dirs):
@@ -22,7 +22,10 @@ def _rows(mail_dirs):
         for path in d.glob("*.md"):
             try:
                 stored = store.resolve(d, path.stem)
-            except NoSuchLetter:
+            except (NoSuchLetter, MalformedLetter):
+                # One bad file must not take the archive down with it - the
+                # same lesson the letterbox check learned this week. resolve
+                # already fail-closes per file; the walk skips and continues.
                 continue
             rows.append({
                 "mtime": path.stat().st_mtime,
@@ -65,7 +68,11 @@ def show(mail_dirs, letter_id):
 
 
 def search(mail_dirs, text):
-    """Exact substring over body and envelope values. Never fuzzy."""
+    """Exact substring over body and envelope values. Never fuzzy - and
+    never empty: '' is a substring of everything, so an empty search is a
+    listing wearing a search's name. Refused (grok's flag)."""
+    if not text or not text.strip():
+        raise ValueError("search text must be non-empty")
     hits = []
     for r in _rows(mail_dirs):
         haystacks = [r["body"]] + [str(v) for v in r["meta"].values()]
@@ -98,9 +105,17 @@ def export_thread(mail_dirs, state, member_id, dest):
     state = pathlib.Path(state)
     with tarfile.open(dest, "w") as tar:
         for r in members:
-            tar.add(r["where"], arcname=f"letters/{r['id']}.md")
+            src = pathlib.Path(r["where"])
+            # Regular files only. A symlink in a mailbox is not a letter, and
+            # following it would pull arbitrary target bytes into an archive
+            # that promises to be a copy of the correspondence (grok's flag).
+            if src.is_symlink() or not src.is_file():
+                continue
+            tar.add(src, arcname=f"letters/{r['id']}.md")
             receipts = state / "receipts" / r["id"]
             if receipts.is_dir():
                 for event in sorted(receipts.iterdir()):
+                    if event.is_symlink() or not event.is_file():
+                        continue
                     tar.add(event, arcname=f"receipts/{r['id']}/{event.name}")
     return dest
