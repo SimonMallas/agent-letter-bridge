@@ -15,6 +15,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "alb" / "letter" / "store.py"
 SEND = ROOT / "src" / "alb" / "send" / "reply.py"
+MSGINDEX = ROOT / "src" / "alb" / "msgindex.py"
 POLL = ROOT / "src" / "alb" / "poller" / "loop.py"
 NOTIFY = ROOT / "src" / "alb" / "notifier" / "ring.py"
 ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
@@ -129,6 +130,18 @@ EXTRA = {
         OUTBOUND, "tests.test_outbound",
         '        record_event(state, letter_id, "dead", detail="reconciled at restart")',
         '        pass'),
+    "the index key is the full triple, never the bare id": (
+        MSGINDEX, "tests.test_w2_identity_threading",
+        '    return f"{platform}|{origin}|{message_id}"',
+        '    return f"{platform}|{message_id}"'),
+    "reply-to joins the targets thread without moving the pointer": (
+        POLL, "tests.test_w2_identity_threading",
+        "            if not reply_target:",
+        "            if True:"),
+    "slash-new only cuts at position zero": (
+        POLL, "tests.test_w2_identity_threading",
+        'cut=text.split(" ", 1)[0] == "/new" if text else False',
+        'cut=("/new" in text) if text else False'),
     "deny still consumes the update": (
         POLL, "tests.test_poller",
         '        platform.ack(item["update_id"])\n\n    # Only after a poll',

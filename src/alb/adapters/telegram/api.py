@@ -135,6 +135,13 @@ class Telegram:
                 "update_id": item["update_id"],
                 "chat_id": str(message.get("chat", {}).get("id", "")) if message else "",
                 "text": message.get("text", ""),
+                # W2: the platform's chat-scoped message id, and the id of the
+                # message this one replies to. Both feed the private
+                # exact-triple index; neither is identity.
+                "message_id": str(message.get("message_id", "") or ""),
+                "reply_to_message_id": str(
+                    (message.get("reply_to_message") or {}).get("message_id", "")
+                    or ""),
             })
         return updates
 

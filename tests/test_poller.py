@@ -196,7 +196,10 @@ class PollerIsStructurallyIncapable(unittest.TestCase):
             # transport, a surface or a credential, so a ring still cannot be
             # constructed inside the poller.
             {"platform", "inbox", "ledger", "allowlist_path", "health_path",
-             "processed", "sender", "recipient"},
+             "processed", "sender", "recipient",
+             # state: a directory path for private bookkeeping (threads,
+             # correspondents, message index) - not a capability either.
+             "state"},
             "the poller's signature changed - if it now receives a transport, "
             "surface or credential, ringing became constructible inside it",
         )

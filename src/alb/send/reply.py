@@ -175,7 +175,8 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
 
     out_id = outbound.compose(pathlib.Path(outbox), pathlib.Path(state),
                               source_id=letter_id, origin_chat=chat_id,
-                              sender=agent, body=text)
+                              sender=agent, body=text,
+                              thread=stored.meta.get("thread", ""))
     outbound.record_event(state, out_id, "sending")
     try:
         platform_id = sender.send(chat_id, text)
@@ -200,6 +201,10 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
     # which was written before the platform knew anything.
     outbound.record_event(state, out_id, "sent",
                           platform_message_id=str(platform_id))
+    # Both directions in the index: a phone reply to the bot's own message
+    # must resolve to the outbound letter it answers.
+    from alb import msgindex
+    msgindex.record(state, "telegram", chat_id, str(platform_id), out_id)
     return out_id
 
 

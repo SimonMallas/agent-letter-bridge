@@ -37,13 +37,15 @@ def correspondent_key(state, origin_chat, platform="telegram"):
     key = hashlib.sha256(origin.encode()).hexdigest()[:16]
     table[origin] = key
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(table, indent=2), encoding="utf-8")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(table, indent=2))
     os.replace(tmp, path)
     return key
 
 
 def compose(outbox, state, source_id, origin_chat, sender, body,
-            platform="telegram"):
+            platform="telegram", thread=""):
     """Write the outbound letter; its O_EXCL create is the claim.
 
     Returns the letter id. Raises AlreadyClaimed if a letter for this source
@@ -66,6 +68,8 @@ def compose(outbox, state, source_id, origin_chat, sender, body,
     )
     meta["id"] = letter_id
     meta["re"] = source_id
+    # The reply lives in the source's thread (or the source roots one).
+    meta["thread"] = thread or source_id
     text = letters._serialise(meta, body)
 
     path = outbox / f"{letter_id}.md"

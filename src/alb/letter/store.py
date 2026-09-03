@@ -38,7 +38,7 @@ class Letter:
 #
 # Frozen at v0.1: every letter on every user's disk carries this shape, so a
 # later change is a migration rather than an edit.
-ENVELOPE_ORDER = ("id", "from", "to", "type", "re", "priority",
+ENVELOPE_ORDER = ("id", "from", "to", "type", "re", "thread", "priority",
                   "requires_ack", "deadline")
 
 
@@ -57,6 +57,10 @@ def envelope(sender, recipient, kind="info", priority="now", extra=None):
         "to": recipient,
         "type": kind,
         "re": "",
+        # W2: thread linkage - blank at composition, stamped at publish for
+        # inbound (one thread per correspondent, /new cuts), carried from the
+        # source for outbound. Matches the letterbox v0.3 envelope.
+        "thread": "",
         "priority": priority,
         "requires_ack": "false",
         "deadline": "",
