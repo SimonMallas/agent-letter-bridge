@@ -74,7 +74,12 @@ def _stamp_thread(inbox, letter_id, thread):
     else:
         return
     tmp = pathlib.Path(str(path) + ".tmp")
-    tmp.write_text("\n".join(lines), encoding="utf-8")
+    # Born 0600 like every letter (grok's must-fix: a umask-governed write
+    # here made the stamped letter 0644 - same class as the state files this
+    # build already caught once).
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))
     os.replace(tmp, path)
 
 

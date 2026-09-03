@@ -175,3 +175,19 @@ class OutboundJoinsTheIndexAndThread(Base):
         [c] = self.poll([update(2, "111", "thanks!", message_id=11, reply_to=777)])
         meta = self.letter(c).meta
         self.assertEqual(meta.get("re"), out_id)
+
+
+class TheStampKeepsTheLettersMode(Base):
+    """Grok's must-fix: the sanctioned thread stamp rewrote the letter via a
+    umask-governed write, so an inbound letter came out 0644 after stamping.
+    Same class as the state files this build already caught once."""
+
+    def test_a_stamped_letter_stays_0600(self):
+        import os, stat
+        old = os.umask(0o022)
+        try:
+            [lid] = self.poll([update(1, "111", "hello", message_id=1)])
+        finally:
+            os.umask(old)
+        mode = stat.S_IMODE(os.stat(self.inbox / f"{lid}.md").st_mode)
+        self.assertEqual(mode, 0o600)
