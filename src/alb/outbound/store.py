@@ -51,6 +51,11 @@ def compose(outbox, state, source_id, origin_chat, sender, body,
     orphan letter exists anywhere.
     """
     outbox = pathlib.Path(outbox)
+    # outbox/ is one of the three directories that are ours to add inside a
+    # mailbox (inbox, processed, outbox - same rule as prepare_mail_root, same
+    # no-chmod respect for a directory that may not be ours). The reply path
+    # can run before any poll cycle has prepared anything.
+    outbox.mkdir(parents=True, exist_ok=True)
     state = pathlib.Path(state)
     letter_id = f"reply-{source_id}"
 

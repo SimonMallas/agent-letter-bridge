@@ -187,8 +187,12 @@ class Telegram:
 
     def send(self, chat_id, text):
         try:
-            return _request(self._base, "sendMessage",
-                            {"chat_id": chat_id, "text": text}, self._token)
+            payload = _request(self._base, "sendMessage",
+                               {"chat_id": chat_id, "text": text}, self._token)
+            # The platform's message id, previously discarded. It feeds the
+            # outbound delivery events and (W2) the reply-linkage index -
+            # never the letter, which was durable before this call returned.
+            return str(((payload or {}).get("result") or {}).get("message_id", ""))
         except urllib.error.HTTPError as exc:
             if exc.code >= 500:
                 # The server may have accepted it before failing. Unknown.

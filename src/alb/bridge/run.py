@@ -134,7 +134,7 @@ FILE_MODE = 0o600
 def prepare_root(root):
     """Create the state layout with private permissions from the first run."""
     root = pathlib.Path(root)
-    for path in (root, root / "inbox", root / "processed", root / "state"):
+    for path in (root, root / "inbox", root / "processed", root / "outbox", root / "state"):
         path.mkdir(parents=True, exist_ok=True)
         try:
             path.chmod(DIR_MODE)

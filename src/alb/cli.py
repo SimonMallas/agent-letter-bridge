@@ -198,7 +198,12 @@ def main(argv=None):
                 # integrated mode the letter is not under --root at all, and
                 # searching only there refuses a reply to a letter that plainly
                 # exists - the dogfood send bug in a new place.
-                searched=[mail / "inbox", mail / "processed"])
+                searched=[mail / "inbox", mail / "processed"],
+                # v0.2: the reply becomes a durable outbound LETTER in the
+                # mail root's outbox before the platform hears anything, and
+                # its creation is the claim.
+                outbox=mail / "outbox",
+                agent=config.get("ALB_TO", "agent"))
         except reply.AmbiguousOutcome as exc:
             print(f"alb: AMBIGUOUS - dead-lettered for a human, NOT retried: {exc}",
                   file=sys.stderr)

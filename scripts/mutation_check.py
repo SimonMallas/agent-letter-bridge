@@ -113,6 +113,18 @@ EXTRA = {
         OUTBOUND, "tests.test_outbound",
         "    if origin in table:\n        return table[origin]",
         "    if False:\n        return table[origin]"),
+    "the reply path is letter-first, not legacy": (
+        SEND, "tests.test_send",
+        "    out_id = outbound.compose(",
+        "    return _send_legacy(sender, state, letter_id, chat_id, text)\n    out_id = outbound.compose("),
+    "the platform message id lands in the sent event": (
+        SEND, "tests.test_send",
+        '    outbound.record_event(state, out_id, "sent",\n                          platform_message_id=str(platform_id))',
+        '    outbound.record_event(state, out_id, "sent")'),
+    "ambiguous still dead-letters on the letter-first path": (
+        SEND, "tests.test_send",
+        '        outbound.record_event(state, out_id, "ambiguous", detail=str(exc))\n        _dead_letter(state, out_id, letter_id, str(exc))',
+        '        outbound.record_event(state, out_id, "ambiguous", detail=str(exc))'),
     "deny still consumes the update": (
         POLL, "tests.test_poller",
         '        platform.ack(item["update_id"])\n\n    # Only after a poll',
@@ -293,8 +305,8 @@ EXTRA = {
         '    loop._write_heartbeat(root / "state" / "health.json")', "    pass"),
     "the mailbox never receives private state": (
         BRIDGE, "tests.test_mail_root",
-        '    for name in ("inbox", "processed"):\n        (mail_root / name).mkdir(exist_ok=True)',
-        "    prepare_root(mail_root)"),
+        '        (mail_root / name).mkdir(exist_ok=True)\n    return mail_root',
+        "        (mail_root / name).mkdir(exist_ok=True)\n    prepare_root(mail_root)\n    return mail_root"),
     "a missing mailbox is refused, not invented": (
         BRIDGE, "tests.test_mail_root",
         "    if not mail_root.is_dir():", "    if False:"),
