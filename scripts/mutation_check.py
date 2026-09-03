@@ -16,6 +16,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "alb" / "letter" / "store.py"
 SEND = ROOT / "src" / "alb" / "send" / "reply.py"
 MSGINDEX = ROOT / "src" / "alb" / "msgindex.py"
+RETRIEVAL = ROOT / "src" / "alb" / "retrieval.py"
 POLL = ROOT / "src" / "alb" / "poller" / "loop.py"
 NOTIFY = ROOT / "src" / "alb" / "notifier" / "ring.py"
 ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
@@ -142,6 +143,18 @@ EXTRA = {
         POLL, "tests.test_w2_identity_threading",
         'cut=text.split(" ", 1)[0] == "/new" if text else False',
         'cut=("/new" in text) if text else False'),
+    "search is exact substring, never everything": (
+        RETRIEVAL, "tests.test_retrieval",
+        "        if any(text in h for h in haystacks):",
+        "        if True:"),
+    "show refuses on anything but the exact id": (
+        RETRIEVAL, "tests.test_retrieval",
+        '        if r["id"] == letter_id:',
+        '        if r["id"].startswith(letter_id[:8]):'),
+    "the archive lists in publish order": (
+        RETRIEVAL, "tests.test_retrieval",
+        '    rows.sort(key=lambda r: (r["mtime"], r["id"]))',
+        '    rows.sort(key=lambda r: r["id"], reverse=True)'),
     "deny still consumes the update": (
         POLL, "tests.test_poller",
         '        platform.ack(item["update_id"])\n\n    # Only after a poll',
