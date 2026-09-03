@@ -170,3 +170,14 @@ class ThroughTheBinary(Base):
     def test_unknown_id_exits_nonzero(self):
         code, _ = self._run("--show", "nope")
         self.assertEqual(code, 1)
+
+
+class ExactMeansExact(Base):
+    def test_a_truncated_real_id_refuses(self):
+        """The pin the gate demanded: 'no-such-id' also fails a PREFIX match,
+        so only a truncated real id distinguishes exact from startswith."""
+        [a] = self.poll([update(1, "111", "x", message_id=1)])
+        with self.assertRaises(retrieval.NoSuchLetter):
+            retrieval.show(self.mail(), a[:12])
+        with self.assertRaises(retrieval.NoSuchLetter):
+            retrieval.thread(self.mail(), a[:12])
