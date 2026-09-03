@@ -3,11 +3,6 @@
 **Message the CLI agents on your machine from your phone — and every message
 becomes part of their memory.**
 
-<!-- LAUNCH GATE: the doorbell GIF goes here, and nothing is announced
-     anywhere until it does. A message arrives on a phone; a letter file
-     appears in the inbox; THEN the doorbell types itself into the pane.
-     (assets/doorbell.gif — to be recorded against a clean demo root.) -->
-
 Agent Letter Bridge connects a chat app to AI agents on your own machine. An
 incoming message becomes a durable file on disk **before** it is acknowledged and
 **before** any agent is notified. The file is the source of truth; the
