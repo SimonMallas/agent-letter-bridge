@@ -125,6 +125,10 @@ EXTRA = {
         SEND, "tests.test_send",
         '        outbound.record_event(state, out_id, "ambiguous", detail=str(exc))\n        _dead_letter(state, out_id, letter_id, str(exc))',
         '        outbound.record_event(state, out_id, "ambiguous", detail=str(exc))'),
+    "startup reconciliation dead-letters, once": (
+        OUTBOUND, "tests.test_outbound",
+        '        record_event(state, letter_id, "dead", detail="reconciled at restart")',
+        '        pass'),
     "deny still consumes the update": (
         POLL, "tests.test_poller",
         '        platform.ack(item["update_id"])\n\n    # Only after a poll',

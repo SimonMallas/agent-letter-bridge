@@ -182,3 +182,39 @@ class RestartReconciliation(Base):
         outbound.record_event(self.root / "state", letter_id, "sent",
                               platform_message_id="1")
         self.assertEqual(outbound.reconcile(self.root / "state"), {})
+
+
+class ReconcileRunsAtStartup(Base):
+    """Grok's hostile-review flag 1: reconcile existed, was pinned, and was
+    never called. A crash after 2-sending left no dead-letter for a human on
+    restart - the retry refused (no double-post) but nobody was told why.
+    The bridge's first act on rising is now the reconciliation pass, and it
+    is idempotent: a reconciled letter gains a terminal 'dead' event so the
+    next restart does not re-flag it."""
+
+    def test_ambiguous_in_flight_dead_letters_on_startup(self):
+        letter_id = self.compose()
+        outbound.record_event(self.root / "state", letter_id, "sending")
+        flagged = outbound.reconcile_at_startup(self.root / "state")
+        self.assertEqual(flagged, [letter_id])
+        dead = list((self.root / "state" / "dead-letters").glob("*.json"))
+        self.assertEqual(len(dead), 1)
+        payload = json.loads(dead[0].read_text())
+        self.assertEqual(payload["letter_id"], letter_id)
+        self.assertIn("restart", payload["detail"])
+
+    def test_the_pass_is_idempotent_across_restarts(self):
+        letter_id = self.compose()
+        outbound.record_event(self.root / "state", letter_id, "sending")
+        outbound.reconcile_at_startup(self.root / "state")
+        second = outbound.reconcile_at_startup(self.root / "state")
+        self.assertEqual(second, [])
+        dead = list((self.root / "state" / "dead-letters").glob("*.json"))
+        self.assertEqual(len(dead), 1)
+
+    def test_composed_only_is_left_alone(self):
+        """Unsent-but-never-sending is safely composable again - not a human's
+        problem, not a dead letter."""
+        self.compose()
+        self.assertEqual(outbound.reconcile_at_startup(self.root / "state"), [])
+        self.assertEqual(list((self.root / "state" / "dead-letters").glob("*")), [])

@@ -318,6 +318,13 @@ def _report(cycle, once):
 
 
 def _poll_forever(platform, transport, surface, root, args, config):
+    # First act on rising: reconcile outbound letters left in flight by a
+    # crash - each dead-letters for a human, once, before any new work.
+    from alb.outbound import store as outbound
+    flagged = outbound.reconcile_at_startup(root / "state")
+    for letter_id in flagged:
+        print(f"alb: reconciled in-flight outbound {letter_id} -> dead-letter",
+              file=sys.stderr)
     while True:
         try:
             published = run.run_once(

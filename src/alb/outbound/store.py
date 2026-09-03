@@ -132,6 +132,38 @@ def reconcile(state):
     return verdicts
 
 
+def reconcile_at_startup(state):
+    """The bridge's first act on rising (grok's flag: reconcile existed and
+    was never called). Every in-flight outbound letter dead-letters for a
+    human and gains a terminal 'dead' event, making the pass idempotent -
+    the next restart has nothing to re-flag. Composed-only letters are left
+    alone: safely composable again, nobody's emergency."""
+    state = pathlib.Path(state)
+    flagged = []
+    for letter_id, verdict in reconcile(state).items():
+        if verdict != "ambiguous":
+            continue
+        dead = state / "dead-letters"
+        dead.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "reply_id": letter_id, "letter_id": letter_id,
+            "outcome": "ambiguous",
+            "detail": ("in-flight at restart: a send was started and no outcome "
+                       "was recorded before the process died. The platform may "
+                       "or may not have delivered it."),
+            "action_required": (
+                "Open the chat. If the message is there: STOP, do not resend, "
+                "leave these records. If it is absent: a human decides whether "
+                "to send new text. Never delete this file."),
+        }
+        tmp = dead / f"{letter_id}.json.tmp"
+        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        os.replace(tmp, dead / f"{letter_id}.json")
+        record_event(state, letter_id, "dead", detail="reconciled at restart")
+        flagged.append(letter_id)
+    return flagged
+
+
 def _fsync_dir(path):
     fd = os.open(path, os.O_RDONLY)
     try:

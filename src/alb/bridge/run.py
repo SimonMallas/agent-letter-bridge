@@ -195,7 +195,7 @@ def prepare_mail_root(mail_root):
             f"where nothing sweeps, silently. Check the path, or remove "
             f"--mail-root / ALB_MAIL_ROOT to run standalone."
         )
-    for name in ("inbox", "processed"):
+    for name in ("inbox", "processed", "outbox"):
         (mail_root / name).mkdir(exist_ok=True)
     return mail_root
 
