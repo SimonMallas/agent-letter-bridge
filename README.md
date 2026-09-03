@@ -169,7 +169,7 @@ Waking an agent that already handles other mail: [`docs/agent-setup.md`](docs/ag
 
 ## Status
 
-**v0.1.0 — finished, privately held.** Inbound delivery, ringing and bounded replies have been
+**v0.1.1.** Inbound delivery, ringing and bounded replies have been
 exercised live against real bots on macOS and Linux, cmux and tmux, including by
 someone other than the author. **Automated coverage still uses fakes** — the
 suite proves the invariants, the live runs prove the transports, and those are
