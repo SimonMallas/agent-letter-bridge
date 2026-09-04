@@ -37,9 +37,9 @@ guarantee — a record, in
 plain Markdown, that everything downstream can trust: the agent reading it
 now, the memory system ingesting it later, the search that asks what was
 said last month. Replies are addressed to the letter, which knows its own
-way home — though the durable archive is inbound today: an outbound reply
-leaves an attempt record (id, time, outcome), not a stored letter. Stored
-outbound letters are the first item on v0.2's list.
+way home. Since v0.2 the archive runs both ways: an outbound reply is
+written as its own letter *before* the platform is touched, and its delivery
+events are recorded as immutable files beside it.
 
 That is what makes this a front door rather than a pipe. Whatever you build
 behind it — today's agent, tomorrow's memory system — inherits records
@@ -164,12 +164,15 @@ Waking an agent that already handles other mail: [`docs/agent-setup.md`](docs/ag
 
 ## Status
 
-**v0.1.1.** Inbound delivery, ringing and bounded replies have been
+**v0.2.** Inbound delivery, ringing and bounded replies have been
 exercised live against real bots on macOS and Linux, cmux and tmux, including by
-someone other than the author. **Automated coverage still uses fakes** — the
-suite proves the invariants, the live runs prove the transports, and those are
-different claims. Not published, and not formally audited; see
-`docs/threat-model.md` for what is and is not claimed.
+someone other than the author. v0.2 adds durable outbound letters, correspondent
+identity and threading, and read-only retrieval (`--list`, `--show`, `--search`,
+`--thread`, `--export`); those are covered by the suite and reviewed, but have
+not yet had the same live mileage as the inbound path. **Automated coverage
+still uses fakes** — the suite proves the invariants, the live runs prove the
+transports, and those are different claims. Not on a package index, and not
+formally audited; see `docs/threat-model.md` for what is and is not claimed.
 
 ## What you need
 
