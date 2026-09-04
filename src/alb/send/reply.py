@@ -136,7 +136,7 @@ def _dead_letter(state, reply_id, letter_id, detail):
 
 
 def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
-               searched=None):
+               searched=None, outbox=None, agent="agent"):
     """Reply to the chat named by a stored inbound letter. Nothing else.
 
     `searched` must cover everywhere letters travel. An inbox is swept, and
@@ -159,6 +159,56 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
     if not gate.allows(allowlist_path, chat_id):
         raise NotPermitted(f"destination not permitted at send time")
 
+    # v0.2 W1: the outbound LETTER is written first and its O_EXCL create IS
+    # the claim - one logical reply per source letter, established in the same
+    # syscall that makes the reply durable. The legacy body-hash claim held a
+    # weaker promise (it deduplicated identical text, not logical replies).
+    # Function-level import: outbound imports this module for the exception
+    # types, so a module-level import here would be a cycle.
+    from alb.outbound import store as outbound
+
+    if outbox is None:
+        # Callers that predate slice 2 (and the tests that pin them) keep the
+        # legacy claim path until the wiring lands everywhere; new callers
+        # pass outbox and get the letter-first path.
+        return _send_legacy(sender, state, letter_id, chat_id, text)
+
+    out_id = outbound.compose(pathlib.Path(outbox), pathlib.Path(state),
+                              source_id=letter_id, origin_chat=chat_id,
+                              sender=agent, body=text,
+                              thread=stored.meta.get("thread", ""))
+    outbound.record_event(state, out_id, "sending")
+    try:
+        platform_id = sender.send(chat_id, text)
+    except AmbiguousOutcome as exc:
+        outbound.record_event(state, out_id, "ambiguous", detail=str(exc))
+        _dead_letter(state, out_id, letter_id, str(exc))
+        raise
+    except DefiniteRefusal as exc:
+        outbound.record_event(state, out_id, "refused", detail=str(exc))
+        raise
+    except Exception as exc:
+        # THE SAFETY NET, unchanged in spirit: an outcome that escaped
+        # classification is unknown, and unknown means ambiguous - record it
+        # and leave it for a human. Never auto-retry.
+        outbound.record_event(state, out_id, "ambiguous",
+                              detail=f"unclassified {type(exc).__name__}: {exc}")
+        _dead_letter(state, out_id, letter_id,
+                     f"unclassified {type(exc).__name__}: {exc}")
+        raise AmbiguousOutcome(f"unclassified sender failure: {exc}") from exc
+    # Platform acceptance is never described as human receipt. The message id
+    # the platform returns lives HERE, in the events - never on the letter,
+    # which was written before the platform knew anything.
+    outbound.record_event(state, out_id, "sent",
+                          platform_message_id=str(platform_id))
+    # Both directions in the index: a phone reply to the bot's own message
+    # must resolve to the outbound letter it answers.
+    from alb import msgindex
+    msgindex.record(state, "telegram", chat_id, str(platform_id), out_id)
+    return out_id
+
+
+def _send_legacy(sender, state, letter_id, chat_id, text):
     claim = _claim(state, _reply_id(letter_id, text))
     try:
         sender.send(chat_id, text)
@@ -170,12 +220,6 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
         _record(claim, "refused")
         raise
     except Exception as exc:
-        # THE SAFETY NET. An adapter is contracted to raise AmbiguousOutcome or
-        # DefiniteRefusal, but a bug in one is exactly when this matters: an
-        # unclassified failure would otherwise escape with the claim burned
-        # in_flight forever and nobody told. If an outcome escaped
-        # classification then it is unknown by definition, and unknown means
-        # ambiguous: record it and leave it for a human.
         _record(claim, "ambiguous")
         _dead_letter(state, claim.stem, letter_id,
                      f"unclassified {type(exc).__name__}: {exc}")

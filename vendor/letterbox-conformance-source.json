@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "upstream_repository": "agent-letterbox-cmux",
+  "upstream_commit": "379d1e76c788752241d084a5b61720c92759f4ca",
+  "snapshot_directory": "vendor/letterbox-conformance-v1",
+  "manifest_sha256": "bb53b40f2dce45e118f3a316e10b1afdd13a960eb2f097cf1d4ac1be34ac2364",
+  "sync_policy": "Explicit reviewed updates only; CI and runtime never fetch upstream."
+}

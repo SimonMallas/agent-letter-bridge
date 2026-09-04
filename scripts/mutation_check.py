@@ -9,18 +9,27 @@ Exit 0 = every invariant is genuinely pinned. Exit 1 = one is not.
 """
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
+import tempfile
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+# SOURCE_ROOT is the operator's tree. Mutations never write here.
+# ROOT is rebound for EXTRA path construction at import; _run maps those
+# paths into the isolated copy.
+SOURCE_ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = SOURCE_ROOT
 SRC = ROOT / "src" / "alb" / "letter" / "store.py"
 SEND = ROOT / "src" / "alb" / "send" / "reply.py"
+MSGINDEX = ROOT / "src" / "alb" / "msgindex.py"
+RETRIEVAL = ROOT / "src" / "alb" / "retrieval.py"
 POLL = ROOT / "src" / "alb" / "poller" / "loop.py"
 NOTIFY = ROOT / "src" / "alb" / "notifier" / "ring.py"
 ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
 TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
 BRIDGE = ROOT / "src" / "alb" / "bridge" / "run.py"
+OUTBOUND = ROOT / "src" / "alb" / "outbound" / "store.py"
 WIZARD = ROOT / "src" / "alb" / "setup" / "wizard.py"
 DISCOVER = ROOT / "src" / "alb" / "setup" / "discover.py"
 
@@ -96,6 +105,62 @@ EXTRA = {
     "the helper is asked for only when it is missing": (
         WIZARD, "tests.test_setup",
         '        if not found:', '        if True:'),
+    "the outbound letter create is the claim": (
+        OUTBOUND, "tests.test_outbound",
+        "    except FileExistsError:\n        raise AlreadyClaimed",
+        "    except FileExistsError:\n        pass\n    if False:\n        raise AlreadyClaimed"),
+    "delivery events never overwrite": (
+        OUTBOUND, "tests.test_outbound",
+        "    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)\n    with os.fdopen(fd, \"w\", encoding=\"utf-8\") as handle:\n        json.dump(payload, handle)",
+        "    fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o600)\n    with os.fdopen(fd, \"w\", encoding=\"utf-8\") as handle:\n        json.dump(payload, handle)"),
+    "in-flight reconciles ambiguous, never clean": (
+        OUTBOUND, "tests.test_outbound",
+        '        verdicts[d.name] = "ambiguous" if "sending" in events else "unsent"',
+        '        verdicts[d.name] = "unsent"'),
+    "the correspondent store is authoritative over the derivation": (
+        OUTBOUND, "tests.test_outbound",
+        "    if origin in table:\n        return table[origin]",
+        "    if False:\n        return table[origin]"),
+    "the reply path is letter-first, not legacy": (
+        SEND, "tests.test_send",
+        "    out_id = outbound.compose(",
+        "    return _send_legacy(sender, state, letter_id, chat_id, text)\n    out_id = outbound.compose("),
+    "the platform message id lands in the sent event": (
+        SEND, "tests.test_send",
+        '    outbound.record_event(state, out_id, "sent",\n                          platform_message_id=str(platform_id))',
+        '    outbound.record_event(state, out_id, "sent")'),
+    "ambiguous still dead-letters on the letter-first path": (
+        SEND, "tests.test_send",
+        '        outbound.record_event(state, out_id, "ambiguous", detail=str(exc))\n        _dead_letter(state, out_id, letter_id, str(exc))',
+        '        outbound.record_event(state, out_id, "ambiguous", detail=str(exc))'),
+    "startup reconciliation dead-letters, once": (
+        OUTBOUND, "tests.test_outbound",
+        '        record_event(state, letter_id, "dead", detail="reconciled at restart")',
+        '        pass'),
+    "the index key is the full triple, never the bare id": (
+        MSGINDEX, "tests.test_w2_identity_threading",
+        '    return f"{platform}|{origin}|{message_id}"',
+        '    return f"{platform}|{message_id}"'),
+    "reply-to joins the targets thread without moving the pointer": (
+        POLL, "tests.test_w2_identity_threading",
+        "            if not reply_target:",
+        "            if True:"),
+    "slash-new only cuts at position zero": (
+        POLL, "tests.test_w2_identity_threading",
+        'cut=text.split(" ", 1)[0] == "/new" if text else False',
+        'cut=("/new" in text) if text else False'),
+    "search is exact substring, never everything": (
+        RETRIEVAL, "tests.test_retrieval",
+        "        if any(text in h for h in haystacks):",
+        "        if True:"),
+    "show refuses on anything but the exact id": (
+        RETRIEVAL, "tests.test_retrieval",
+        '        if r["id"] == letter_id:',
+        '        if r["id"].startswith(letter_id[:8]):'),
+    "the archive lists in publish order": (
+        RETRIEVAL, "tests.test_retrieval",
+        '    rows.sort(key=lambda r: (r["mtime"], r["id"]))',
+        '    rows.sort(key=lambda r: r["id"], reverse=True)'),
     "deny still consumes the update": (
         POLL, "tests.test_poller",
         '        platform.ack(item["update_id"])\n\n    # Only after a poll',
@@ -276,8 +341,8 @@ EXTRA = {
         '    loop._write_heartbeat(root / "state" / "health.json")', "    pass"),
     "the mailbox never receives private state": (
         BRIDGE, "tests.test_mail_root",
-        '    for name in ("inbox", "processed"):\n        (mail_root / name).mkdir(exist_ok=True)',
-        "    prepare_root(mail_root)"),
+        '        (mail_root / name).mkdir(exist_ok=True)\n    return mail_root',
+        "        (mail_root / name).mkdir(exist_ok=True)\n    prepare_root(mail_root)\n    return mail_root"),
     "a missing mailbox is refused, not invented": (
         BRIDGE, "tests.test_mail_root",
         "    if not mail_root.is_dir():", "    if False:"),
@@ -333,7 +398,14 @@ MUTATIONS = {
 }
 
 
-def _purge_bytecode():
+def _git_status(root):
+    result = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=root,
+        capture_output=True, text=True)
+    return result.stdout
+
+
+def _purge_bytecode(root):
     """Remove every __pycache__ under the tree.
 
     THIS IS NOT TIDINESS. Python invalidates cached bytecode on (mtime, size).
@@ -351,7 +423,7 @@ def _purge_bytecode():
     prints ok. So caches are purged around every mutation, and the subprocess
     is told not to write new ones.
     """
-    for cache in ROOT.rglob("__pycache__"):
+    for cache in pathlib.Path(root).rglob("__pycache__"):
         for f in cache.glob("*"):
             try:
                 f.unlink()
@@ -363,52 +435,96 @@ def _purge_bytecode():
             pass
 
 
-def _run(name, target, tests, old, new, failures):
+def _isolate():
+    """Throwaway tree: git archive HEAD + overlay of working-tree src/tests/scripts.
+
+    Never copies source .git (a linked worktree's .git is a pointer; git in the
+    copy would mutate the real index). Mutations live only here, under /tmp,
+    so SIGKILL cannot leave the source tree contaminated.
+    """
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="alb-mut.", dir="/tmp"))
+    source = str(SOURCE_ROOT.resolve())
+    if str(tmp.resolve()).startswith(source + os.sep) or tmp.resolve() == SOURCE_ROOT.resolve():
+        shutil.rmtree(tmp, ignore_errors=True)
+        print("FAIL: mutation temp dir is inside the scanned tree", file=sys.stderr)
+        sys.exit(1)
+    archive = subprocess.run(
+        ["git", "archive", "HEAD"], cwd=SOURCE_ROOT,
+        capture_output=True, check=True)
+    subprocess.run(["tar", "-x", "-C", str(tmp)], input=archive.stdout, check=True)
+    for name in ("src", "tests", "scripts"):
+        src, dst = SOURCE_ROOT / name, tmp / name
+        if not src.is_dir():
+            continue
+        if dst.exists():
+            shutil.rmtree(dst)
+        shutil.copytree(
+            src, dst,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".git"))
+    return tmp
+
+
+def _in_work(work, target):
+    return work / target.relative_to(SOURCE_ROOT)
+
+
+def _run(name, target, tests, old, new, failures, work):
+    target = _in_work(work, target)
     original = target.read_text(encoding="utf-8")
     if old not in original:
         failures.append(f"{name}: mutation anchor no longer present")
         print(f"  FAIL {name} (anchor missing)")
         return
     try:
-        _purge_bytecode()
+        _purge_bytecode(work)
         target.write_text(original.replace(old, new, 1), encoding="utf-8")
         result = subprocess.run(
             [sys.executable, "-m", "unittest", tests],
-            capture_output=True, text=True, cwd=ROOT,
-                env={**os.environ, "PYTHONPATH": str(ROOT / "src"),
+            capture_output=True, text=True, cwd=work,
+            env={**os.environ, "PYTHONPATH": str(work / "src"),
                  "PYTHONDONTWRITEBYTECODE": "1"},
         )
     finally:
         target.write_text(original, encoding="utf-8")
-        _purge_bytecode()
+        _purge_bytecode(work)
     if result.returncode == 0:
         failures.append(f"{name}: DISABLED BUT NO TEST FAILED")
     print(f"  {'ok  ' if result.returncode else 'FAIL'} {name}")
 
 
 def main():
-    original = SRC.read_text(encoding="utf-8")
+    before = _git_status(SOURCE_ROOT)
+    work = _isolate()
     failures = []
+    src = _in_work(work, SRC)
+    original = src.read_text(encoding="utf-8")
     try:
         for name, (target, tests, old, new) in EXTRA.items():
-            _run(name, target, tests, old, new, failures)
+            _run(name, target, tests, old, new, failures, work)
         for name, (old, new) in MUTATIONS.items():
             if old not in original:
                 failures.append(f"{name}: mutation anchor no longer present")
                 continue
-            SRC.write_text(original.replace(old, new, 1), encoding="utf-8")
+            src.write_text(original.replace(old, new, 1), encoding="utf-8")
             result = subprocess.run(
                 [sys.executable, "-m", "unittest", "tests.test_letter"],
-                capture_output=True, text=True, cwd=ROOT,
-            env={**os.environ, "PYTHONPATH": str(ROOT / "src"),
-                 "PYTHONDONTWRITEBYTECODE": "1"},
+                capture_output=True, text=True, cwd=work,
+                env={**os.environ, "PYTHONPATH": str(work / "src"),
+                     "PYTHONDONTWRITEBYTECODE": "1"},
             )
             if result.returncode == 0:
                 failures.append(f"{name}: DISABLED BUT NO TEST FAILED")
             print(f"  {'ok  ' if result.returncode else 'FAIL'} {name}")
     finally:
-        SRC.write_text(original, encoding="utf-8")
-        _purge_bytecode()
+        src.write_text(original, encoding="utf-8")
+        _purge_bytecode(work)
+        shutil.rmtree(work, ignore_errors=True)
+
+    after = _git_status(SOURCE_ROOT)
+    if after != before:
+        print("FAIL: source tree contaminated by the mutation gate", file=sys.stderr)
+        print(after, file=sys.stderr)
+        failures.append("source tree status changed")
 
     if failures:
         print("\nMUTATION GATE FAILED\n")

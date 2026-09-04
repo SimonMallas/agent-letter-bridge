@@ -15,6 +15,8 @@ import time
 
 from alb.allowlist import gate
 from alb.letter import store
+from alb import msgindex
+from alb.outbound import store as outbound_store
 
 
 class PlatformConflict(Exception):
@@ -25,6 +27,60 @@ class PlatformConflict(Exception):
     under a restart-on-crash-only policy stays down by design - state that
     wherever this is used.
     """
+
+
+def _thread_of(searched, letter_id):
+    """The thread a stored letter belongs to - its own thread field, or
+    itself when it roots one."""
+    for directory in searched:
+        try:
+            stored = store.resolve(directory, letter_id)
+            return stored.meta.get("thread") or letter_id
+        except store.NoSuchLetter:
+            continue
+    return letter_id
+
+
+def _current_thread(state, correspondent, letter_id, cut):
+    """Per-correspondent thread pointer: this letter roots a new thread when
+    the pointer is empty or /new cut it; otherwise the open thread continues."""
+    path = pathlib.Path(state) / "threads.json"
+    try:
+        table = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        table = {}
+    if cut or correspondent not in table:
+        table[correspondent] = letter_id
+        tmp = pathlib.Path(str(path) + ".tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(table))
+        os.replace(tmp, path)
+    return table[correspondent]
+
+
+def _stamp_thread(inbox, letter_id, thread):
+    """The one sanctioned rewrite: thread is stamped at PUBLISH time, before
+    anyone has been told the letter exists - the letter is not yet anyone's
+    record. After the doorbell, letters are never rewritten; this runs inside
+    the same publish step, pre-ack, pre-ring."""
+    path = pathlib.Path(inbox) / f"{letter_id}.md"
+    text = path.read_text(encoding="utf-8")
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        if line == "thread:" or line.startswith("thread: "):
+            lines[i] = f"thread: {thread}"
+            break
+    else:
+        return
+    tmp = pathlib.Path(str(path) + ".tmp")
+    # Born 0600 like every letter (grok's must-fix: a umask-governed write
+    # here made the stamped letter 0644 - same class as the state files this
+    # build already caught once).
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))
+    os.replace(tmp, path)
 
 
 def _write_heartbeat(path):
@@ -70,7 +126,8 @@ class Cycle(list):
 
 
 def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
-              processed=None, sender="telegram-bridge", recipient="agent"):
+              processed=None, sender="telegram-bridge", recipient="agent",
+              state=None):
     """Fetch pending updates and durably record the permitted ones.
 
     Returns the ids of letters published, which may be fewer than the updates
@@ -81,6 +138,10 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
     # everywhere they land, or a late redelivery republishes a letter that was
     # already handled.
     searched = [inbox] + ([processed] if processed else [])
+    # W2: correspondent identity, threading, and the message-id index all
+    # live in private state. Derived from the ledger's home when not given,
+    # so existing callers keep working and everything private stays together.
+    state = pathlib.Path(state) if state else pathlib.Path(ledger).parent
 
     result = Cycle()
     for item in platform.fetch(offset=None):
@@ -96,24 +157,60 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
         # message would wedge the bridge and no permitted mail behind it would
         # ever arrive. Silence must not mean stuck.
         if gate.allows(allowlist_path, chat_id):
+            text = item.get("text", "")
+            message_id = str(item.get("message_id", "") or "")
+            extra = {
+                "telegram_chat_id": chat_id,
+                "telegram_update_id": item["update_id"],
+            }
+            if message_id:
+                extra["telegram_message_id"] = message_id
+            # Gate 0: the external principal is provenance, never a routable
+            # participant. Stable opaque key, derived once, store-authoritative.
+            extra["correspondent"] = outbound_store.correspondent_key(
+                state, chat_id)
+
+            # Platform reply-to resolves through the exact-triple index only.
+            # A hit fills re: and joins THAT letter's thread; a miss changes
+            # nothing - exact match or nothing, never fuzzy.
+            reply_target = ""
+            rt_mid = str(item.get("reply_to_message_id", "") or "")
+            if rt_mid:
+                reply_target = msgindex.lookup(state, "telegram", chat_id,
+                                               rt_mid) or ""
+            if reply_target:
+                extra["re"] = reply_target
+                extra["thread"] = _thread_of(searched, reply_target)
+
             letter_id = store.publish_once(
                 inbox,
                 ledger,
                 str(item["update_id"]),
-                item.get("text", ""),
+                text,
                 store.envelope(
                     sender=sender,
                     recipient=recipient,
-                    extra={
-                        "telegram_chat_id": chat_id,
-                        "telegram_update_id": item["update_id"],
-                    },
+                    extra=extra,
                 ),
                 searched=searched,
             )
             if letter_id is not None:
                 result.append(letter_id)
                 result.published += 1
+                if message_id:
+                    msgindex.record(state, "telegram", chat_id, message_id,
+                                    letter_id)
+                if not reply_target:
+                    # One open thread per correspondent, cut ONLY by /new at
+                    # position zero (structure, never interpretation - the
+                    # token stays in the stored body). A platform reply into
+                    # an old thread deliberately does not move this pointer.
+                    thread = _current_thread(
+                        state, extra["correspondent"], letter_id,
+                        cut=text.split(" ", 1)[0] == "/new" if text else False)
+                    _stamp_thread(inbox, letter_id, thread)
+                else:
+                    _stamp_thread(inbox, letter_id, extra["thread"])
             else:
                 # Already published, and dedup said so. Counted apart from a
                 # deny: both publish nothing, but only one of them is the

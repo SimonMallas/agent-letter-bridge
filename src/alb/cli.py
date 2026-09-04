@@ -93,6 +93,18 @@ def main(argv=None):
                         help="report bridge and ring health; reads only")
     parser.add_argument("--doctor", action="store_true",
                         help="local diagnostics; holds no token, makes no platform call")
+    parser.add_argument("--list", action="store_true",
+                        help="the correspondence, both directions; reads only")
+    parser.add_argument("--show", metavar="LETTER_ID",
+                        help="one letter, envelope and body; reads only")
+    parser.add_argument("--search", metavar="TEXT",
+                        help="exact substring over bodies and envelopes; reads only")
+    parser.add_argument("--thread", metavar="LETTER_ID",
+                        help="a whole thread by any member letter; reads only")
+    parser.add_argument("--export", metavar="LETTER_ID",
+                        help="tar a thread's letters and receipts (with --out)")
+    parser.add_argument("--out", metavar="PATH",
+                        help="destination for --export")
     parser.add_argument("--reply-to", metavar="LETTER_ID",
                         help="reply to a stored letter instead of polling")
     parser.add_argument("--text", help="reply body, with --reply-to")
@@ -148,6 +160,41 @@ def main(argv=None):
         print(checks.summary(listing, os.getpid(), pathlib.Path(args.root), dict(os.environ)))
         return 0
 
+    # W4 retrieval: read-only, no token, no config - the same standing as
+    # --status. The mail root comes from the flag or defaults to --root.
+    if args.list or args.show or args.search or args.thread or args.export:
+        from alb import retrieval
+        mail = pathlib.Path(args.mail_root) if args.mail_root else pathlib.Path(args.root)
+        dirs = [mail / "inbox", mail / "processed", mail / "outbox"]
+        try:
+            if args.show:
+                got = retrieval.show(dirs, args.show)
+                print(pathlib.Path(got["where"]).read_text(encoding="utf-8"),
+                      end="")
+                return 0
+            if args.export:
+                if not args.out:
+                    print("alb: --export needs --out PATH", file=sys.stderr)
+                    return 2
+                dest = retrieval.export_thread(
+                    dirs, pathlib.Path(args.root) / "state", args.export,
+                    args.out)
+                print(f"alb: exported to {dest}")
+                return 0
+            rows = (retrieval.thread(dirs, args.thread) if args.thread
+                    else retrieval.search(dirs, args.search) if args.search
+                    else retrieval.list_letters(dirs))
+            for r in rows:
+                arrow = "->" if r["direction"] == "out" else "<-"
+                print(f"{r['id']}  {arrow}  {r['from']} to {r['to']}  "
+                      f"[{r['type']}]  thread {r['thread']}")
+            if not rows:
+                print("alb: no letters")
+            return 0
+        except retrieval.NoSuchLetter as exc:
+            print(f"alb: {exc}", file=sys.stderr)
+            return 1
+
     if not args.config:
         print("alb: --config is required", file=sys.stderr)
         return 2
@@ -198,7 +245,12 @@ def main(argv=None):
                 # integrated mode the letter is not under --root at all, and
                 # searching only there refuses a reply to a letter that plainly
                 # exists - the dogfood send bug in a new place.
-                searched=[mail / "inbox", mail / "processed"])
+                searched=[mail / "inbox", mail / "processed"],
+                # v0.2: the reply becomes a durable outbound LETTER in the
+                # mail root's outbox before the platform hears anything, and
+                # its creation is the claim.
+                outbox=mail / "outbox",
+                agent=config.get("ALB_TO", "agent"))
         except reply.AmbiguousOutcome as exc:
             print(f"alb: AMBIGUOUS - dead-lettered for a human, NOT retried: {exc}",
                   file=sys.stderr)
@@ -313,6 +365,13 @@ def _report(cycle, once):
 
 
 def _poll_forever(platform, transport, surface, root, args, config):
+    # First act on rising: reconcile outbound letters left in flight by a
+    # crash - each dead-letters for a human, once, before any new work.
+    from alb.outbound import store as outbound
+    flagged = outbound.reconcile_at_startup(root / "state")
+    for letter_id in flagged:
+        print(f"alb: reconciled in-flight outbound {letter_id} -> dead-letter",
+              file=sys.stderr)
     while True:
         try:
             published = run.run_once(

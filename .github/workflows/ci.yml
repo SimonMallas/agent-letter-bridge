@@ -26,6 +26,11 @@ jobs:
       - name: Dependency gate
         run: python3 scripts/deps_check.py
 
+      # W5 vendors reviewed Letterbox conformance bytes. CI verifies the local
+      # manifest and inventory only; ordinary CI never fetches fixture data.
+      - name: Conformance fixture snapshot
+        run: python3 scripts/check_conformance_vendor.py
+
       # A wheel that imports cleanly is proved by INSTALLING it, not by the
       # suite - which runs from the source tree so mutations stay visible.
       - name: Install smoke test

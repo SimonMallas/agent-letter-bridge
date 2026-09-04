@@ -34,7 +34,8 @@ class Fetch(unittest.TestCase):
             {"update_id": 5, "message": {"chat": {"id": 111}, "text": "hi"}}
         ]}):
             got = self.client.fetch(offset=None)
-        self.assertEqual(got, [{"update_id": 5, "chat_id": "111", "text": "hi"}])
+        self.assertEqual(got, [{"update_id": 5, "chat_id": "111", "text": "hi",
+                                "message_id": "", "reply_to_message_id": ""}])
 
     def test_a_non_message_update_is_surfaced_so_it_can_be_consumed(self):
         """Edits, reactions and channel posts must not be silently dropped.

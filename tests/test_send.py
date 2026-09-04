@@ -221,3 +221,98 @@ class BoundedReply(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LetterFirstOutbound(unittest.TestCase):
+    """W1 slice 2: send_reply writes the outbound LETTER first - its O_EXCL
+    create is the claim - then brackets the platform call in immutable events.
+    The old body-hash claim is gone: cardinality is per SOURCE letter, changed
+    text against a claimed source refuses, and the message id the platform
+    returns lands in the events, never on the letter."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        self.inbox = self.root / "inbox"; self.inbox.mkdir()
+        self.outbox = self.root / "outbox"; self.outbox.mkdir()
+        self.state = self.root / "state"; self.state.mkdir()
+        self.allow = self.root / "allowlist.json"
+        self.allow.write_text(json.dumps({"chats": ["8675309"]}), encoding="utf-8")
+        self.letter_id = store.publish(self.inbox, "incoming",
+                                       {"chat_id": "8675309"})
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _send(self, sender, text="a reply"):
+        return reply.send_reply(
+            sender, self.inbox, self.state, self.allow, self.letter_id, text,
+            outbox=self.outbox, agent="codex")
+
+    def events(self, out_id):
+        d = self.state / "receipts" / out_id
+        return sorted(p.name for p in d.iterdir()) if d.is_dir() else []
+
+    def test_the_letter_exists_before_the_platform_is_called(self):
+        seen = {}
+        outbox = self.outbox
+
+        class Peeking:
+            def send(self, chat_id, text):
+                seen["letters"] = list(outbox.glob("*.md"))
+                return "42"
+        self._send(Peeking())
+        self.assertEqual(len(seen["letters"]), 1)
+
+    def test_events_bracket_the_call_and_carry_the_message_id(self):
+        class MidSender:
+            def send(self, chat_id, text):
+                return "4242"
+        out_id = self._send(MidSender())
+        names = self.events(out_id)
+        self.assertEqual(names, ["1-composed.json", "2-sending.json", "3-sent.json"])
+        sent = json.loads((self.state / "receipts" / out_id / "3-sent.json").read_text())
+        self.assertEqual(sent["platform_message_id"], "4242")
+
+    def test_the_letter_never_carries_the_message_id(self):
+        class MidSender:
+            def send(self, chat_id, text): return "4242"
+        out_id = self._send(MidSender())
+        text = next(self.outbox.glob(f"{out_id}.md")).read_text()
+        self.assertNotIn("4242", text)
+
+    def test_second_reply_to_same_source_refuses_even_with_new_text(self):
+        self._send(FakeSender())
+        with self.assertRaises(reply.AlreadyClaimed):
+            self._send(FakeSender(), text="totally different words")
+        self.assertEqual(len(list(self.outbox.glob("*.md"))), 1)
+
+    def test_ambiguous_records_event_and_dead_letters(self):
+        with self.assertRaises(reply.AmbiguousOutcome):
+            self._send(FakeSender("ambiguous"))
+        out_id = f"reply-{self.letter_id}"
+        self.assertIn("3-ambiguous.json", self.events(out_id))
+        dead = list((self.state / "dead-letters").glob("*.json"))
+        self.assertEqual(len(dead), 1)
+        payload = json.loads(dead[0].read_text())
+        self.assertEqual(payload["letter_id"], self.letter_id)
+
+    def test_refusal_records_event_no_dead_letter(self):
+        with self.assertRaises(reply.DefiniteRefusal):
+            self._send(FakeSender("refused"))
+        out_id = f"reply-{self.letter_id}"
+        self.assertIn("3-refused.json", self.events(out_id))
+        self.assertEqual(list((self.state / "dead-letters").glob("*")), [])
+
+    def test_unclassified_failure_is_ambiguous(self):
+        class Buggy:
+            def send(self, chat_id, text): raise RuntimeError("adapter bug")
+        with self.assertRaises(reply.AmbiguousOutcome):
+            self._send(Buggy())
+        self.assertIn("3-ambiguous.json", self.events(f"reply-{self.letter_id}"))
+
+    def test_allowlist_still_checked_before_any_letter_is_written(self):
+        self.allow.write_text(json.dumps({"chats": ["999"]}), encoding="utf-8")
+        with self.assertRaises(reply.NotPermitted):
+            self._send(FakeSender())
+        self.assertEqual(list(self.outbox.glob("*.md")), [])
