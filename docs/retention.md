@@ -23,6 +23,22 @@ with mail.
 `alb export` (v0.2, lands with the retrieval CLI) is how you take a
 copy **you** can keep. It does not change the live store.
 
+### Spec names and shipped CLI flags
+
+The v0.2 spec names the retrieval operations as verbs. The shipped binary
+keeps its established flag grammar; these are the same operations, not two
+interfaces:
+
+| Spec name | Shipped invocation |
+| --- | --- |
+| `alb list` | `alb --root <state> [--mail-root <mailbox>] --list` |
+| `alb show <id>` | `alb --root <state> [--mail-root <mailbox>] --show <id>` |
+| `alb search <text>` | `alb --root <state> [--mail-root <mailbox>] --search <text>` |
+| `alb thread <id>` | `alb --root <state> [--mail-root <mailbox>] --thread <id>` |
+| `alb export <id>` | `alb --root <state> [--mail-root <mailbox>] --export <id> --out <archive.tar>` |
+
+Use the flag forms above. There are no positional retrieval subcommands.
+
 ---
 
 ## What durable does not mean
@@ -54,13 +70,13 @@ copy **you** can keep. It does not change the live store.
 Non-destructive. It does not delete, rewrite, or tombstone anything.
 
 ```sh
-alb export --root /path/to/state [--mail-root /path/to/mailbox] thread <id>
-alb export --root /path/to/state [--mail-root /path/to/mailbox] origin <key>
+alb --root /path/to/state [--mail-root /path/to/mailbox] \
+  --export <letter-id> --out /path/to/archive.tar
 ```
 
-The archive is a tar of:
+The archive is a tar of the thread selected by any member letter id:
 
-- the letters in that thread or origin (inbound and outbound), and
+- the letters in that thread (inbound and outbound), and
 - the receipt logs that belong to those letters.
 
 It does **not** include: bot token, `bridge.env`, allowlist, offset,
