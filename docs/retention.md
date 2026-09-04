@@ -31,8 +31,8 @@ copy **you** can keep. It does not change the live store.
   "we are your archive policy." If you need a retention period, you
   enforce it. This tool will not silently expire letters in v0.2.
 - **Not a librarian.** No promotion, summaries, embeddings, or search
-  ranking. `alb list` / `show` / `search` / `thread` (when shipped) scan
-  files. That is a filing cabinet.
+  ranking. `alb --list` / `--show` / `--search` / `--thread` scan files.
+  That is a filing cabinet.
 - **Not the chat app's history.** Telegram (or any platform) keeps
   whatever it keeps. We cannot delete, export, or prove their copy.
   A letter here and a bubble on your phone are two records of one
