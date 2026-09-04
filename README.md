@@ -5,8 +5,9 @@ becomes part of their memory.**
 
 Agent Letter Bridge connects a chat app to AI agents on your own machine. An
 incoming message becomes a durable file on disk **before** it is acknowledged and
-**before** any agent is notified. The file is the source of truth; the
-notification only makes it faster.
+**before** any agent is notified. The file is the source of truth; the ring is
+how it gets read. Letter first, then ring — without a bell, mail lands in a dead
+drop and nobody is told.
 
 Most tools in this space deliver an external message **as the agent's input** —
 typed into its terminal, or handed to its session as a prompt. This one delivers
@@ -66,7 +67,7 @@ back.
 ## Design
 
 Four roles with deliberately unequal privilege. The separation *is* the
-product — and in v0.1 it is enforced at module boundaries and proved by
+product — and it is enforced at module boundaries and proved by
 tests (the poller code path cannot ring; the watchdog reads only mirrored
 state), not by OS process isolation: the resident bridge holds the token and
 the notifier in one process, and `docs/operations.md` states that limit
@@ -164,7 +165,7 @@ Waking an agent that already handles other mail: [`docs/agent-setup.md`](docs/ag
 
 ## Status
 
-**v0.2.** Inbound delivery, ringing and bounded replies have been
+**v0.2.1.** Inbound delivery, ringing and bounded replies have been
 exercised live against real bots on macOS and Linux, cmux and tmux, including by
 someone other than the author. v0.2 adds durable outbound letters, correspondent
 identity and threading, and read-only retrieval (`--list`, `--show`, `--search`,

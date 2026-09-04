@@ -7,6 +7,54 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-09-04
+
+Package metadata correction. 0.2.0 shipped with `version = "0.1.1"` in
+`pyproject.toml`, so `alb --version` reported the previous release on a tree
+tagged v0.2.0 — a stranger could not tell which world they had cloned. Caught
+by an outside reviewer within hours of the flip. The tag stands as published;
+this release makes the metadata tell the truth.
+
+Also in this release: the README no longer describes the ring as something that
+"only makes it faster" — letter first, then ring, and without a bell mail lands
+in a dead drop and nobody is told. The Design section no longer dates its
+isolation claim to v0.1.
+
+## [0.2.0] — 2026-09-04
+
+Durable outbound, correspondent identity and threading, and read-only
+retrieval. First release published to a public repository.
+
+### The letter is the claim
+
+An outbound reply is written as a letter — created `O_EXCL` — **before** the
+platform is touched. That create *is* the claim on the work, so a crash between
+send and record cannot produce a silent double-send: the second attempt finds
+the letter already there. Delivery events are immutable numbered files rather
+than appended lines, so a crash mid-write cannot tear the record. Startup
+reconciliation finds anything left in flight with no terminal event,
+dead-letters it, and says so.
+
+### Identity and threading
+
+Correspondents are provenance, not participants: `from` and `to` remain
+routable agent ids. Replies resolve on the exact `(platform, origin,
+message_id)` triple in both directions — no prefix matching. One thread per
+correspondent, stamped inside publish.
+
+### Retrieval
+
+`--list`, `--show`, `--search`, `--thread`, `--export`. Read-only, standard
+library, no config and no token: reading your own records never needs a
+credential.
+
+### Coverage
+
+344 tests and 99 mutation-pinned invariants. Automated coverage still uses
+fakes — the suite proves the invariants, live runs prove the transports, and
+those are different claims. The inbound path has real live mileage; the paths
+added here are covered and reviewed but newer.
+
 ## [0.1.1] — 2026-09-02
 
 First complete release (0.1.0 tagged earlier the same day; 0.1.1 lands the
