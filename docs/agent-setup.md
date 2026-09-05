@@ -113,12 +113,20 @@ On waking, and on any sweep of your inbox, run:
     alb --check --root <your root>
 
   exit 0  nothing to do.
-  exit 2  your relay is dead. Stop it (alb --stop --root <your root>),
-          then start it again in ITS OWN pane — the same one, never a
-          second. Two pollers on one token is a conflict, not a backup.
+  exit 2  your relay is UNRESPONSIVE — silent past a policy threshold,
+          which is grounds to restart it and not proof it is dead. Stop it
+          (alb --stop --root <your root>), then start it again in ITS OWN
+          pane — the same one, never a second. Two pollers on one token
+          is a conflict, not a backup.
   exit 3  something is wrong that a restart will not fix. Read what it
           says and tell your operator.
 ```
+
+The distinction in exit 2 is not pedantry. The thresholds are policy, not
+proof: while any part of a poll can take unbounded time, no number can
+establish death — only suspicion. Restarting on suspicion is right, because a
+suspected-dead relay is worth restarting. But if you report it onward, report
+what you know rather than what the exit code sounds like.
 
 This is the whole of the self-healing. There is no daemon watching you and
 there will not be one: under cmux the bridge must be born inside a pane, so

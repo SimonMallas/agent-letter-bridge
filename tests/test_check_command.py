@@ -175,3 +175,40 @@ class TheTwoRitualsAgree(unittest.TestCase):
         self.assertTrue(line)
         self.assertNotIn("interrupt", " ".join(line).lower(),
                          "it requests; it has never interrupted anything")
+
+
+class TheRitualUsesTheVerdictsOwnWords(unittest.TestCase):
+    """Pi's third follow-up. I changed the verdict from dead to unresponsive
+    and left the doc saying dead - the same disagreement Codex found between
+    the binary and agent-setup.md, arriving through a terminology change
+    rather than a missing command.
+
+    An agent reads the doc to learn what the exit code means. If the doc
+    promises certainty the code deliberately withdrew, the withdrawal is
+    decorative."""
+
+    def setUp(self):
+        self.doc = (ROOT_DIR / "docs" / "agent-setup.md").read_text(
+            encoding="utf-8")
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "state").mkdir()
+        (self.root / "state" / "health.json").write_text(
+            json.dumps({"heartbeat": time.time() - 900, "state": "running"}),
+            encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_doc_says_what_the_binary_says(self):
+        out = subprocess.run([ALB, "--check", "--root", str(self.root)],
+                             capture_output=True, text=True).stdout.lower()
+        self.assertIn("unresponsive", out)
+        self.assertIn("unresponsive", self.doc.lower(),
+                      "the doc must teach the word the code actually returns")
+
+    def test_the_doc_does_not_promise_death(self):
+        exit2 = [l for l in self.doc.splitlines() if "exit 2" in l]
+        self.assertTrue(exit2)
+        self.assertNotIn("is dead", " ".join(exit2).lower(),
+                         "a policy threshold cannot establish death")

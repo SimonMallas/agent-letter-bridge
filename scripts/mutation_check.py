@@ -555,6 +555,10 @@ EXTRA = {
         ROOT / "src" / "alb" / "watchdog" / "health.py", "tests.test_wake_check",
         '    return Verdict("unresponsive", "restart",',
         '    return Verdict("dead", "restart",'),
+    "the ritual and the verdict use the same word": (
+        ROOT / "src" / "alb" / "watchdog" / "health.py", "tests.test_check_command",
+        '    return Verdict("unresponsive", "restart",',
+        '    return Verdict("silent", "restart",'),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

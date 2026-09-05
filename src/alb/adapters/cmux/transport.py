@@ -24,6 +24,13 @@ CMUX = "cmux"
 # provable, because the number would describe a path with no ceiling - and a
 # bridge stuck in a subprocess looks exactly like the death a supervisor
 # exists to detect. A bounded ring can fail; an unbounded one can hang.
+#
+# PER SUBPROCESS, not per ring: a transport that types a line and then submits
+# it makes two calls, so the wall-clock ceiling is roughly twice this plus
+# process startup. A helper that forks children of its own needs its own
+# lifecycle contract - a timeout here proves this child was abandoned, not
+# that its descendants were. And a timed-out ring does not prove nothing was
+# submitted, so it is never blindly replayed.
 RING_TIMEOUT = 10
 
 
