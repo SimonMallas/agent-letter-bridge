@@ -355,3 +355,40 @@ class AStandDownProvesWhichRunStoodDown(unittest.TestCase):
     def test_a_stand_down_naming_no_run_proves_nothing(self):
         said = self._stop_seeing({"state": "yielded", "reason": "requested"})
         self.assertNotIn("stopped", said.replace("never read", ""))
+
+
+class TheFallbackDoesNotClaimACause(unittest.TestCase):
+    """Pi's wording correction. Absence of a receipt cannot establish WHY the
+    bridge is gone: it may have ended for its own reasons, or stood down and
+    failed to record it. Naming the first is claiming a cause the evidence
+    does not support - the same error as reading the request's disappearance
+    as proof it was honoured, one level further out."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "state").mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_it_says_unconfirmed_rather_than_naming_a_reason(self):
+        from unittest import mock
+        from alb import cli
+        calls = {"n": 0}
+
+        def running_pid(root):
+            calls["n"] += 1
+            return 4242 if calls["n"] == 1 else None
+
+        with mock.patch.multiple(
+                cli.singleton, request_stop=lambda root: "gen-A",
+                running_pid=running_pid,
+                stop_requested=lambda root, generation: False,
+                clear_stop_request=lambda root: None):
+            with mock.patch.object(cli.sys, "stdout") as out:
+                cli.main(["--stop", "--root", str(self.root)])
+        said = " ".join(str(c) for c in out.method_calls).lower()
+        self.assertIn("unconfirmed", said)
+        self.assertIn("or that the record did not survive", said,
+                      "both explanations must be offered, not one asserted")

@@ -542,6 +542,10 @@ EXTRA = {
         ROOT / "src" / "alb" / "setup" / "wizard.py", "tests.test_setup",
         "        raise UnreadableConfig(str(exc)) from None",
         "        return {}"),
+    "the fallback does not claim a cause": (
+        CLI, "tests.test_stop",
+        '                print("the bridge is gone; consumption unconfirmed. It did not "',
+        '                print("the bridge is gone. It ended for its own reasons. "'),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

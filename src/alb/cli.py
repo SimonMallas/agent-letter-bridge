@@ -181,9 +181,15 @@ def main(argv=None):
                 if _recorded_stand_down(args.root, requested_at, asked):
                     print("stopped")
                     return 0
-                print("the bridge is gone. It did not record standing down for "
-                      "our request, so it ended for its own reasons - check "
-                      "alb.log before starting another.")
+                # "No receipt" does not establish WHY. The bridge may have
+                # ended for its own reasons, or stood down and failed to
+                # record it. Naming the first would be claiming a cause the
+                # absence cannot support - the same error as reading the
+                # request's disappearance as proof it was honoured.
+                print("the bridge is gone; consumption unconfirmed. It did not "
+                      "record standing down for our request, which may mean it "
+                      "ended for another reason or that the record did not "
+                      "survive. Check alb.log before starting another.")
                 return 0
             time.sleep(0.2)
         print("stop requested; the bridge is still running. It checks at its "
