@@ -483,6 +483,18 @@ EXTRA = {
         "        if not math.isfinite(heartbeat):\n"
         '            raise ValueError("non-finite heartbeat")\n',
         ""),
+    "a stop signals only a holder the lock proves is alive": (
+        ROOT / "src" / "alb" / "bridge" / "singleton.py", "tests.test_stop",
+        "            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+        "        except OSError:\n"
+        "            # Held: someone is alive. Read who.",
+        "            pass\n"
+        "        except OSError:\n"
+        "            # Held: someone is alive. Read who."),
+    "the holder records its pid": (
+        ROOT / "src" / "alb" / "bridge" / "singleton.py", "tests.test_stop",
+        '        os.write(fd, json.dumps({"pid": os.getpid()}).encode("utf-8"))',
+        "        pass"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

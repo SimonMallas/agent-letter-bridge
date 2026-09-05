@@ -34,7 +34,9 @@ supervision it will stay stopped, which is intended. See docs/operations.md.
 """
 import argparse
 import contextlib
+import os
 import pathlib
+import signal
 import sys
 import time
 
@@ -91,6 +93,9 @@ def main(argv=None):
                         help="prove the send path is alive; sends to your own chat")
     parser.add_argument("--status", action="store_true",
                         help="report bridge and ring health; reads only")
+    parser.add_argument("--stop", action="store_true",
+                        help="interrupt the bridge running on this root; "
+                             "starts nothing")
     parser.add_argument("--check", action="store_true",
                         help="what a waking agent should DO about its relay; "
                              "exit 0 nothing, 2 restart it, 3 investigate")
@@ -119,6 +124,35 @@ def main(argv=None):
     # reaches the platform unless the operator asks it to in that moment.
     if args.init:
         return _init(args)
+
+    # Stopping is a signal to a process this product owns. It deliberately
+    # knows nothing about panes: STARTING is a pane act and belongs to whoever
+    # owns the multiplexer, but ending a process we started is ours, and
+    # leaving it to each seat is how one agent ended up signalling a pid it
+    # had found by hand.
+    if args.stop:
+        # No local import: singleton is already imported at module level, and
+        # re-importing it here would make the name local to this whole
+        # function - unbinding the module-level one for every branch after
+        # this. Which is exactly what it did, twice, before this comment.
+        pid = singleton.running_pid(args.root)
+        if pid is None:
+            print("nothing to stop: no bridge holds this root")
+            return 0
+        if pid < 0:
+            print("a bridge holds this root but did not record its pid - "
+                  "refusing to guess at one. Find it in its pane and "
+                  "interrupt it there.")
+            return 1
+        os.kill(pid, signal.SIGINT)
+        for _ in range(100):
+            if singleton.running_pid(args.root) is None:
+                print(f"stopped {pid}")
+                return 0
+            time.sleep(0.1)
+        print(f"signalled {pid}, but it still holds the lock after 10s. "
+              f"It may be mid-send; do not start a second one.")
+        return 1
 
     # The wake-check. Deliberately separate from --status: status describes,
     # this one DECIDES, and the exit code carries the decision so a standing
@@ -181,7 +215,6 @@ def main(argv=None):
     # Doctor runs BEFORE the config is loaded and never reads the token: it is
     # the tool you reach for when the bridge will not start.
     if args.doctor:
-        import os
         import subprocess
         from alb.doctor import checks
         listing = subprocess.run(["ps", "-Ao", "uid,pid,command"],
