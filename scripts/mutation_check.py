@@ -476,8 +476,8 @@ EXTRA = {
         ""),
     "the advice names only commands that exist": (
         CLI, "tests.test_check_command",
-        '            print("action: restart the bridge in its own pane. Interrupt the "',
-        '            print("action: restart. Stop it first with --stop. "'),
+        '                  "running one first with `alb --stop --root <your root>`, "',
+        '                  "running one first with `alb --halt`, "'),
     "a non-finite heartbeat is investigated, never a crash": (
         ROOT / "src" / "alb" / "watchdog" / "health.py", "tests.test_wake_check",
         "        if not math.isfinite(heartbeat):\n"
@@ -506,6 +506,12 @@ EXTRA = {
         "        asked = singleton.request_stop(args.root)",
         "        singleton.request_stop(args.root)\n"
         "        asked = singleton.current_generation(args.root)"),
+    "the two restart rituals name the same command": (
+        CLI, "tests.test_check_command",
+        '            print("action: restart the bridge in its own pane. Stop the "\n'
+        '                  "running one first with `alb --stop --root <your root>`, "',
+        '            print("action: restart the bridge in its own pane. Interrupt "\n'
+        '                  "it with cmux send-key ctrl+c, "'),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

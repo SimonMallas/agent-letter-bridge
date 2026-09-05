@@ -94,8 +94,8 @@ def main(argv=None):
     parser.add_argument("--status", action="store_true",
                         help="report bridge and ring health; reads only")
     parser.add_argument("--stop", action="store_true",
-                        help="interrupt the bridge running on this root; "
-                             "starts nothing")
+                        help="request the bridge on this root to stand down; "
+                             "signals nothing, starts nothing")
     parser.add_argument("--check", action="store_true",
                         help="what a waking agent should DO about its relay; "
                              "exit 0 nothing, 2 restart it, 3 investigate")
@@ -192,8 +192,8 @@ def main(argv=None):
             # Names only what exists today. The first version of this line
             # recommended an alb flag that had not been built, so obeying the
             # verdict failed at the moment of obedience.
-            print("action: restart the bridge in its own pane. Interrupt the "
-                  "running one first (cmux send-key --surface <yours> ctrl+c), "
+            print("action: restart the bridge in its own pane. Stop the "
+                  "running one first with `alb --stop --root <your root>`, "
                   "then start it in that SAME pane. Never start a second one: "
                   "two pollers on one token is a conflict, not a backup.")
             return 2

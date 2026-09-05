@@ -175,3 +175,64 @@ class TheStopRemembersWhatItAsked(unittest.TestCase):
         self.assertEqual(got.returncode, 0, got.stderr)
         self.assertFalse((self.root / "state" / "stop-requested").exists(),
                          "an unhonoured request must not be left behind")
+
+
+class TheSeamItselfIsPinned(unittest.TestCase):
+    """Codex F1-test: my previous regression never reached the seam it
+    claimed to pin. It killed the holder BEFORE invoking --stop, so the
+    command took the nothing-is-running branch - where the mutant behaves
+    identically. A pin whose named test cannot distinguish the mutant is a
+    green light wired to nothing, which is worse than an absent test because
+    it retires the question.
+
+    This one drives the seam deterministically: request_stop returns a
+    generation, and every holder check after it says absent."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "state").mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_generation_is_carried_not_reread(self):
+        from unittest import mock
+        from alb import cli
+        from alb.bridge import singleton
+
+        (self.root / "state" / singleton.STOP_REQUEST).write_text(
+            json.dumps({"generation": "gen-A"}), encoding="utf-8")
+        seen = {"reread": 0, "checked_with": [], "cleared": 0}
+
+        def request_stop(root):
+            return "gen-A"
+
+        def current_generation(root):
+            seen["reread"] += 1
+            return None          # the holder vanished in the gap
+
+        def running_pid(root):
+            return None          # lock free: the wait ends immediately
+
+        def stop_requested(root, generation):
+            seen["checked_with"].append(generation)
+            return generation == "gen-A"
+
+        def clear_stop_request(root):
+            seen["cleared"] += 1
+
+        with mock.patch.multiple(
+                cli.singleton, request_stop=request_stop,
+                current_generation=current_generation, running_pid=running_pid,
+                stop_requested=stop_requested,
+                clear_stop_request=clear_stop_request):
+            rc = cli.main(["--stop", "--root", str(self.root)])
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(seen["reread"], 0,
+                         "the generation was in hand; re-reading it is the bug")
+        self.assertIn("gen-A", seen["checked_with"],
+                      "consumption must be checked against what we ASKED")
+        self.assertEqual(seen["cleared"], 1,
+                         "an unhonoured request must be cleared")

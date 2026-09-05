@@ -135,3 +135,43 @@ class TheDocumentedRitualMatchesTheBinary(unittest.TestCase):
         """A sleeping agent supervises nothing. If that sentence is missing,
         the page promises self-healing it cannot deliver."""
         self.assertIn("sleeping agent is not a supervisor", self.doc)
+
+
+class TheTwoRitualsAgree(unittest.TestCase):
+    """Codex F2. Two authoritative places tell an agent how to restart: the
+    --check verdict and docs/agent-setup.md. They named different mechanisms -
+    a cmux key in one, alb --stop in the other - so an agent on tmux following
+    the binary would reach for a tool it does not have, while the doc named
+    the adapter-independent command we built for exactly that reason.
+
+    The earlier advice test was vacuous for this: it proved every alb flag
+    named exists, and passed happily while the verdict named no alb flag at
+    all."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "state").mkdir()
+        (self.root / "state" / "health.json").write_text(
+            json.dumps({"heartbeat": time.time() - 900, "state": "running"}),
+            encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_restart_verdict_names_the_stop_we_built(self):
+        out = subprocess.run([ALB, "--check", "--root", str(self.root)],
+                             capture_output=True, text=True).stdout
+        self.assertIn("--stop", out,
+                      "the verdict must name the adapter-independent stop, "
+                      "not a key binding for one multiplexer")
+        self.assertNotIn("send-key", out,
+                         "naming a cmux key strands every tmux seat")
+
+    def test_the_help_does_not_promise_a_signal(self):
+        helptext = subprocess.run([ALB, "--help"], capture_output=True,
+                                  text=True).stdout
+        line = [l for l in helptext.splitlines() if "--stop" in l]
+        self.assertTrue(line)
+        self.assertNotIn("interrupt", " ".join(line).lower(),
+                         "it requests; it has never interrupted anything")
