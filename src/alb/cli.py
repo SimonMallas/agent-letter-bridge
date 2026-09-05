@@ -91,6 +91,9 @@ def main(argv=None):
                         help="prove the send path is alive; sends to your own chat")
     parser.add_argument("--status", action="store_true",
                         help="report bridge and ring health; reads only")
+    parser.add_argument("--check", action="store_true",
+                        help="what a waking agent should DO about its relay; "
+                             "exit 0 nothing, 2 restart it, 3 investigate")
     parser.add_argument("--doctor", action="store_true",
                         help="local diagnostics; holds no token, makes no platform call")
     parser.add_argument("--list", action="store_true",
@@ -116,6 +119,27 @@ def main(argv=None):
     # reaches the platform unless the operator asks it to in that moment.
     if args.init:
         return _init(args)
+
+    # The wake-check. Deliberately separate from --status: status describes,
+    # this one DECIDES, and the exit code carries the decision so a standing
+    # instruction can branch on it without parsing prose. Reads one file, holds
+    # no token and makes no platform call - the moment an agent most needs this
+    # answer is when the platform is already refusing it.
+    if args.check:
+        from alb.watchdog import health
+
+        v = health.verdict(pathlib.Path(args.root) / "state" / "health.json")
+        print(f"{v.state}: {v.reason}")
+        if v.action == "restart":
+            print("action: restart the bridge in its own pane. "
+                  "Stop it first with --stop; never start a second one.")
+            return 2
+        if v.action == "investigate":
+            print("action: investigate. Absence is not death - this bridge may "
+                  "never have run here.")
+            return 3
+        print("action: none")
+        return 0
 
     # Status reads files only: no config, no token, no network. It is the
     # thing you run when you want to know whether to worry.

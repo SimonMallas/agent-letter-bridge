@@ -449,6 +449,14 @@ EXTRA = {
         POLL, "tests.test_heartbeat_states",
         '            payload["reason"] = reason if reason in REASONS else "unknown"',
         '            payload["reason"] = reason'),
+    "a waiting bridge is not restarted": (
+        ROOT / "src" / "alb" / "watchdog" / "health.py", "tests.test_wake_check",
+        '    allowance = ALLOWANCE.get(state, DEFAULT_ALLOWANCE)',
+        "    allowance = DEFAULT_ALLOWANCE"),
+    "absence is not death": (
+        ROOT / "src" / "alb" / "watchdog" / "health.py", "tests.test_wake_check",
+        '        return Verdict("unknown", "investigate",',
+        '        return Verdict("dead", "restart",'),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
