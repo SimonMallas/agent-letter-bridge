@@ -516,11 +516,20 @@ EXTRA = {
         CLI, "tests.test_stop",
         "                if _recorded_stand_down(root=args.root, since=requested_at):",
         "                if True:"),
-    "a rerun writes the surface it was given": (
+    "the env is parsed, not pattern-matched": (
         ROOT / "src" / "alb" / "setup" / "wizard.py", "tests.test_setup",
-        '        if "ALB_SURFACE=" not in existing:\n'
-        '            lines.append(f"ALB_SURFACE={surface}\\n")\n',
+        "    config = _effective(env_path) if env_path_existed else {}",
+        "    config = {}"),
+    "an append never joins onto the previous value": (
+        ROOT / "src" / "alb" / "setup" / "wizard.py", "tests.test_setup",
+        '            if existing and not existing.endswith("\\n"):\n'
+        '                handle.write("\\n")\n',
         ""),
+    "configured means the runtime would find a ring": (
+        ROOT / "src" / "alb" / "setup" / "wizard.py", "tests.test_setup",
+        '    if not after.get("ALB_SURFACE"):\n'
+        '        summary["ring"] = "not configured"',
+        "    if False:\n        pass"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

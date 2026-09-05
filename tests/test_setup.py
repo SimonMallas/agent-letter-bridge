@@ -598,3 +598,118 @@ class RerunningAfterAnIncompleteInstall(Base):
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertIn("ALB_TOKEN=123456:TOKEN", env)
         self.assertNotIn("999999:DIFFERENT", env)
+
+
+class TheEnvIsParsedNotPatternMatched(Base):
+    """Pi's four counterexamples. My previous fix asked whether the file
+    CONTAINED the text "ALB_SURFACE=" - a question about shape, not meaning.
+
+    A commented-out line contains it. An empty assignment contains it. And a
+    file whose last line has no newline turns an append into a JOIN: the new
+    key lands on the end of the token's value, changing the one secret in the
+    file while reporting success. That is the worst of the four and it is a
+    config writer damaging config."""
+
+    def _env(self, text):
+        self.root.mkdir(parents=True, exist_ok=True)
+        (self.root / "bridge.env").write_text(text, encoding="utf-8")
+        (self.root / "bridge.env").chmod(0o600)
+
+    def _rerun(self):
+        return self.run_init(
+            answers=["n", "print", "fixture-pane", "y"],
+            panes=[{"id": "fixture-pane", "label": "agent", "notifier": "cmux"}],
+            cmux_born=lambda: True,
+            start_pane=lambda title, command: "surface:9")
+
+    def _effective(self):
+        from alb.bridge import run
+        try:
+            return run.load_config(self.root / "bridge.env")
+        except Exception:  # noqa: BLE001 - an unreadable config is no config
+            return {}
+
+    def test_a_commented_surface_is_not_a_configured_surface(self):
+        self._env("ALB_TOKEN=123456:TOKEN\n# ALB_SURFACE=old\n")
+        self._rerun()
+        self.assertEqual(self._effective().get("ALB_SURFACE"), "fixture-pane")
+
+    def test_an_empty_surface_is_not_a_configured_surface(self):
+        self._env("ALB_TOKEN=123456:TOKEN\nALB_SURFACE=\n")
+        self._rerun()
+        self.assertTrue(self._effective().get("ALB_SURFACE"),
+                        "an empty value is not a pane")
+
+    def test_a_file_without_a_trailing_newline_keeps_its_token(self):
+        """The one that damages rather than misleads."""
+        self._env("ALB_TOKEN=123456:TOKEN")   # no newline
+        self._rerun()
+        self.assertEqual(self._effective().get("ALB_TOKEN"), "123456:TOKEN",
+                         "appending must never join onto the previous value")
+
+    def test_a_pane_from_the_other_multiplexer_is_not_saved_as_compatible(self):
+        from alb.cli import _init_status
+        self._env("ALB_TOKEN=123456:TOKEN\nALB_NOTIFIER=tmux\n")
+        _, result = self._rerun()
+        config = self._effective()
+        if config.get("ALB_NOTIFIER") == "tmux" and config.get("ALB_SURFACE"):
+            self.assertNotEqual(
+                _init_status(result), 0,
+                "a cmux pane under a tmux notifier is not a working ring")
+
+
+class TheRingClaimIsEstablishedNotAsserted(Base):
+    """The gate refused two pins here as hollow - disabled, and no test
+    noticed. Same class Codex found earlier: a pin naming a property its
+    tests could not distinguish. These two establish them."""
+
+    def _env(self, text):
+        self.root.mkdir(parents=True, exist_ok=True)
+        (self.root / "bridge.env").write_text(text, encoding="utf-8")
+        (self.root / "bridge.env").chmod(0o600)
+
+    def _rerun(self):
+        return self.run_init(
+            answers=["n", "print", "fixture-pane", "y"],
+            panes=[{"id": "fixture-pane", "label": "agent", "notifier": "cmux"}],
+            cmux_born=lambda: True,
+            start_pane=lambda title, command: "surface:9")
+
+    def test_a_surface_already_pinned_is_left_alone(self):
+        """Non-clobber, established rather than assumed: reading the env is
+        what tells us a surface is there, so a build that stops reading it
+        would overwrite somebody's pinned pane."""
+        self._env("ALB_TOKEN=123456:TOKEN\nALB_SURFACE=theirs\n")
+        self._rerun()
+        body = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertIn("ALB_SURFACE=theirs", body,
+                      "an existing pane id is not ours to replace")
+        self.assertNotIn("ALB_SURFACE=fixture-pane", body)
+
+    def test_a_ring_that_never_reached_the_file_is_not_configured(self):
+        """Established by making the write not take, which is the only way to
+        separate 'somebody typed a pane' from 'the runtime will find one'.
+        Without this the word 'configured' survives a write that failed."""
+        from unittest import mock
+        from alb.cli import _init_status
+        from alb.setup import wizard as wiz
+
+        self._env("ALB_TOKEN=123456:TOKEN\n")
+        real_open = open
+
+        def refuse_append(path, mode="r", *a, **kw):
+            if "a" in mode and str(path).endswith("bridge.env"):
+                class _Sink:
+                    def __enter__(self_inner): return self_inner
+                    def __exit__(self_inner, *exc): return False
+                    def write(self_inner, _): pass
+                    def writelines(self_inner, _): pass
+                return _Sink()
+            return real_open(path, mode, *a, **kw)
+
+        with mock.patch.object(wiz, "open", refuse_append, create=True):
+            _, result = self._rerun()
+
+        self.assertEqual(result.get("ring"), "not configured",
+                         "a paste that never landed is not a configured ring")
+        self.assertNotEqual(_init_status(result), 0)

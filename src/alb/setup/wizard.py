@@ -214,33 +214,8 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     #    resident whose ring stayed disabled until a restart nobody mentioned.)
     surface, notifier = _offer_ring(console, panes, summary)
     if surface:
-        # Non-clobber protects what is THERE. Declining to add a key that is
-        # ABSENT is not protection - it is a silent failure wearing a safety's
-        # clothes, and it broke the recovery we prescribe: a first init
-        # finishes bell-less, we tell the operator to re-run and paste a pane,
-        # and on that run bridge.env exists, so the paste was accepted, marked
-        # configured, and never written. Bell-less again, reported as success.
-        existing = ""
-        if env_path_existed:
-            try:
-                existing = env_path.read_text(encoding="utf-8")
-            except OSError:
-                existing = ""
-        lines = []
-        if "ALB_SURFACE=" not in existing:
-            lines.append(f"ALB_SURFACE={surface}\n")
-        if notifier and "ALB_NOTIFIER=" not in existing:
-            lines.append(f"ALB_NOTIFIER={notifier}\n")
-        if lines:
-            with open(env_path, "a", encoding="utf-8") as handle:
-                handle.writelines(lines)
-        elif env_path_existed and "ALB_SURFACE=" in existing:
-            # A surface is already pinned and it is not ours to replace.
-            console.say("  bridge.env already names a surface; leaving it "
-                        "alone. Edit it yourself if that pane is wrong.")
-        # Configured means it reached the file, not that it was typed.
-        if "ALB_SURFACE" not in (existing + "".join(lines)):
-            summary["ring"] = "not configured"
+        _persist_ring(console, env_path, env_path_existed, surface, notifier,
+                      summary)
 
     # 6. The resident. Both real installs stalled at "--once looks fine" with
     #    nothing left running - so init finishes the job, or prints exactly
@@ -421,6 +396,68 @@ def _chat_ids(console, token, reader):
     if not 1 <= index <= len(found):
         return []
     return [str(found[index - 1]["chat_id"])]
+
+
+def _effective(env_path):
+    """What the RUNTIME would read, not what the file happens to contain.
+
+    Pi's four: a commented line contains "ALB_SURFACE=" and configures
+    nothing; an empty assignment contains it and configures nothing; so a
+    substring check answers a question about shape when the question is about
+    meaning. Parsed with the same loader the bridge uses, so setup and runtime
+    cannot disagree about what is set.
+    """
+    from alb.bridge import run
+
+    try:
+        return run.load_config(env_path)
+    except Exception:  # noqa: BLE001 - unreadable is indistinguishable from unset here
+        return {}
+
+
+def _persist_ring(console, env_path, env_path_existed, surface, notifier,
+                  summary):
+    """Write the ring into the env, or refuse to call it configured.
+
+    Non-clobber protects what is THERE; it must not decline to add what is
+    absent. And an append must not JOIN: a file whose last line lacks a
+    newline turns the next line into a continuation of the token's value,
+    changing the one secret in the file while reporting success.
+    """
+    config = _effective(env_path) if env_path_existed else {}
+    lines = []
+    if not config.get("ALB_SURFACE"):
+        lines.append(f"ALB_SURFACE={surface}\n")
+    else:
+        console.say("  bridge.env already names a surface; leaving it alone. "
+                    "Edit it yourself if that pane is wrong.")
+    if notifier and not config.get("ALB_NOTIFIER"):
+        lines.append(f"ALB_NOTIFIER={notifier}\n")
+
+    if lines:
+        try:
+            existing = env_path.read_text(encoding="utf-8") if env_path_existed else ""
+        except OSError:
+            existing = ""
+        with open(env_path, "a", encoding="utf-8") as handle:
+            if existing and not existing.endswith("\n"):
+                handle.write("\n")
+            handle.writelines(lines)
+
+    # Configured means the RUNTIME would find a usable ring - not that
+    # somebody typed one. And a pane from one multiplexer under a notifier
+    # naming another is not a ring; it is two settings that cannot both be
+    # true.
+    after = _effective(env_path)
+    chosen = (after.get("ALB_NOTIFIER") or "").strip().lower()
+    if not after.get("ALB_SURFACE"):
+        summary["ring"] = "not configured"
+    elif notifier and chosen and chosen != notifier:
+        console.say(f"  bridge.env says ALB_NOTIFIER={chosen}, and that pane "
+                    f"is a {notifier} pane. Those cannot both be true, so the "
+                    f"ring is not configured. Fix the env or pick a "
+                    f"{chosen} pane.")
+        summary["ring"] = "not configured"
 
 
 def _offer_ring(console, panes, summary):
