@@ -131,27 +131,25 @@ def main(argv=None):
     # leaving it to each seat is how one agent ended up signalling a pid it
     # had found by hand.
     if args.stop:
-        # No local import: singleton is already imported at module level, and
-        # re-importing it here would make the name local to this whole
-        # function - unbinding the module-level one for every branch after
-        # this. Which is exactly what it did, twice, before this comment.
+        # Nothing is signalled. A failed lock proves someone held it at that
+        # instant, not at the instant of a kill - the holder can exit and have
+        # its pid reused in between, and we would signal a stranger with the
+        # confidence of having proved they were ours. So the request is left
+        # for the process that owns the work, and the lock going free is the
+        # only thing accepted as proof it was honoured.
         pid = singleton.running_pid(args.root)
         if pid is None:
             print("nothing to stop: no bridge holds this root")
             return 0
-        if pid < 0:
-            print("a bridge holds this root but did not record its pid - "
-                  "refusing to guess at one. Find it in its pane and "
-                  "interrupt it there.")
-            return 1
-        os.kill(pid, signal.SIGINT)
-        for _ in range(100):
+        singleton.request_stop(args.root)
+        for _ in range(150):
             if singleton.running_pid(args.root) is None:
-                print(f"stopped {pid}")
+                print("stopped")
                 return 0
-            time.sleep(0.1)
-        print(f"signalled {pid}, but it still holds the lock after 10s. "
-              f"It may be mid-send; do not start a second one.")
+            time.sleep(0.2)
+        print("stop requested; the bridge is still running. It checks at its "
+              "own loop boundary, so a long poll can delay this - the request "
+              "stays on disk and will be honoured. Do not start a second one.")
         return 1
 
     # The wake-check. Deliberately separate from --status: status describes,
@@ -517,6 +515,19 @@ def _poll_forever(platform, transport, surface, root, args, config):
     for letter_id in flagged:
         log(root, f"reconciled in-flight outbound {letter_id} -> dead-letter")
     while True:
+        # Checked before reaching for the platform, so a stop is honoured
+        # without one more round trip - and before anything can fail in a way
+        # that would obscure why we are leaving.
+        if singleton.stop_requested(root):
+            singleton.clear_stop_request(root)
+            log(root, "stop requested; standing down")
+            # Its own reason. A requested stop and a token conflict are both
+            # deliberate stand-downs, but an operator arriving later needs to
+            # know WHICH - one means somebody asked, the other means somebody
+            # else is holding the token.
+            _loop._write_heartbeat(root / "state" / "health.json",
+                                   state="yielded", reason="requested")
+            return 0
         try:
             published = run.run_once(
                 platform, transport, surface, root,

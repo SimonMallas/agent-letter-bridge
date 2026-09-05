@@ -87,7 +87,7 @@ def _stamp_thread(inbox, letter_id, thread):
 # by things that log and display it, and a message carrying a chat id or a body
 # would put correspondence into a health file that nothing treats as private.
 REASONS = frozenset({"throttled_429", "upstream_5xx", "network", "starting",
-                     "conflict"})
+                     "conflict", "requested"})
 
 
 def _write_heartbeat(path, state="running", reason=None):

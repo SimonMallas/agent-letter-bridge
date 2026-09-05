@@ -45,6 +45,43 @@ def hold(root):
         os.close(fd)
 
 
+STOP_REQUEST = "stop-requested"
+
+
+def request_stop(root):
+    """Ask the bridge to stand down. Signals nothing.
+
+    Pi's block on the signalling design: a failed flock proves someone held
+    the lock at that instant, not at the instant of the kill. The holder can
+    exit, release, and have its pid reused in between - and a stop would then
+    signal a stranger with the confidence of having proved they were ours,
+    which is worse than guessing because it looks verified.
+
+    So the only process that ever acts on a stop is the one that owns the
+    work. A stale request cannot reach anybody else, because nobody else is
+    running our loop.
+    """
+    path = pathlib.Path(root) / "state"
+    path.mkdir(parents=True, exist_ok=True)
+    (path / STOP_REQUEST).write_text("", encoding="utf-8")
+
+
+def stop_requested(root):
+    """Checked by the bridge at its own boundary. Never raises: a stop that
+    cannot be read is not a reason to stop handling mail."""
+    try:
+        return (pathlib.Path(root) / "state" / STOP_REQUEST).exists()
+    except OSError:
+        return False
+
+
+def clear_stop_request(root):
+    """Cleared by the bridge as it stands down, so the next start is not
+    stopped by a request that has already been honoured."""
+    with contextlib.suppress(OSError):
+        (pathlib.Path(root) / "state" / STOP_REQUEST).unlink()
+
+
 def running_pid(root):
     """The pid of the live bridge on this root, or None if none is running.
 

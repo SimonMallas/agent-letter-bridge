@@ -171,3 +171,43 @@ class AYieldIsRecordedBeforeLeaving(unittest.TestCase):
         health = json.loads(
             (self.root / "state" / "health.json").read_text(encoding="utf-8"))
         self.assertEqual(health["state"], "yielded")
+
+
+class TheBridgeStandsDownWhenAsked(unittest.TestCase):
+    """The other half of --stop. A request nothing reads is a command that
+    lies, and this one would lie at the moment an operator most needs it."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        for sub in ("state", "inbox", "processed", "outbox"):
+            (self.root / sub).mkdir()
+        (self.root / "allowlist.json").write_text(json.dumps({"chats": []}))
+        self.args = argparse.Namespace(interval=2, once=False, mail_root=None)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_requested_stop_ends_the_loop_cleanly(self):
+        from alb.bridge import singleton
+        singleton.request_stop(self.root)
+        platform = mock.Mock()
+        platform.fetch.side_effect = AssertionError(
+            "must stand down BEFORE reaching for the platform")
+        rc = cli._poll_forever(platform, mock.Mock(), "surface:1",
+                               self.root, self.args, {"ALB_TO": "agent"})
+        self.assertEqual(rc, 0, "a requested stop is success, not failure")
+        health = json.loads(
+            (self.root / "state" / "health.json").read_text(encoding="utf-8"))
+        self.assertEqual(health["state"], "yielded")
+        self.assertEqual(health["reason"], "requested",
+                         "an operator must be able to tell a requested stop "
+                         "from a token conflict")
+
+    def test_the_request_is_cleared_so_the_next_start_is_not_stopped(self):
+        from alb.bridge import singleton
+        singleton.request_stop(self.root)
+        cli._poll_forever(mock.Mock(), mock.Mock(), "surface:1",
+                          self.root, self.args, {"ALB_TO": "agent"})
+        self.assertFalse(singleton.stop_requested(self.root),
+                         "an honoured request must not stop the next bridge too")

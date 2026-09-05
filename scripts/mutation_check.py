@@ -495,6 +495,14 @@ EXTRA = {
         ROOT / "src" / "alb" / "bridge" / "singleton.py", "tests.test_stop",
         '        os.write(fd, json.dumps({"pid": os.getpid()}).encode("utf-8"))',
         "        pass"),
+    "a stop is a request, never a signal": (
+        ROOT / "src" / "alb" / "bridge" / "singleton.py", "tests.test_stop",
+        '    (path / STOP_REQUEST).write_text("", encoding="utf-8")',
+        "    pass"),
+    "the bridge honours a stop request": (
+        CLI, "tests.test_poll_backoff",
+        "        if singleton.stop_requested(root):",
+        "        if False:"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
