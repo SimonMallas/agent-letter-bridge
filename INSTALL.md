@@ -176,7 +176,7 @@ no network.
 | Key | Meaning | Default |
 | --- | --- | --- |
 | `ALB_TOKEN` | your bot token | **required** |
-| `ALB_SURFACE` | the pane to ring on | none — ring disabled |
+| `ALB_SURFACE` | the pane to ring on | **required** — init will not start a poller without it |
 | `ALB_NOTIFIER` | `cmux` or `tmux` | `cmux` |
 | `ALB_TO` | who the letter is addressed to | `agent` |
 | `ALB_FROM` | who the letter is from | `telegram-bridge` |

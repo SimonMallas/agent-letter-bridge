@@ -290,20 +290,26 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running, start_pan
     console.say(f"  {command}")
     console.say()
 
+    if summary.get("ring") != "configured":
+        # Simon: a full install is not an install without the bell. Starting
+        # a poller here would succeed bell-less and --status would say
+        # disabled, not broken. That is grok's install.
+        console.say("No ring is configured. The bridge will not be started.")
+        console.say("A poller with nothing to ping is not an install.")
+        console.say("Re-run init from a cmux pane, paste your agent's pane id")
+        console.say("when asked, then start.")
+        summary["resident"] = "incomplete"
+        return
+
     if not cmux_born():
         # Same ACL as the ring: a pane created from outside cmux is refused.
         console.say("Run it from inside a cmux pane (cmux refuses processes")
         console.say("born outside it, so started from here the bell would not")
-        console.say("work) - or use the service templates in examples/ for")
-        console.say("tmux or ring-less installs.")
+        console.say("work).")
         summary["resident"] = "printed"
         return
 
     console.say(f'It can start now, in its own cmux pane titled "{title}".')
-    if summary.get("ring") != "configured":
-        console.say("  Note: no ring is configured, so it would start BELL-LESS -")
-        console.say("  mail lands durably and nothing pings until ALB_SURFACE is")
-        console.say("  added and the bridge restarted.")
     answer = console.ask("  start the bridge now in its own cmux pane? [Y/n]", "y")
     if answer.strip().lower() in ("n", "no"):
         console.say("Not started. Run the command above from a cmux pane when ready.")
@@ -398,13 +404,12 @@ def _offer_ring(console, panes, summary):
     Listing without choosing still holds: the operator supplies the id, and a
     single pane in the listing is still not a choice init may make. Returns
     the pasted id (or "") so the caller writes it before anything loads the
-    env - the old order started a resident whose ring stayed disabled until a
-    restart nobody mentioned (codex's consistency review, finding 1)."""
+    env. Blank is not a skip. Simon: there is no supported bell-less install.
+    """
     console.say()
     console.say("The ring types a line into a terminal pane when mail arrives -")
     console.say("it is what makes the bridge feel alive. Without it, letters land")
-    console.say("durably and sit unread until something sweeps. Skip only if your")
-    console.say("agent checks its own mail; --status will say disabled, not broken.")
+    console.say("and nobody is told. That is not an install.")
 
     if panes:
         console.say("Panes I can see:")
@@ -412,14 +417,18 @@ def _offer_ring(console, panes, summary):
             console.say(f"  {entry['id']}  {entry.get('label', '')}".rstrip())
         console.say("I am not choosing one: a listing cannot tell me which pane")
         console.say("holds your agent, and a doorbell in the wrong pane lands in")
-        console.say("somebody else's session. Paste the id of YOUR agent's pane,")
-        console.say("or leave blank to run without a ring for now.")
-        surface = console.ask("  your agent's pane id (blank to skip)", "").strip()
+        console.say("somebody else's session. Paste the id of YOUR agent's pane.")
+        surface = console.ask("  your agent's pane id", "").strip()
         if surface:
             summary["ring"] = "configured"
-        return surface
+            return surface
+        console.say("  no pane id. The ring will not be configured.")
+        return ""
 
-    console.say("Add ALB_SURFACE to bridge.env when you have a pane id.")
+    console.say("No panes are visible, so the ring cannot be configured.")
+    console.say("Run init from inside cmux with at least one pane, then paste")
+    console.say("your agent's pane id. A later ALB_SURFACE edit is not a")
+    console.say("supported install.")
     return ""
 
 

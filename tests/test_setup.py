@@ -390,12 +390,13 @@ class TheResidentOffer(Base):
         kw.setdefault("cmux_born", lambda: True)
         kw.setdefault("bridge_running", lambda root: False)
         kw.setdefault("start_pane", lambda title, command: started.append((title, command)) or "SURFACE-NEW")
+        kw.setdefault("panes", [{"id": "AGENT-PANE", "label": "agent"}])
         console = ScriptedConsole(answers, ["123456:TOKEN"])
         result = wizard.init(self.root, console, **kw)
         return console, result, started
 
     def test_yes_starts_the_bridge_in_a_new_pane(self):
-        console, result, started = self._init(["n", "print", "y"])
+        console, result, started = self._init(["n", "print", "AGENT-PANE", "y"])
         self.assertEqual(len(started), 1)
         title, command = started[0]
         self.assertIn("DO NOT CLOSE", title)
@@ -404,24 +405,24 @@ class TheResidentOffer(Base):
 
     def test_the_command_is_shown_before_the_question(self):
         """Consent to a named thing, not to "start services?"."""
-        console, _, started = self._init(["n", "print", "y"])
+        console, _, started = self._init(["n", "print", "AGENT-PANE", "y"])
         transcript = console.transcript
         self.assertIn("alb --config", transcript[:transcript.index("It can start now")])
 
     def test_the_report_names_the_surface_and_the_stop_path(self):
-        console, _, _ = self._init(["n", "print", "y"])
+        console, _, _ = self._init(["n", "print", "AGENT-PANE", "y"])
         out = console.transcript
         self.assertIn("SURFACE-NEW", out)
         self.assertIn("close", out.lower())
 
     def test_no_prints_the_identical_command_instead(self):
-        console, _, started = self._init(["n", "print", "no"])
+        console, _, started = self._init(["n", "print", "AGENT-PANE", "no"])
         self.assertEqual(started, [])
         self.assertIn(f"alb --config {self.root}/bridge.env --root {self.root}",
                       console.transcript)
 
     def test_not_cmux_born_skips_the_question_and_says_why(self):
-        console, _, started = self._init(["n", "print", ""],
+        console, _, started = self._init(["n", "print", "AGENT-PANE", ""],
                                          cmux_born=lambda: False)
         self.assertEqual(started, [])
         self.assertFalse(any("start the bridge now" in q for q in console.asked))
@@ -430,19 +431,19 @@ class TheResidentOffer(Base):
         self.assertIn("alb --config", console.transcript)
 
     def test_a_running_bridge_skips_the_offer_entirely(self):
-        console, _, started = self._init(["n", "print", ""],
+        console, _, started = self._init(["n", "print", "AGENT-PANE", ""],
                                          bridge_running=lambda root: True)
         self.assertEqual(started, [])
         self.assertIn("already running", console.transcript.lower())
 
     def test_default_is_yes(self):
-        console, _, started = self._init(["n", "print", ""])
+        console, _, started = self._init(["n", "print", "AGENT-PANE", ""])
         self.assertEqual(len(started), 1)
 
     def test_a_failed_start_degrades_to_the_printed_command(self):
         def boom(title, command):
             raise RuntimeError("no socket")
-        console, result, _ = self._init(["n", "print", "y"], start_pane=boom)
+        console, result, _ = self._init(["n", "print", "AGENT-PANE", "y"], start_pane=boom)
         self.assertIn("alb --config", console.transcript)
         self.assertIn("could not", console.transcript.lower())
 
@@ -462,11 +463,14 @@ class TheRingAsksForItsSurface(Base):
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertIn("ALB_SURFACE=0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", env)
 
-    def test_blank_skips_and_writes_nothing(self):
+    def test_blank_does_not_write_a_surface(self):
+        """Blank is not a skip-to-success. No id, no ALB_SURFACE. The
+        operator still has to supply one; init will not invent or skip."""
         console, result = self.run_init(
             answers=["n", "print", ""],
             panes=[{"id": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "label": "agent"}])
         self.assertNotIn("ALB_SURFACE", (self.root / "bridge.env").read_text(encoding="utf-8"))
+        self.assertIn("not an install", console.transcript.lower())
 
     def test_the_id_must_come_from_the_operator_not_the_listing(self):
         """One pane in the listing is still not a choice init may make."""
@@ -475,12 +479,24 @@ class TheRingAsksForItsSurface(Base):
             panes=[{"id": "only-pane-here", "label": "agent"}])
         self.assertNotIn("only-pane-here", (self.root / "bridge.env").read_text(encoding="utf-8"))
 
-    def test_the_resident_offer_warns_when_no_ring_is_configured(self):
-        """Starting bell-less must be said at the moment of consent, not
-        discovered from --status later."""
-        console, _, = self.run_init(
+    def test_no_visible_panes_is_not_a_silent_skip(self):
+        """Grok: empty discovery printed one line and succeeded. Fail closed."""
+        console, result = self.run_init(answers=["n", "print"], panes=[])
+        self.assertNotIn("ALB_SURFACE", (self.root / "bridge.env").read_text(encoding="utf-8"))
+        out = console.transcript.lower()
+        self.assertIn("no panes", out)
+        self.assertEqual(result.get("resident"), "incomplete")
+
+    def test_it_will_not_start_a_bell_less_bridge(self):
+        """Grok's install: init succeeded, ring disabled, --status said
+        disabled not broken. Simon: that is not an install."""
+        started = []
+        console, result = self.run_init(
             answers=["n", "print", "", "y"],
             cmux_born=lambda: True,
-            start_pane=lambda title, command: "S-1")
+            start_pane=lambda title, command: started.append(title) or "S-1")
+        self.assertEqual(started, [])
         out = console.transcript.lower()
         self.assertIn("no ring", out)
+        self.assertIn("not an install", out)
+        self.assertEqual(result.get("resident"), "incomplete")
