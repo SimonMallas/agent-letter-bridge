@@ -145,3 +145,40 @@ class TheVerdictKnowsWhatItDoesNotKnow(unittest.TestCase):
         v = health.verdict(self.path)
         self.assertEqual(v.action, "investigate")
         self.assertNotEqual(v.action, "restart")
+
+
+class ANonFiniteHeartbeatIsReadNotFatal(unittest.TestCase):
+    """Kimi's block. JSON admits NaN and Infinity by default, float() passes
+    them through happily, and the arithmetic that turns a timestamp into an
+    age sat outside the try - so a corrupted health file crashed the reader
+    with a traceback instead of returning the investigate verdict that exists
+    for exactly this.
+
+    The module's own rule is never act on a record we cannot read. Dying on
+    one is a way of not acting, but it is not the way: an agent running this
+    at wake gets a stack trace where it expected an answer."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = pathlib.Path(self.tmp.name) / "health.json"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_nan_and_infinity_are_investigated(self):
+        for raw in ('{"heartbeat": NaN, "state": "running"}',
+                    '{"heartbeat": Infinity, "state": "running"}',
+                    '{"heartbeat": -Infinity, "state": "running"}'):
+            with self.subTest(raw=raw[:30]):
+                self.path.write_text(raw, encoding="utf-8")
+                v = health.verdict(self.path)  # must not raise
+                self.assertEqual(v.state, "unknown")
+                self.assertEqual(v.action, "investigate")
+
+    def test_a_real_stale_heartbeat_still_asks_for_a_restart(self):
+        """The control. Without it, 'tolerates nonsense' and 'never decides
+        anything' pass the same test."""
+        self.path.write_text(
+            json.dumps({"heartbeat": time.time() - 99999, "state": "running"}),
+            encoding="utf-8")
+        self.assertEqual(health.verdict(self.path).action, "restart")

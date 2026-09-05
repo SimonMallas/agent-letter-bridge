@@ -12,6 +12,7 @@ both fields: the timestamp for "is it there" and the state for "what is it
 doing", with a different allowance for each.
 """
 import json
+import math
 import pathlib
 import time
 
@@ -95,6 +96,12 @@ def verdict(path):
     try:
         data = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
         heartbeat = float(data["heartbeat"])
+        # JSON admits NaN and Infinity, float() passes them through, and the
+        # arithmetic below would then raise - so a corrupted file would crash
+        # the reader that exists to absorb corrupted files. Checked HERE,
+        # inside the same guard, rather than trusted downstream.
+        if not math.isfinite(heartbeat):
+            raise ValueError("non-finite heartbeat")
     except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
         return Verdict("unknown", "investigate",
                        "no readable health file: the bridge may never have "

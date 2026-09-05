@@ -478,6 +478,11 @@ EXTRA = {
         CLI, "tests.test_check_command",
         '            print("action: restart the bridge in its own pane. Interrupt the "',
         '            print("action: restart. Stop it first with --stop. "'),
+    "a non-finite heartbeat is investigated, never a crash": (
+        ROOT / "src" / "alb" / "watchdog" / "health.py", "tests.test_wake_check",
+        "        if not math.isfinite(heartbeat):\n"
+        '            raise ValueError("non-finite heartbeat")\n',
+        ""),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
