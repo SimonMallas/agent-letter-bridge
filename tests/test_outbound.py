@@ -261,3 +261,38 @@ class AThrottleIsNotAnUnknown(Base):
         outbound.reconcile_at_startup(self.root / "state")
         dead = self.root / "state" / "dead-letters"
         self.assertTrue(dead.exists() and any(dead.iterdir()))
+
+
+class EventOrderIsNumericNotAlphabetical(Base):
+    """Sequence numbers are written 1.. and read back sorted as TEXT, so at
+    ten events "10-sending" sorts before "2-sending" and the tail of the list
+    stops being the latest event.
+
+    Harmless while reconcile only asked order-free questions - is any event
+    terminal, is sending present. The deferred check made ordering
+    load-bearing on an ordering that was never correct, which is how a
+    genuinely in-flight send can read as resumable and be sent twice.
+    """
+
+    def _churn(self, letter_id, pairs):
+        for event in pairs:
+            outbound.record_event(self.root / "state", letter_id, event)
+
+    def test_the_tenth_event_is_the_latest_one(self):
+        letter_id = self.compose()
+        # composed is 1; nine more takes us past the single digit boundary.
+        self._churn(letter_id, ["sending", "throttled"] * 4 + ["sending"])
+        self.assertEqual(outbound.reconcile(self.root / "state").get(letter_id),
+                         "ambiguous",
+                         "an in-flight retry must never read as resumable")
+
+    def test_a_throttle_after_ten_events_is_still_deferred(self):
+        letter_id = self.compose()
+        self._churn(letter_id, ["sending", "throttled"] * 5)
+        self.assertEqual(outbound.reconcile(self.root / "state").get(letter_id),
+                         "throttled")
+
+    def test_a_terminal_event_past_ten_still_ends_it(self):
+        letter_id = self.compose()
+        self._churn(letter_id, ["sending", "throttled"] * 4 + ["sending", "sent"])
+        self.assertNotIn(letter_id, outbound.reconcile(self.root / "state"))

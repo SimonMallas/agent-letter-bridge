@@ -364,9 +364,12 @@ def _reply_or_resume(sender, inbox, state, allowlist_path, letter_id, text,
         out_id = f"reply-{letter_id}"
         if outbound.reconcile(state).get(out_id) != "throttled":
             raise
+        # The text goes with it: retyping is the gesture, so the operator may
+        # retype something different, and resume refuses rather than sending
+        # the original body under a new instruction.
         return reply.resume_throttled(
             sender, inbox, state, allowlist_path, out_id, outbox=outbox,
-            searched=searched)
+            searched=searched, text=text)
 
 
 def _report(cycle, once):

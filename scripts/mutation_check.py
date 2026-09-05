@@ -406,6 +406,20 @@ EXTRA = {
         "        except store.NoSuchLetter:\n"
         "            continue\n",
         "    source = store.resolve(pathlib.Path(inbox), source_id)\n"),
+    "event order is numeric, not alphabetical": (
+        OUTBOUND, "tests.test_outbound",
+        "    return [p.name.split(\"-\", 1)[1].removesuffix(\".json\")\n"
+        "            for p in sorted(d.iterdir(), key=_seq)]",
+        "    return [p.name.split(\"-\", 1)[1].removesuffix(\".json\")\n"
+        "            for p in sorted(d.iterdir())]"),
+    "only one resumer crosses the send boundary": (
+        SEND, "tests.test_send",
+        "            fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)",
+        "            pass"),
+    "resume refuses text the letter does not carry": (
+        SEND, "tests.test_send",
+        "    if text is not None and text != letter.body:",
+        "    if False:"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

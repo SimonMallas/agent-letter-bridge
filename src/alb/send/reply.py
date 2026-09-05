@@ -4,6 +4,7 @@ This process holds the token, so it is a privilege boundary. Every route out is
 a reply to a letter that already exists on disk, to the chat that letter names.
 There is deliberately no function here that can start a conversation.
 """
+import fcntl
 import hashlib
 import json
 import os
@@ -36,6 +37,18 @@ class DefiniteRefusal(Exception):
 
     Not ambiguous, so it does not dead-letter: the operator may fix the cause
     and send new text. A rate limit is NOT one of these - see Throttled.
+    """
+
+
+class TextChanged(Exception):
+    """Asked to resume with different text than the letter carries.
+
+    Retyping is the resume gesture, so an operator may retype something else -
+    and the letter that exists is the one composed on the first attempt.
+    Sending the old body under a new instruction is safe and dishonest: the
+    operator reads success and the recipient gets something they were not
+    shown. Refusing is the only honest answer, because the composed letter is
+    immutable by design and cannot be quietly rewritten to match.
     """
 
 
@@ -247,7 +260,7 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
 
 
 def resume_throttled(sender, inbox, state, allowlist_path, out_id, outbox,
-                     searched=None):
+                     searched=None, text=None):
     """Make ONE further attempt on an outbound letter left waiting by a 429.
 
     The letter is not re-composed and the claim is not released: this reuses
@@ -259,10 +272,30 @@ def resume_throttled(sender, inbox, state, allowlist_path, out_id, outbox,
     Refuses anything not actually deferred. The state is read from the events,
     not from the caller's belief about them.
     """
+    state = pathlib.Path(state)
+    # The check and the send are two steps, so the deferred state has to be
+    # CONSUMED exclusively rather than merely observed: two resumers can both
+    # read "throttled" before either writes "sending", and both then send. An
+    # advisory lock held across the whole transition is what makes crossing
+    # the send boundary singular; O_EXCL on each event file makes history
+    # append-only, which is a different property and does not help here. The
+    # lock is flock, so a crash releases it rather than stranding the letter.
+    locks = state / "locks"
+    locks.mkdir(parents=True, exist_ok=True)
+    with open(locks / f"{out_id}.resume", "a+") as guard:
+        try:
+            fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise NotDeferred(f"{out_id}: another resumer holds this letter") from None
+        return _resume_locked(sender, inbox, state, allowlist_path, out_id,
+                              outbox, searched, text)
+
+
+def _resume_locked(sender, inbox, state, allowlist_path, out_id, outbox,
+                   searched, text):
     # Function-level import for the same cycle reason as send_reply.
     from alb.outbound import store as outbound
 
-    state = pathlib.Path(state)
     if outbound.reconcile(state).get(out_id) != "throttled":
         raise NotDeferred(f"{out_id}: not waiting on a throttle")
     letter = store.resolve(pathlib.Path(outbox), out_id)
@@ -287,6 +320,12 @@ def resume_throttled(sender, inbox, state, allowlist_path, out_id, outbox,
             continue
     if source is None:
         raise store.NoSuchLetter(f"{source_id}: no letter with this exact id")
+    if text is not None and text != letter.body:
+        raise TextChanged(
+            f"{out_id}: the composed reply says something else. The letter is "
+            f"immutable, so this would send the original text under your new "
+            f"instruction. Resume with the original words, or wait for this "
+            f"one to reach a terminal state before composing another.")
     chat_id = destination(source.meta)
     if not chat_id:
         raise NotPermitted(f"{source_id}: the letter names no destination")

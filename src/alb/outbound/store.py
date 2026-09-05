@@ -104,6 +104,27 @@ def record_event(state, letter_id, event, **fields):
     return path
 
 
+def _seq(path):
+    """The numeric sequence a receipt file was written with.
+
+    Read as a NUMBER, never as text: names are written 1.. with no padding,
+    so "10-sending" sorts before "2-sending" alphabetically and the tail of a
+    sorted listing stops being the latest event exactly when a letter has been
+    retried enough times to matter. Anything unparsable sorts first, so a
+    stray file cannot masquerade as the current state.
+    """
+    try:
+        return int(path.name.split("-", 1)[0])
+    except (ValueError, IndexError):
+        return -1
+
+
+def _history(d):
+    """This letter's events, oldest first, in the order they happened."""
+    return [p.name.split("-", 1)[1].removesuffix(".json")
+            for p in sorted(d.iterdir(), key=_seq)]
+
+
 def _event_path(d, event):
     """Next sequence number for this letter's event dir. Split out so the
     collision path is testable: whatever computes the name, O_EXCL at the
@@ -136,8 +157,7 @@ def reconcile(state):
     if not receipts.is_dir():
         return verdicts
     for d in receipts.iterdir():
-        events = [p.name.split("-", 1)[1].removesuffix(".json")
-                  for p in sorted(d.iterdir())]
+        events = _history(d)
         if any(e in TERMINAL for e in events):
             continue
         if events and events[-1] in DEFERRED:

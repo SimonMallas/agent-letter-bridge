@@ -451,3 +451,109 @@ class ACrashDuringResumeIsGenuinelyUnknown(LetterFirstOutbound):
         # The crash: the resume's own "sending" is written, nothing follows.
         outbound.record_event(self.state, out_id, "sending")
         self.assertEqual(outbound.reconcile(self.state).get(out_id), "ambiguous")
+
+
+class OnlyOneResumerCrossesTheSendBoundary(LetterFirstOutbound):
+    """The deferred check and the send are two steps, so two processes can
+    both read "throttled" before either writes "sending" - and both send. The
+    O_EXCL on each event file makes history append-only; it does not make the
+    transition out of deferred exclusive, which is a different property.
+
+    The window is narrow - between reconcile() and the "sending" event - so a
+    test that races the SEND instead misses it entirely and passes while the
+    hazard stands. This one blocks inside that window on purpose.
+    """
+
+    class Working:
+        def __init__(self):
+            self.calls = 0
+
+        def send(self, chat_id, text):
+            self.calls += 1
+            return "9001"
+
+    class Throttling:
+        def send(self, chat_id, text):
+            raise reply.Throttled("throttled with HTTP 429", retry_after=1)
+
+    def test_two_resumers_in_the_check_window_produce_one_send(self):
+        import threading
+        with self.assertRaises(reply.Throttled):
+            self._send(self.Throttling())
+        out_id = f"reply-{self.letter_id}"
+        sender = self.Working()
+        in_window, proceed = threading.Event(), threading.Event()
+        real_record = outbound.record_event
+        held = {"done": False}
+
+        def blocking_record(state, letter_id, event, **fields):
+            # Stop the first resumer exactly where the hazard lives: past the
+            # deferred check, before the state it would consume is written.
+            if event == "sending" and not held["done"]:
+                held["done"] = True
+                in_window.set()
+                proceed.wait(2)
+            return real_record(state, letter_id, event, **fields)
+
+        outcomes = []
+
+        def resume():
+            try:
+                reply.resume_throttled(
+                    sender, self.inbox, self.state, self.allow, out_id,
+                    outbox=self.outbox)
+                outcomes.append("sent")
+            except Exception as exc:  # noqa: BLE001 - the loser's refusal
+                outcomes.append(type(exc).__name__)
+
+        with mock.patch.object(outbound, "record_event", blocking_record):
+            first = threading.Thread(target=resume)
+            first.start()
+            in_window.wait(2)
+            second = threading.Thread(target=resume)
+            second.start()
+            second.join(3)
+            proceed.set()
+            first.join(3)
+
+        self.assertEqual(sender.calls, 1,
+                         f"exactly one send may cross the boundary, got {outcomes}")
+
+
+class ResumeSendsWhatWasComposed(LetterFirstOutbound):
+    """Retyping is the resume gesture, so the operator may retype different
+    text - and the letter that exists is the one from the first attempt.
+    Sending the old body under the new instruction is safe and dishonest:
+    the operator sees success and the recipient sees something else."""
+
+    class Throttling:
+        def send(self, chat_id, text):
+            raise reply.Throttled("throttled with HTTP 429", retry_after=1)
+
+    class Working:
+        def __init__(self):
+            self.sent = []
+
+        def send(self, chat_id, text):
+            self.sent.append(text)
+            return "9001"
+
+    def test_resuming_with_different_text_refuses_rather_than_substituting(self):
+        with self.assertRaises(reply.Throttled):
+            self._send(self.Throttling(), text="the original")
+        sender = self.Working()
+        with self.assertRaises(reply.TextChanged):
+            reply.resume_throttled(
+                sender, self.inbox, self.state, self.allow,
+                f"reply-{self.letter_id}", outbox=self.outbox,
+                text="something else entirely")
+        self.assertEqual(sender.sent, [], "never send text nobody asked for")
+
+    def test_resuming_with_the_same_text_proceeds(self):
+        with self.assertRaises(reply.Throttled):
+            self._send(self.Throttling(), text="the original")
+        sender = self.Working()
+        reply.resume_throttled(
+            sender, self.inbox, self.state, self.allow,
+            f"reply-{self.letter_id}", outbox=self.outbox, text="the original")
+        self.assertEqual(sender.sent, ["the original"])
