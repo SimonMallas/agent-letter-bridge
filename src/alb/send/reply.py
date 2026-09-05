@@ -246,7 +246,8 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
     return out_id
 
 
-def resume_throttled(sender, inbox, state, allowlist_path, out_id, outbox):
+def resume_throttled(sender, inbox, state, allowlist_path, out_id, outbox,
+                     searched=None):
     """Make ONE further attempt on an outbound letter left waiting by a 429.
 
     The letter is not re-composed and the claim is not released: this reuses
@@ -274,7 +275,19 @@ def resume_throttled(sender, inbox, state, allowlist_path, out_id, outbox):
     source_id = letter.meta.get("re", "")
     if not source_id:
         raise NotDeferred(f"{out_id}: the letter names no source to answer")
-    chat_id = destination(store.resolve(pathlib.Path(inbox), source_id).meta)
+    # Searched the same way the first attempt searched, and for the same
+    # reason: a sweep files the inbound letter to processed, and a resume that
+    # only knows the inbox stops working the moment anybody tidies their mail.
+    source = None
+    for directory in (searched or [inbox]):
+        try:
+            source = store.resolve(directory, source_id)
+            break
+        except store.NoSuchLetter:
+            continue
+    if source is None:
+        raise store.NoSuchLetter(f"{source_id}: no letter with this exact id")
+    chat_id = destination(source.meta)
     if not chat_id:
         raise NotPermitted(f"{source_id}: the letter names no destination")
     # Gated again, deliberately: an allowlist can change between the first
@@ -287,7 +300,10 @@ def resume_throttled(sender, inbox, state, allowlist_path, out_id, outbox):
         platform_id = sender.send(chat_id, letter.body)
     except AmbiguousOutcome as exc:
         outbound.record_event(state, out_id, "ambiguous", detail=str(exc))
-        _dead_letter(state, out_id, out_id, str(exc))
+        # The SOURCE id, not the outbound id twice: an operator chasing a
+        # dead-letter needs the letter it answers, which is the one they can
+        # actually read.
+        _dead_letter(state, out_id, source_id, str(exc))
         raise
     except DefiniteRefusal as exc:
         outbound.record_event(state, out_id, "refused", detail=str(exc))
@@ -298,7 +314,7 @@ def resume_throttled(sender, inbox, state, allowlist_path, out_id, outbox):
     except Exception as exc:  # noqa: BLE001 - same safety net as the first attempt
         outbound.record_event(state, out_id, "ambiguous",
                               detail=f"unclassified {type(exc).__name__}: {exc}")
-        _dead_letter(state, out_id, out_id,
+        _dead_letter(state, out_id, source_id,
                      f"unclassified {type(exc).__name__}: {exc}")
         raise AmbiguousOutcome(f"unclassified sender failure: {exc}") from exc
     outbound.record_event(state, out_id, "sent",

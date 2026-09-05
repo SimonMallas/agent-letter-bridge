@@ -237,7 +237,7 @@ def main(argv=None):
             print("alb: --reply-to needs --text", file=sys.stderr)
             return 2
         try:
-            rid = reply.send_reply(
+            rid = _reply_or_resume(
                 api.Telegram(config["ALB_TOKEN"]), root / "inbox", root / "state",
                 root / "allowlist.json", args.reply_to, args.text,
                 # The SAME mailbox the poller writes to, including processed,
@@ -263,7 +263,10 @@ def main(argv=None):
             when = f" for {wait}s" if wait else ""
             print(f"alb: DEFERRED - the platform asked us to wait{when}. "
                   f"The reply is composed and still claimed; nothing was sent "
-                  f"and nothing was lost: {exc}", file=sys.stderr)
+                  f"and nothing was lost: {exc}\n"
+                  f"alb: run the same --reply-to again to finish it. A reply "
+                  f"that already went is still refused, never re-sent.",
+                  file=sys.stderr)
             return 4
         except Exception as exc:
             print(f"alb: refused: {type(exc).__name__}: {exc}", file=sys.stderr)
@@ -335,6 +338,35 @@ def _init(args):
         print("\nalb: setup cancelled", file=sys.stderr)
         return 1
     return 0 if summary else 1
+
+
+def _reply_or_resume(sender, inbox, state, allowlist_path, letter_id, text,
+                     searched=None, outbox=None, agent="agent"):
+    """Send the reply - or finish the one a throttle interrupted.
+
+    The operator's way back from a deferred send is the gesture they already
+    make: type the same reply again. Explicit and human, never an automatic
+    retry, and safe because resume refuses anything that is not actually
+    waiting - a delivered reply still meets AlreadyClaimed and is never
+    re-sent.
+
+    This lives in the CLI rather than in send_reply so the library keeps its
+    strict one-reply-per-source semantics: it is the human repeating the
+    command that authorises the second attempt, not the code deciding to.
+    """
+    from alb.outbound import store as outbound
+
+    try:
+        return reply.send_reply(
+            sender, inbox, state, allowlist_path, letter_id, text,
+            searched=searched, outbox=outbox, agent=agent)
+    except outbound.AlreadyClaimed:
+        out_id = f"reply-{letter_id}"
+        if outbound.reconcile(state).get(out_id) != "throttled":
+            raise
+        return reply.resume_throttled(
+            sender, inbox, state, allowlist_path, out_id, outbox=outbox,
+            searched=searched)
 
 
 def _report(cycle, once):

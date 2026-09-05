@@ -392,6 +392,20 @@ EXTRA = {
         SEND, "tests.test_send",
         '        raise NotDeferred(f"{out_id}: not waiting on a throttle")',
         "        pass"),
+    "retyping a delivered reply never re-sends it": (
+        CLI, "tests.test_resume_cli",
+        '        if outbound.reconcile(state).get(out_id) != "throttled":\n'
+        '            raise\n',
+        ""),
+    "resume finds a source letter that has been filed": (
+        SEND, "tests.test_send",
+        "    for directory in (searched or [inbox]):\n"
+        "        try:\n"
+        "            source = store.resolve(directory, source_id)\n"
+        "            break\n"
+        "        except store.NoSuchLetter:\n"
+        "            continue\n",
+        "    source = store.resolve(pathlib.Path(inbox), source_id)\n"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

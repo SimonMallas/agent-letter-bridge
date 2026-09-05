@@ -399,3 +399,55 @@ class AThrottledSendCanBeResumed(LetterFirstOutbound):
                 sender, self.inbox, self.state, self.allow,
             f"reply-{self.letter_id}", outbox=self.outbox)
         self.assertEqual(len(sender.sent), 1, "resume must not re-send")
+
+
+class ResumeFindsWhatTheFirstAttemptHadInHand(LetterFirstOutbound):
+    """The first send held the inbound letter; a resume has to find it again,
+    and sweeps move letters. Looking only in the inbox means resume works
+    until someone files their mail."""
+
+    class Throttling:
+        def send(self, chat_id, text):
+            raise reply.Throttled("throttled with HTTP 429", retry_after=1)
+
+    class Working:
+        def __init__(self):
+            self.sent = []
+
+        def send(self, chat_id, text):
+            self.sent.append((chat_id, text))
+            return "9001"
+
+    def test_resume_works_after_the_source_is_filed(self):
+        with self.assertRaises(reply.Throttled):
+            self._send(self.Throttling())
+        processed = self.root / "processed"
+        processed.mkdir()
+        (self.inbox / f"{self.letter_id}.md").rename(
+            processed / f"{self.letter_id}.md")
+        sender = self.Working()
+        reply.resume_throttled(
+            sender, self.inbox, self.state, self.allow,
+            f"reply-{self.letter_id}", outbox=self.outbox,
+            searched=[self.inbox, processed])
+        self.assertEqual(len(sender.sent), 1)
+
+
+class ACrashDuringResumeIsGenuinelyUnknown(LetterFirstOutbound):
+    """Deliberate, not an oversight. Once resume writes `sending`, the syscall
+    may have reached the platform - exactly the ambiguity the first attempt
+    has, arrived at by the same route. So it dead-letters, and it SHOULD:
+    sparing it would mean claiming certainty about a send we did not watch
+    return. The deferred state ends when a new attempt begins."""
+
+    class Throttling:
+        def send(self, chat_id, text):
+            raise reply.Throttled("throttled with HTTP 429", retry_after=1)
+
+    def test_a_resume_interrupted_mid_send_is_ambiguous_not_deferred(self):
+        with self.assertRaises(reply.Throttled):
+            self._send(self.Throttling())
+        out_id = f"reply-{self.letter_id}"
+        # The crash: the resume's own "sending" is written, nothing follows.
+        outbound.record_event(self.state, out_id, "sending")
+        self.assertEqual(outbound.reconcile(self.state).get(out_id), "ambiguous")
