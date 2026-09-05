@@ -479,6 +479,17 @@ class TheRingAsksForItsSurface(Base):
             panes=[{"id": "only-pane-here", "label": "agent"}])
         self.assertNotIn("only-pane-here", (self.root / "bridge.env").read_text(encoding="utf-8"))
 
+    def test_incomplete_install_is_nonzero_for_the_agent(self):
+        """docs/agent-install.md branches on exit status, not on prose."""
+        from alb.cli import _init_status
+        _, result = self.run_init(answers=["n", "print"], panes=[])
+        self.assertEqual(_init_status(result), 1)
+        _, result = self.run_init(
+            answers=["n", "print", "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"],
+            panes=[{"id": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "label": "agent"}])
+        self.assertEqual(result.get("ring"), "configured")
+        self.assertEqual(_init_status(result), 0)
+
     def test_no_visible_panes_is_not_a_silent_skip(self):
         """Grok: empty discovery printed one line and succeeded. Fail closed."""
         console, result = self.run_init(answers=["n", "print"], panes=[])
