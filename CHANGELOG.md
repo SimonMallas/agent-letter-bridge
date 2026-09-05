@@ -7,6 +7,30 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.2.3] — unreleased
+
+The relay stops needing a person to notice it died.
+
+An agent asks `alb --check` when it wakes: exit 0 nothing to do, 2 the
+relay is dead and here is how to restart it, 3 something a restart will
+not fix. The allowance follows the state rather than one number for
+everything, because a bridge waiting out a rate limit is quiet BECAUSE it
+is behaving, and a bridge that has just started has not finished a poll
+yet. Both used to read as dead.
+
+`alb --stop` asks the running bridge to stand down and signals nothing.
+A request names the exact run it was meant for, so one written for a
+bridge that then crashes cannot stop the next bridge to start.
+
+Failures reach a log file as well as the terminal, timestamped, so "is
+it down" and "since when" have different answers. A broken log can never
+stop the bridge.
+
+The install refuses to finish without a bell. Pane discovery asks every
+multiplexer present and the notifier follows the pane the operator picks,
+so an id we never showed cannot be accepted and silently pointed at a
+multiplexer that is not there.
+
 ## [0.2.2] — unreleased, canary only
 
 **Not a release.** The version exists so a running bridge can say which code
