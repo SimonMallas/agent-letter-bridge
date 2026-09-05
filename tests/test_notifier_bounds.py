@@ -93,8 +93,21 @@ class TheBoundActuallyBites(unittest.TestCase):
         import tempfile
         import os
         with tempfile.TemporaryDirectory() as tmp:
+            # Python rather than a shell, and it prints the success marker
+            # AFTER sleeping. Pi's polish, and the reason is attribution: with
+            # a shell that never reports success, removing the timeout makes
+            # this test fail at the helper-output check rather than at the
+            # missing TimeoutExpired - red for a downstream reason instead of
+            # the one the test is named for. A sleeper that eventually
+            # succeeds fails only where it should. It also avoids leaving a
+            # shell's orphaned child behind when the shell itself is killed.
             sleeper = pathlib.Path(tmp) / "slow-helper"
-            sleeper.write_text("#!/bin/sh\nsleep 5\n", encoding="utf-8")
+            sleeper.write_text(
+                f"#!{sys.executable}\n"
+                "import time\n"
+                "time.sleep(5)\n"
+                "print('doorbell submitted')\n",
+                encoding="utf-8")
             sleeper.chmod(0o700)
             with mock.patch.object(run, "RING_TIMEOUT", 0.1):
                 with self.assertRaises(subprocess.TimeoutExpired):
