@@ -426,6 +426,14 @@ EXTRA = {
         SEND, "tests.test_send",
         "    store._check_id(out_id)\n",
         ""),
+    "a failure reaches the log, not just the pane": (
+        CLI, "tests.test_logging",
+        '            handle.write(f"{stamp} {message}\\n")',
+        "            pass"),
+    "a broken log never stops the bridge": (
+        CLI, "tests.test_logging",
+        "    except Exception:  # noqa: BLE001 - see docstring; never fail while failing\n        pass",
+        "    except Exception:\n        raise"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

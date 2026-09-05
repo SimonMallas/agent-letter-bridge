@@ -340,6 +340,37 @@ def _init(args):
     return 0 if summary else 1
 
 
+# A log that grows without bound becomes the disk problem it was meant to
+# diagnose. One rotation keeps the previous window - enough to cover a failure
+# that began before anyone noticed, which is the whole point.
+LOG_MAX_BYTES = 1 << 20
+
+
+def log(root, message):
+    """Print to the terminal AND record it under --root, timestamped.
+
+    The record has to be the product's job. A relay died and the only trace
+    was pane scrollback nobody kept: the alb.log beside it was shell
+    redirection, so a restart without the redirect ended the record silently
+    and the failure had to be reconstructed from a heartbeat and a memory.
+
+    Never raises. A logging failure that stops the bridge is the same defect
+    as dying on a rate limit - ending a process over something incidental -
+    and it would arrive precisely when the platform is already failing, which
+    is when the bridge is most worth keeping alive.
+    """
+    print(f"alb: {message}", file=sys.stderr)
+    try:
+        path = pathlib.Path(root) / "alb.log"
+        if path.exists() and path.stat().st_size > LOG_MAX_BYTES:
+            path.replace(path.with_suffix(".log.1"))
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(f"{stamp} {message}\n")
+    except Exception:  # noqa: BLE001 - see docstring; never fail while failing
+        pass
+
+
 def _reply_or_resume(sender, inbox, state, allowlist_path, letter_id, text,
                      searched=None, outbox=None, agent="agent"):
     """Send the reply - or finish the one a throttle interrupted.
@@ -415,8 +446,7 @@ def _poll_forever(platform, transport, surface, root, args, config):
     from alb.outbound import store as outbound
     flagged = outbound.reconcile_at_startup(root / "state")
     for letter_id in flagged:
-        print(f"alb: reconciled in-flight outbound {letter_id} -> dead-letter",
-              file=sys.stderr)
+        log(root, f"reconciled in-flight outbound {letter_id} -> dead-letter")
     while True:
         try:
             published = run.run_once(
@@ -430,7 +460,7 @@ def _poll_forever(platform, transport, surface, root, args, config):
             # A conflict is a YIELD, not an error: exit 0 so the token's holder
             # keeps running. Under a restart-on-crash-only policy this stays
             # down by design - that is the intended behaviour, not a failure.
-            print(f"alb: yielding, {exc}", file=sys.stderr)
+            log(root, f"yielding, {exc}")
             return 0
         except api.TransientFailure as exc:
             # Ordinary on a long poll. Wait it out rather than dying: the
@@ -442,12 +472,12 @@ def _poll_forever(platform, transport, surface, root, args, config):
             # not told us how many others it named it for.
             backoff = min(args.interval * 5, 30)
             floor = getattr(exc, "retry_after", None) or 0
-            print(f"alb: transient, retrying: {exc}", file=sys.stderr)
+            log(root, f"transient, retrying: {exc}")
             time.sleep(max(backoff, floor))
             continue
         except api.FetchFailed as exc:
             # NOT a conflict. Do not send an operator hunting a second poller.
-            print(f"alb: fetch failed: {exc}", file=sys.stderr)
+            log(root, f"fetch failed: {exc}")
             return 1
 
         _report(published, args.once)
