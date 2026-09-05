@@ -423,16 +423,16 @@ def _offer_ring(console, panes, summary):
         console.say("holds your agent, and a doorbell in the wrong pane lands in")
         console.say("somebody else's session. Paste the id of YOUR agent's pane.")
         surface = console.ask("  your agent's pane id", "").strip()
-        if surface:
-            summary["ring"] = "configured"
-            notifier = ""
-            for entry in panes:
-                if entry.get("id") == surface:
-                    notifier = entry.get("notifier") or ""
-                    break
-            summary["notifier"] = notifier
-            return surface, notifier
-        console.say("  no pane id. The ring will not be configured.")
+        if not surface:
+            console.say("  no pane id. The ring will not be configured.")
+            return "", ""
+        for entry in panes:
+            if entry.get("id") == surface:
+                summary["ring"] = "configured"
+                notifier = entry.get("notifier") or ""
+                summary["notifier"] = notifier
+                return surface, notifier
+        console.say("  that id is not in the list above - re-run to refresh.")
         return "", ""
 
     console.say("No panes are visible, so the ring cannot be configured.")

@@ -465,6 +465,19 @@ class TheRingAsksForItsSurface(Base):
         self.assertIn("ALB_SURFACE=0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", env)
         self.assertIn("ALB_NOTIFIER=cmux", env)
 
+    def test_an_unknown_paste_is_not_configured(self):
+        """Fat-fingered uuid: success + default cmux is grok's defect one step later."""
+        console, result = self.run_init(
+            answers=["n", "print", "not-in-the-list"],
+            panes=[{"id": "%1", "label": "main:0.0 zsh", "notifier": "tmux"}])
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertNotIn("ALB_SURFACE", env)
+        self.assertNotIn("ALB_NOTIFIER", env)
+        self.assertNotEqual(result.get("ring"), "configured")
+        self.assertIn("not in the list", console.transcript.lower())
+        from alb.cli import _init_status
+        self.assertEqual(_init_status(result), 1)
+
     def test_a_tmux_pane_sets_the_notifier_from_the_paste(self):
         """latitude-pi shape: cmux absent, tmux present. No extra question."""
         console, result = self.run_init(
