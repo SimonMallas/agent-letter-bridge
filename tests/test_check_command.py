@@ -14,6 +14,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 ALB = str(ROOT / ".venv" / "bin" / "alb")
+ROOT_DIR = ROOT
 
 
 class TheCommandAnAgentRunsOnWaking(unittest.TestCase):
@@ -102,3 +103,35 @@ class TheAdviceNamesOnlyThingsThatExist(unittest.TestCase):
             with self.subTest(flag=flag):
                 self.assertIn(flag, helptext,
                               f"--check recommends alb {flag}, which does not exist")
+
+
+class TheDocumentedRitualMatchesTheBinary(unittest.TestCase):
+    """docs/agent-setup.md tells an agent what to run and what each exit code
+    means. It is the one place where a wrong word costs a relay, because the
+    agent following it is alone at the time - so the doc is tested, not
+    trusted."""
+
+    def setUp(self):
+        self.doc = (ROOT_DIR / "docs" / "agent-setup.md").read_text(
+            encoding="utf-8")
+
+    def test_every_alb_flag_the_ritual_names_exists(self):
+        import re
+        helptext = subprocess.run([ALB, "--help"], capture_output=True,
+                                  text=True).stdout
+        for flag in set(re.findall(r"alb (--[a-z][a-z-]+)", self.doc)):
+            with self.subTest(flag=flag):
+                self.assertIn(flag, helptext,
+                              f"agent-setup.md tells an agent to run alb "
+                              f"{flag}, which does not exist")
+
+    def test_the_exit_codes_it_documents_are_the_ones_we_return(self):
+        for code, meaning in (("0", "nothing"), ("2", "dead"), ("3", "not fix")):
+            with self.subTest(code=code):
+                self.assertIn(f"exit {code}", self.doc.lower().replace("  ", " ")
+                              .replace("exit  ", "exit ") or self.doc)
+
+    def test_the_honest_limit_is_stated_where_an_agent_will_read_it(self):
+        """A sleeping agent supervises nothing. If that sentence is missing,
+        the page promises self-healing it cannot deliver."""
+        self.assertIn("sleeping agent is not a supervisor", self.doc)

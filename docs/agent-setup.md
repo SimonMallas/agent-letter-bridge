@@ -101,6 +101,41 @@ alb --reply-to <letter-id> --text "..."
 Replying needs the token, so it is an operator-side action. Being woken and
 reading mail does not.
 
+## Check your own relay when you wake
+
+**Put this in your standing instructions.** Not in a hook that a compaction
+can eat, and not in a habit — in the file you read at the start of every
+session, pointed at your own root:
+
+```
+On waking, and on any sweep of your inbox, run:
+
+    alb --check --root <your root>
+
+  exit 0  nothing to do.
+  exit 2  your relay is dead. Stop it (alb --stop --root <your root>),
+          then start it again in ITS OWN pane — the same one, never a
+          second. Two pollers on one token is a conflict, not a backup.
+  exit 3  something is wrong that a restart will not fix. Read what it
+          says and tell your operator.
+```
+
+This is the whole of the self-healing. There is no daemon watching you and
+there will not be one: under cmux the bridge must be born inside a pane, so
+nothing outside can start it, and a watcher that could would be a second
+process to go quietly wrong.
+
+**Which means the honest limit belongs here too.** The supervisor is the
+agent — and a sleeping agent is not a supervisor, and a busy one is not
+either. Only a wired one is. An agent that never wakes never checks, and its
+relay stays dead until something else wakes it. Mail is not lost while that
+is true; it lands durably and waits. But nobody is told, and that is the
+condition this check exists to shorten rather than to abolish.
+
+One relay ran dead for thirty-six hours with an agent awake and working
+beside it the whole time, because checking was something to remember rather
+than something wired.
+
 ## If the doorbell stops arriving
 
 The mail still lands — letters are authoritative and the ring only accelerates.
