@@ -83,12 +83,28 @@ def _stamp_thread(inbox, letter_id, thread):
     os.replace(tmp, path)
 
 
-def _write_heartbeat(path):
-    """Written after EVERY completed poll, busy or quiet.
+# Codes an operator can act on. A reason is never free text: this file is read
+# by things that log and display it, and a message carrying a chat id or a body
+# would put correspondence into a health file that nothing treats as private.
+REASONS = frozenset({"throttled_429", "upstream_5xx", "network", "starting"})
+
+
+def _write_heartbeat(path, state="running", reason=None):
+    """Written after every completed poll, and whenever the loop is still
+    going round without completing one.
 
     Freshness equals liveness: a supervisor judges this process from outside,
     without its cooperation. If only busy polls wrote it, a quiet bridge would
-    read as a dead one.
+    read as a dead one - and if only COMPLETED polls write it, so would two
+    other healthy states. A bridge that has just started has not finished a
+    poll yet, and a bridge correctly backing off from a rate limit will not
+    finish one for minutes. Both were reading as dead, which is how a fix for
+    restarts becomes a cause of them.
+
+    So the file answers two questions rather than one: `heartbeat` says I am
+    alive, `state` says what kind of alive. A reader that wants "did work
+    complete" checks the state; a reader that wants "is it there" checks the
+    timestamp, and neither is misled by the other.
     """
     path = pathlib.Path(path)
     tmp = path.with_suffix(".tmp")
@@ -96,7 +112,11 @@ def _write_heartbeat(path):
     # briefly readable by anyone else.
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        fh.write(json.dumps({"heartbeat": time.time()}))
+        payload = {"heartbeat": time.time(), "state": state}
+        if reason is not None:
+            # Bounded, never the caller's text - see REASONS.
+            payload["reason"] = reason if reason in REASONS else "unknown"
+        fh.write(json.dumps(payload))
     os.replace(tmp, path)
 
 

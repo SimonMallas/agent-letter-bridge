@@ -68,3 +68,76 @@ class TheLoopHonoursThePlatformsFloor(unittest.TestCase):
         """The healthy control: without it, "honours the floor" and "sleeps
         whatever it is told, including nothing" are the same test."""
         self.assertEqual(self._slept_for(None), 10)
+
+
+class TheLoopSaysItIsStillThereWhileItWaits(unittest.TestCase):
+    """Grok's finding, from the other end: a bridge that correctly waits out
+    a rate limit completes no cycles, so under the old rule its heartbeat
+    froze for exactly as long as it behaved correctly."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        for sub in ("state", "inbox", "processed", "outbox"):
+            (self.root / sub).mkdir()
+        (self.root / "allowlist.json").write_text(json.dumps({"chats": []}))
+        self.args = argparse.Namespace(interval=2, once=False, mail_root=None)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_throttled_wait_writes_degraded_not_silence(self):
+        platform = mock.Mock()
+        platform.fetch.side_effect = api.TransientFailure(
+            "getUpdates deferred: HTTP 429", 1)
+
+        def stop(_):
+            raise Slept
+
+        with mock.patch.object(cli.time, "sleep", side_effect=stop):
+            with self.assertRaises(Slept):
+                cli._poll_forever(platform, mock.Mock(), "surface:1",
+                                  self.root, self.args, {"ALB_TO": "agent"})
+        health = json.loads(
+            (self.root / "state" / "health.json").read_text(encoding="utf-8"))
+        self.assertEqual(health["state"], "degraded")
+        self.assertEqual(health["reason"], "throttled_429")
+
+
+class AStartingBridgeSaysSoBeforeItBlocks(unittest.TestCase):
+    """The gate refused this as a pin until the test existed: I had checked
+    that _write_heartbeat CAN say "starting" and never that the loop says it.
+    The same error as testing that retry_after is stored and not that anything
+    reads it - a unit proved, a behaviour assumed."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        for sub in ("state", "inbox", "processed", "outbox"):
+            (self.root / sub).mkdir()
+        (self.root / "allowlist.json").write_text(json.dumps({"chats": []}))
+        self.args = argparse.Namespace(interval=2, once=False, mail_root=None)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_heartbeat_is_written_before_the_first_fetch(self):
+        seen = {}
+        platform = mock.Mock()
+
+        def fetch(*a, **kw):
+            # The moment before any poll could have completed.
+            path = self.root / "state" / "health.json"
+            seen["at_first_fetch"] = (
+                json.loads(path.read_text(encoding="utf-8")) if path.exists()
+                else None)
+            raise Slept
+
+        platform.fetch.side_effect = fetch
+        with self.assertRaises(Slept):
+            cli._poll_forever(platform, mock.Mock(), "surface:1",
+                              self.root, self.args, {"ALB_TO": "agent"})
+        self.assertIsNotNone(seen["at_first_fetch"],
+                             "a restarted bridge must not present the previous "
+                             "process's timestamp while it blocks")
+        self.assertEqual(seen["at_first_fetch"]["state"], "starting")

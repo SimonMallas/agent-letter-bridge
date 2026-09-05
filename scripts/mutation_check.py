@@ -434,6 +434,21 @@ EXTRA = {
         CLI, "tests.test_logging",
         "    except Exception:  # noqa: BLE001 - see docstring; never fail while failing\n        pass",
         "    except Exception:\n        raise"),
+    "a starting bridge does not read as a dead one": (
+        CLI, "tests.test_poll_backoff",
+        '    _loop._write_heartbeat(root / "state" / "health.json",\n'
+        '                           state="starting", reason="starting")\n',
+        ""),
+    "a correct wait still says it is alive": (
+        CLI, "tests.test_poll_backoff",
+        '            _loop._write_heartbeat(\n'
+        '                root / "state" / "health.json", state="degraded",\n'
+        '                reason="throttled_429" if "429" in str(exc) else "upstream_5xx")\n',
+        ""),
+    "a health reason is a code, never the caller's text": (
+        POLL, "tests.test_heartbeat_states",
+        '            payload["reason"] = reason if reason in REASONS else "unknown"',
+        '            payload["reason"] = reason'),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

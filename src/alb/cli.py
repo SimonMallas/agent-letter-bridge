@@ -444,6 +444,13 @@ def _poll_forever(platform, transport, surface, root, args, config):
     # First act on rising: reconcile outbound letters left in flight by a
     # crash - each dead-letters for a human, once, before any new work.
     from alb.outbound import store as outbound
+    # Before the first blocking poll. Until this line existed, a freshly
+    # restarted bridge presented the PREVIOUS process's timestamp for as long
+    # as its first long poll blocked - so the healthiest moment in the
+    # process's life read as its deadest.
+    from alb.poller import loop as _loop
+    _loop._write_heartbeat(root / "state" / "health.json",
+                           state="starting", reason="starting")
     flagged = outbound.reconcile_at_startup(root / "state")
     for letter_id in flagged:
         log(root, f"reconciled in-flight outbound {letter_id} -> dead-letter")
@@ -473,6 +480,12 @@ def _poll_forever(platform, transport, surface, root, args, config):
             backoff = min(args.interval * 5, 30)
             floor = getattr(exc, "retry_after", None) or 0
             log(root, f"transient, retrying: {exc}")
+            # Still going round. No cycle will complete for as long as we
+            # correctly wait, and without this the bridge would look
+            # progressively deader the longer it behaved correctly.
+            _loop._write_heartbeat(
+                root / "state" / "health.json", state="degraded",
+                reason="throttled_429" if "429" in str(exc) else "upstream_5xx")
             time.sleep(max(backoff, floor))
             continue
         except api.FetchFailed as exc:
