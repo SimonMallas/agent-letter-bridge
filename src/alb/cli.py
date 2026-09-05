@@ -131,8 +131,13 @@ def main(argv=None):
         v = health.verdict(pathlib.Path(args.root) / "state" / "health.json")
         print(f"{v.state}: {v.reason}")
         if v.action == "restart":
-            print("action: restart the bridge in its own pane. "
-                  "Stop it first with --stop; never start a second one.")
+            # Names only what exists today. The first version of this line
+            # recommended an alb flag that had not been built, so obeying the
+            # verdict failed at the moment of obedience.
+            print("action: restart the bridge in its own pane. Interrupt the "
+                  "running one first (cmux send-key --surface <yours> ctrl+c), "
+                  "then start it in that SAME pane. Never start a second one: "
+                  "two pollers on one token is a conflict, not a backup.")
             return 2
         if v.action == "investigate":
             print("action: investigate. Absence is not death - this bridge may "

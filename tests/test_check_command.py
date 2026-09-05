@@ -70,3 +70,35 @@ class TheCommandAnAgentRunsOnWaking(unittest.TestCase):
         got = self.check()
         self.assertEqual(got.returncode, 3)
         self.assertIn("investigate", got.stdout.lower())
+
+
+class TheAdviceNamesOnlyThingsThatExist(unittest.TestCase):
+    """Kimi's block. The restart verdict told an agent to run `alb --stop`,
+    which does not exist - so obeying the instruction failed at the exact
+    moment of obedience. The same class as a comment describing a safety the
+    code does not have: guidance that reads as authoritative and cannot be
+    followed."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "state").mkdir()
+        (self.root / "state" / "health.json").write_text(
+            json.dumps({"heartbeat": time.time() - 900, "state": "running"}),
+            encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_every_alb_command_it_recommends_is_a_real_one(self):
+        import re
+        out = subprocess.run([ALB, "--check", "--root", str(self.root)],
+                             capture_output=True, text=True).stdout
+        helptext = subprocess.run([ALB, "--help"], capture_output=True,
+                                  text=True).stdout
+        # Only flags advertised as OURS: a recommendation to run a cmux
+        # command names cmux's flags, and alb's help says nothing about those.
+        for flag in set(re.findall(r"alb [^.\n]*?(--[a-z][a-z-]+)", out)):
+            with self.subTest(flag=flag):
+                self.assertIn(flag, helptext,
+                              f"--check recommends alb {flag}, which does not exist")

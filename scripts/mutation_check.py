@@ -474,6 +474,10 @@ EXTRA = {
         '            _loop._write_heartbeat(root / "state" / "health.json",\n'
         '                                   state="yielded", reason="conflict")\n',
         ""),
+    "the advice names only commands that exist": (
+        CLI, "tests.test_check_command",
+        '            print("action: restart the bridge in its own pane. Interrupt the "',
+        '            print("action: restart. Stop it first with --stop. "'),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
