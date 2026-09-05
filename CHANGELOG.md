@@ -7,6 +7,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.2.2] — unreleased, canary only
+
+**Not a release.** The version exists so a running bridge can say which code
+it is, because a canary you cannot identify proves nothing.
+
+Recoverable platform conditions stop being terminal. 429 and 5xx on fetch and
+confirm are waited out rather than died on, honouring Telegram's documented
+`parameters.retry_after` as a floor; 401 and 403 stay fatal, and 409 still
+yields. A throttled send becomes `Throttled` rather than a permanent refusal,
+keeps its claim, survives a restart as a deferred state rather than being
+dead-lettered as ambiguous, and can be finished by retyping the same reply.
+
+Found by three rounds of adversarial review, each after the previous round's
+gates were green: receipt ordering was lexical and broke past nine events;
+resume was check-then-act and two resumers could both send; and the lock added
+to fix that built its path from unvalidated caller text.
+
 ## [0.2.1] — 2026-09-04
 
 Package metadata correction. 0.2.0 shipped with `version = "0.1.1"` in
