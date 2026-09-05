@@ -272,6 +272,12 @@ def resume_throttled(sender, inbox, state, allowlist_path, out_id, outbox,
     Refuses anything not actually deferred. The state is read from the events,
     not from the caller's belief about them.
     """
+    # BEFORE the filesystem is touched. The lock path was built from raw
+    # caller text and opened before anything validated it, so "../escaped"
+    # created a file outside the locks directory - a public library call able
+    # to write wherever the process can. A refusal raised after the write is
+    # not a refusal, it is a report of something that already happened.
+    store._check_id(out_id)
     state = pathlib.Path(state)
     # The check and the send are two steps, so the deferred state has to be
     # CONSUMED exclusively rather than merely observed: two resumers can both

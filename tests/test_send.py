@@ -557,3 +557,40 @@ class ResumeSendsWhatWasComposed(LetterFirstOutbound):
             sender, self.inbox, self.state, self.allow,
             f"reply-{self.letter_id}", outbox=self.outbox, text="the original")
         self.assertEqual(sender.sent, ["the original"])
+
+
+class ResumeRefusesPathShapedIdentifiers(LetterFirstOutbound):
+    """The lock file was opened from raw caller text before anything checked
+    it, so a public library call could create files anywhere the process can
+    write. The refusal has to come BEFORE the filesystem is touched: a
+    NotDeferred raised afterwards is not a refusal, it is a report of
+    something that already happened."""
+
+    def test_a_traversing_id_is_refused_before_anything_is_written(self):
+        for bad in ("../escaped", "../../outside", "/absolute", "a/b",
+                    ".", "..", "", "with space"):
+            with self.subTest(out_id=bad):
+                with self.assertRaises(store.UnsafeIdentifier):
+                    reply.resume_throttled(
+                        None, self.inbox, self.state, self.allow, bad,
+                        outbox=self.outbox)
+        stray = list(self.root.rglob("*.resume"))
+        self.assertEqual(stray, [], f"nothing may be written: {stray}")
+
+
+class MalformedReceiptNamesDoNotCrashReconciliation(LetterFirstOutbound):
+    """The ordering comment claimed unparsable names sort first and cannot
+    pose as current state. True of the sort key, and _history then split the
+    same names unconditionally - so a stray file raised IndexError instead.
+    A comment describing a safety the code does not have is worse than no
+    comment: it stops the next reader checking."""
+
+    def test_a_stray_file_does_not_crash_the_startup_pass(self):
+        out_id = f"reply-{self.letter_id}"
+        d = self.state / "receipts" / out_id
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "1-composed.json").write_text("{}", encoding="utf-8")
+        (d / "stray").write_text("", encoding="utf-8")
+        (d / "notanumber-sending.json").write_text("{}", encoding="utf-8")
+        verdicts = outbound.reconcile(self.state)
+        self.assertEqual(verdicts.get(out_id), "unsent")

@@ -408,10 +408,12 @@ EXTRA = {
         "    source = store.resolve(pathlib.Path(inbox), source_id)\n"),
     "event order is numeric, not alphabetical": (
         OUTBOUND, "tests.test_outbound",
-        "    return [p.name.split(\"-\", 1)[1].removesuffix(\".json\")\n"
-        "            for p in sorted(d.iterdir(), key=_seq)]",
-        "    return [p.name.split(\"-\", 1)[1].removesuffix(\".json\")\n"
-        "            for p in sorted(d.iterdir())]"),
+        "    for path in sorted(d.iterdir(), key=_seq):",
+        "    for path in sorted(d.iterdir()):"),
+    "a stray receipt file does not crash the startup pass": (
+        OUTBOUND, "tests.test_send",
+        "        if not rest or _seq(path) < 0:\n            continue\n",
+        ""),
     "only one resumer crosses the send boundary": (
         SEND, "tests.test_send",
         "            fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)",
@@ -420,6 +422,10 @@ EXTRA = {
         SEND, "tests.test_send",
         "    if text is not None and text != letter.body:",
         "    if False:"),
+    "resume validates the id before touching the filesystem": (
+        SEND, "tests.test_send",
+        "    store._check_id(out_id)\n",
+        ""),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

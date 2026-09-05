@@ -120,9 +120,22 @@ def _seq(path):
 
 
 def _history(d):
-    """This letter's events, oldest first, in the order they happened."""
-    return [p.name.split("-", 1)[1].removesuffix(".json")
-            for p in sorted(d.iterdir(), key=_seq)]
+    """This letter's events, oldest first, in the order they happened.
+
+    Malformed entries are SKIPPED rather than split blindly: the sort key
+    already tolerates them, and splitting the same names unconditionally
+    raised IndexError on anything without a dash. A stray file in a receipts
+    directory is a thing that happens - a half-written copy, an editor's
+    backup - and it must not take down the startup pass that every letter's
+    fate depends on.
+    """
+    events = []
+    for path in sorted(d.iterdir(), key=_seq):
+        name, _, rest = path.name.partition("-")
+        if not rest or _seq(path) < 0:
+            continue
+        events.append(rest.removesuffix(".json"))
+    return events
 
 
 def _event_path(d, event):
