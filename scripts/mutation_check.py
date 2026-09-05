@@ -501,6 +501,11 @@ EXTRA = {
         CLI, "tests.test_poll_backoff",
         "        if generation is not None and singleton.stop_requested(root, generation):",
         "        if False:"),
+    "the stop remembers the generation it asked for": (
+        CLI, "tests.test_stop",
+        "        asked = singleton.request_stop(args.root)",
+        "        singleton.request_stop(args.root)\n"
+        "        asked = singleton.current_generation(args.root)"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

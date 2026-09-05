@@ -135,3 +135,43 @@ class StoppingTheBridge(unittest.TestCase):
         got = self.stop()
         self.assertEqual(got.returncode, 0)
         self.assertIn("nothing", got.stdout.lower())
+
+
+class TheStopRemembersWhatItAsked(unittest.TestCase):
+    """Codex's seam. --stop knew the generation it had just asked to stop and
+    then went back to disk for it. If the holder exits in that gap the re-read
+    returns nothing, the unhonoured request is neither recognised nor cleared,
+    and the command reports a clean stop it never confirmed.
+
+    The value was in hand. Reading it again was the bug."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_an_unhonoured_request_is_cleared_even_if_the_holder_vanishes(self):
+        from alb.bridge import singleton
+        script = (
+            "import sys, time;"
+            "sys.path.insert(0, %r);" % str(ROOT / "src") +
+            "from alb.bridge import singleton;"
+            "ctx = singleton.hold(%r);" % str(self.root) +
+            "ctx.__enter__();"
+            "time.sleep(300)")
+        child = subprocess.Popen([sys.executable, "-c", script])
+        for _ in range(100):
+            lock = self.root / "bridge.lock"
+            if lock.exists() and lock.read_text(encoding="utf-8"):
+                break
+            time.sleep(0.05)
+        asked = singleton.request_stop(self.root)
+        self.assertIsNotNone(asked)
+        child.kill(); child.wait(timeout=5)  # the holder dies without reading it
+        got = subprocess.run([ALB, "--stop", "--root", str(self.root)],
+                             capture_output=True, text=True, timeout=20)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertFalse((self.root / "state" / "stop-requested").exists(),
+                         "an unhonoured request must not be left behind")

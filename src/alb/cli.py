@@ -137,12 +137,26 @@ def main(argv=None):
         # confidence of having proved they were ours. So the request is left
         # for the process that owns the work, and the lock going free is the
         # only thing accepted as proof it was honoured.
-        if singleton.request_stop(args.root) is None:
-            # No request is left behind. One written now would be a trap for
-            # whichever bridge starts next.
+        # Keep the generation request_stop returned. Re-reading it from disk
+        # opens the seam it was meant to close: the holder can exit between
+        # the two calls, the re-read comes back None, and the unhonoured
+        # request is then neither recognised nor cleared. Codex found me
+        # going back to disk for a value I already had in my hand.
+        asked = singleton.request_stop(args.root)
+        if asked is None:
+            # Nothing is running, so no request is written - one now would be a
+            # trap for whichever bridge starts next. And any request already
+            # here belongs to a run that has ended: harmless, because a
+            # generation cannot match a later run, but litter that reads like
+            # a pending instruction to the next person who looks.
+            if (pathlib.Path(args.root) / "state" /
+                    singleton.STOP_REQUEST).exists():
+                singleton.clear_stop_request(args.root)
+                print("nothing to stop: no bridge holds this root. Cleared a "
+                      "stop request left by a run that has already ended.")
+                return 0
             print("nothing to stop: no bridge holds this root")
             return 0
-        asked = singleton.current_generation(args.root)
         for _ in range(150):
             if singleton.running_pid(args.root) is None:
                 # The lock going free proves the holder is GONE. It does not
