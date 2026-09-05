@@ -418,13 +418,28 @@ def _init(args):
         summary = wizard.init(
             args.root, Console(),
             chat_id_reader=discover.read_chat_ids,
-            panes=discover.list_panes(),
+            panes=discover.list_all_panes(),
         )
     except KeyboardInterrupt:
         # Ctrl-C during setup must not leave a token half-written.
         print("\nalb: setup cancelled", file=sys.stderr)
         return 1
-    return 0 if summary else 1
+    return _init_status(summary)
+
+
+def _init_status(summary):
+    """Exit status for agents. Prose is for humans; this is for docs/agent-install.md.
+
+    A summary always exists, so `return 0 if summary else 1` reported success
+    for grok's bell-less install. Incomplete (no ring) must be non-zero.
+    """
+    if not summary:
+        return 1
+    if summary.get("ring") != "configured":
+        return 1
+    if summary.get("resident") == "incomplete":
+        return 1
+    return 0
 
 
 # A log that grows without bound becomes the disk problem it was meant to

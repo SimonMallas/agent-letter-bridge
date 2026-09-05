@@ -73,6 +73,23 @@ def list_panes(notifier="cmux"):
     return _cmux_surfaces(result.stdout)
 
 
+def list_all_panes():
+    """Discover from both multiplexers. Tag each pane with where it came from.
+
+    Init must not assume cmux: latitude-pi is tmux-only, and under Simon's
+    strict ruling a cmux-only list would fail-close a machine whose bell
+    works. The operator pastes an id; ALB_NOTIFIER follows from that pane.
+    No extra question.
+    """
+    panes = []
+    for notifier in ("cmux", "tmux"):
+        for pane in list_panes(notifier):
+            tagged = dict(pane)
+            tagged["notifier"] = notifier
+            panes.append(tagged)
+    return panes
+
+
 # A cmux tree names windows, workspaces, panes and surfaces, each with its own
 # uuid, drawn with box characters. The ring types into a SURFACE, so the other
 # three ids are offers that would fail - and taking the first field of a tree
