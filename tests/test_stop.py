@@ -82,6 +82,7 @@ class StoppingTheBridge(unittest.TestCase):
             self.assertIn("still running", got.stdout.lower() + got.stderr.lower())
         finally:
             child.kill()
+            child.wait(timeout=5)  # reap it; an unwaited child warns at exit
 
     def test_a_request_names_the_run_it_was_meant_for(self):
         from alb.bridge import singleton

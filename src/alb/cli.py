@@ -142,8 +142,20 @@ def main(argv=None):
             # whichever bridge starts next.
             print("nothing to stop: no bridge holds this root")
             return 0
+        asked = singleton.current_generation(args.root)
         for _ in range(150):
             if singleton.running_pid(args.root) is None:
+                # The lock going free proves the holder is GONE. It does not
+                # prove the holder read the request - it may have crashed, hit
+                # a fatal fetch, or yielded a contested token in the same
+                # window. Codex reproduced exactly that, so the two outcomes
+                # are reported as the different things they are.
+                if singleton.stop_requested(args.root, asked):
+                    singleton.clear_stop_request(args.root)
+                    print("the bridge is gone, but it never read the request - "
+                          "it stopped for another reason. Request cleared so it "
+                          "cannot reach the next one.")
+                    return 0
                 print("stopped")
                 return 0
             time.sleep(0.2)
