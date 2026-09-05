@@ -559,6 +559,11 @@ EXTRA = {
         ROOT / "src" / "alb" / "watchdog" / "health.py", "tests.test_check_command",
         '    return Verdict("unresponsive", "restart",',
         '    return Verdict("silent", "restart",'),
+    "the tmux ring cannot hang either": (
+        ROOT / "src" / "alb" / "adapters" / "tmux" / "transport.py", "tests.test_notifier_bounds",
+        "    subprocess.run(argv, check=True, capture_output=True,\n"
+        "                   timeout=RING_TIMEOUT)",
+        "    subprocess.run(argv, check=True, capture_output=True)"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

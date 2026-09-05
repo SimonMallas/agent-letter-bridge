@@ -8,6 +8,7 @@ death a supervisor is meant to detect.
 
 A bounded ring can fail. An unbounded one can stop the bridge.
 """
+import math
 import pathlib
 import subprocess
 import sys
@@ -47,6 +48,8 @@ class EveryRingPathIsBounded(unittest.TestCase):
                                  "a ring with no timeout can stop the bridge")
             self.assertIsInstance(timeout, (int, float))
             self.assertGreater(timeout, 0, "a zero or negative bound is not one")
+            self.assertTrue(math.isfinite(timeout),
+                            "infinity is positive and is not a bound")
 
     def test_the_cmux_ring_cannot_hang(self):
         self._assert_bounded(self._timeouts_passed(
@@ -62,24 +65,43 @@ class EveryRingPathIsBounded(unittest.TestCase):
 
 
 class TheBoundActuallyBites(unittest.TestCase):
-    """Pi drove real sleeping children rather than inspecting keywords, and
-    checked something I had not thought to: that a transport does not go on to
-    send its SECOND step after the first one times out. A ring that half-fires
-    and then reports a failure is worse than one that does not fire."""
+    """Pi drove real sleeping children rather than inspecting keywords - and
+    then caught my attempt to preserve that from calling production at all.
 
-    def _slow_child(self):
+    My first version ran subprocess.run directly with a timeout, which proves
+    Python enforces timeouts and says nothing about our adapters. He proved it
+    by attribution: patched _run to raise if invoked, ran this test, and it
+    passed with the adapter call count at ZERO. A test named for our
+    enforcement that never reaches our enforcement.
+
+    These go through the real _run and the real _bus_ring."""
+
+    def _sleeper(self):
         return [sys.executable, "-c", "import time; time.sleep(5)"]
 
-    def test_a_hanging_cmux_step_raises_rather_than_waiting(self):
+    def test_a_hanging_cmux_call_is_cut_off(self):
         with mock.patch.object(cmux_transport, "RING_TIMEOUT", 0.1):
-            with mock.patch.object(
-                    cmux_transport, "_argv_for",
-                    lambda *a, **kw: self._slow_child(), create=True):
-                with self.assertRaises(subprocess.TimeoutExpired):
-                    subprocess.run(self._slow_child(), check=True,
-                                   capture_output=True, timeout=0.1)
+            with self.assertRaises(subprocess.TimeoutExpired):
+                cmux_transport._run(self._sleeper())
 
-    def test_no_second_step_follows_a_timed_out_first(self):
+    def test_a_hanging_tmux_call_is_cut_off(self):
+        with mock.patch.object(tmux_transport, "RING_TIMEOUT", 0.1):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                tmux_transport._run(self._sleeper())
+
+    def test_a_hanging_integrated_ring_is_cut_off(self):
+        import tempfile
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            sleeper = pathlib.Path(tmp) / "slow-helper"
+            sleeper.write_text("#!/bin/sh\nsleep 5\n", encoding="utf-8")
+            sleeper.chmod(0o700)
+            with mock.patch.object(run, "RING_TIMEOUT", 0.1):
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    run._bus_ring("codex", "info", "an-id", binary=str(sleeper))
+
+    def test_no_second_cmux_step_follows_a_timed_out_first(self):
+        """A half-fired ring is worse than one that did not fire."""
         calls = []
 
         def timing_out(argv, **kw):
@@ -89,5 +111,16 @@ class TheBoundActuallyBites(unittest.TestCase):
         with mock.patch.object(subprocess, "run", timing_out):
             with self.assertRaises(subprocess.TimeoutExpired):
                 cmux_transport.Cmux().deliver("surface:1", "a line")
-        self.assertEqual(len(calls), 1,
-                         "a half-fired ring is worse than one that did not fire")
+        self.assertEqual(len(calls), 1)
+
+    def test_no_second_tmux_step_follows_a_timed_out_first(self):
+        calls = []
+
+        def timing_out(argv, **kw):
+            calls.append(argv)
+            raise subprocess.TimeoutExpired(argv, kw.get("timeout", 0))
+
+        with mock.patch.object(subprocess, "run", timing_out):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                tmux_transport.Tmux().deliver("%1", "a line")
+        self.assertEqual(len(calls), 1)
