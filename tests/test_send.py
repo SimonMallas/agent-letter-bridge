@@ -316,3 +316,33 @@ class LetterFirstOutbound(unittest.TestCase):
         with self.assertRaises(reply.NotPermitted):
             self._send(FakeSender())
         self.assertEqual(list(self.outbox.glob("*.md")), [])
+
+
+class ThrottledKeepsTheClaim(LetterFirstOutbound):
+    """A throttled send is the one failure we know the outcome of: the
+    platform never looked, so nothing was delivered and nothing may be
+    dead-lettered. The claim must survive the wait - releasing it mid-throttle
+    would let a second composer pick the source up and invent the duplicate
+    the never-retry doctrine exists to prevent."""
+
+    class Throttling:
+        def send(self, chat_id, text):
+            raise reply.Throttled("throttled with HTTP 429", retry_after=12)
+
+    def test_it_records_the_throttle_without_dead_lettering(self):
+        with self.assertRaises(reply.Throttled):
+            self._send(self.Throttling())
+        out_id = f"reply-{self.letter_id}"
+        events = self.events(out_id)
+        self.assertTrue(any("throttled" in name for name in events), events)
+        self.assertFalse(any("ambiguous" in name for name in events), events)
+        dead = self.state / "dead-letters"
+        self.assertFalse(dead.exists() and any(dead.iterdir()),
+                         "a throttle is provably undelivered - never dead-lettered")
+
+    def test_the_outbound_letter_survives_so_the_claim_holds(self):
+        with self.assertRaises(reply.Throttled):
+            self._send(self.Throttling())
+        out_id = f"reply-{self.letter_id}"
+        self.assertTrue((self.outbox / f"{out_id}.md").exists(),
+                        "the letter IS the claim; a throttle must not release it")

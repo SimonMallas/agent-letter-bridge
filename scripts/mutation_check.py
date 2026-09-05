@@ -362,6 +362,18 @@ EXTRA = {
         ROOT / "src" / "alb" / "cli.py", "tests.test_mail_root",
         '    mail = pathlib.Path(args.mail_root or config.get("ALB_MAIL_ROOT") or root)',
         "    mail = root"),
+    "a rate limit is waited out, not died on": (
+        TG, "tests.test_telegram_adapter",
+        '            if exc.code == 429 or exc.code >= 500:\n'
+        '                # The platform asking for time, or failing at its own gateway.\n'
+        '                # Neither is a verdict about us and both clear on their own.\n'
+        '                raise TransientFailure(f"getUpdates deferred: HTTP {exc.code}",\n'
+        '                                       _retry_after(exc)) from None\n',
+        ""),
+    "a throttled send is not a refusal": (
+        TG, "tests.test_telegram_adapter",
+        '            if exc.code == 429:',
+        "            if False:"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

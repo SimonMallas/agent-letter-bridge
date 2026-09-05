@@ -32,11 +32,31 @@ class AmbiguousOutcome(Exception):
 
 
 class DefiniteRefusal(Exception):
-    """The platform definitely did not send it (for example a rate limit).
+    """The platform definitely did not send it, and will not if asked again.
 
     Not ambiguous, so it does not dead-letter: the operator may fix the cause
-    and send new text.
+    and send new text. A rate limit is NOT one of these - see Throttled.
     """
+
+
+class Throttled(Exception):
+    """The platform refused to look at it yet. Retryable, uniquely.
+
+    A 429 is pre-processing: the message provably was not sent, so a retry
+    cannot double-post. That makes it the one send outcome the never-retry
+    doctrine does not cover - the doctrine refuses AmbiguousOutcome because a
+    retry might duplicate something already accepted, and nothing was accepted
+    here.
+
+    Recording this as a DefiniteRefusal wrote a temporary state into a durable
+    record as a final verdict, which is wrong in a way that looks right: the
+    message genuinely was not sent, so the outcome reads as correct while the
+    letter is closed against a condition that would have cleared itself.
+    """
+
+    def __init__(self, message, retry_after=None):
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 # Where a letter names its destination, newest first. This list is the
@@ -187,6 +207,14 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
     except DefiniteRefusal as exc:
         outbound.record_event(state, out_id, "refused", detail=str(exc))
         raise
+    except Throttled as exc:
+        # NOT terminal and NOT ambiguous - the only failure whose outcome we
+        # know. The platform never read the request, so nothing was delivered
+        # and there is nothing to dead-letter. The outbound letter stays where
+        # it is: it IS the claim, and releasing it here would let a second
+        # composer pick up the same source mid-wait and post twice.
+        outbound.record_event(state, out_id, "throttled", detail=str(exc))
+        raise
     except Exception as exc:
         # THE SAFETY NET, unchanged in spirit: an outcome that escaped
         # classification is unknown, and unknown means ambiguous - record it
@@ -218,6 +246,11 @@ def _send_legacy(sender, state, letter_id, chat_id, text):
         raise
     except DefiniteRefusal:
         _record(claim, "refused")
+        raise
+    except Throttled:
+        # Same reasoning as the letter-first path: provably undelivered, so
+        # the claim holds and nothing is dead-lettered.
+        _record(claim, "throttled")
         raise
     except Exception as exc:
         _record(claim, "ambiguous")

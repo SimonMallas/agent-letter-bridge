@@ -32,13 +32,45 @@ class FetchFailed(Exception):
 
 
 class TransientFailure(Exception):
-    """A network condition, not a verdict about the token or the bridge.
+    """A condition to wait out, not a verdict about the token or the bridge.
 
     Connection resets and timeouts are ordinary on a long poll. Treating one as
     fatal kills the bridge for a condition that resolves itself; treating it as
     a conflict would hand the token away for no reason. It is neither - it is a
     thing to wait out.
+
+    Rate limits and gateway errors belong here for the same reason, and did not
+    used to: every non-409 status was fatal, so "you are polling too fast" and
+    "your token is revoked" ended the process identically. One clears in
+    seconds. A bridge died for thirty-six hours on the first.
+
+    `retry_after` is the platform's own number when it sends one. It is a
+    FLOOR, not the whole wait: backoff still applies on top, because a server
+    telling us when to return does not tell us how many others it told the
+    same thing.
     """
+
+    def __init__(self, message, retry_after=None):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+def _retry_after(exc):
+    """Seconds the platform asked us to wait, if it named a number.
+
+    Read defensively: a missing, malformed or absurd header must degrade to
+    plain backoff rather than raise inside the error path, because a crash
+    while classifying an error loses the classification entirely.
+    """
+    try:
+        raw = (exc.headers or {}).get("Retry-After")
+    except Exception:  # noqa: BLE001 - never fail while handling a failure
+        return None
+    try:
+        seconds = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    return seconds if 0 < seconds <= 3600 else None
 
 
 BASE = "https://api.telegram.org"
@@ -109,6 +141,11 @@ class Telegram:
             if exc.code == 409:
                 # Another consumer holds this token. Yield; never fight for it.
                 raise loop.PlatformConflict("another consumer holds this token") from None
+            if exc.code == 429 or exc.code >= 500:
+                # The platform asking for time, or failing at its own gateway.
+                # Neither is a verdict about us and both clear on their own.
+                raise TransientFailure(f"getUpdates deferred: HTTP {exc.code}",
+                                       _retry_after(exc)) from None
             raise FetchFailed(f"getUpdates failed: HTTP {exc.code}") from None
         except OSError as exc:
             # OSError, not just URLError. A read timeout raised deep in the SSL
@@ -184,6 +221,9 @@ class Telegram:
             # and the operator is told the wrong thing.
             if exc.code == 409:
                 raise loop.PlatformConflict("another consumer holds this token") from None
+            if exc.code == 429 or exc.code >= 500:
+                raise TransientFailure(f"confirm deferred: HTTP {exc.code}",
+                                       _retry_after(exc)) from None
             raise FetchFailed(f"confirm failed: HTTP {exc.code}") from None
         except OSError as exc:
             # The offset stays unpersisted, so the next start re-reads. Safe:
@@ -204,7 +244,15 @@ class Telegram:
             if exc.code >= 500:
                 # The server may have accepted it before failing. Unknown.
                 raise reply.AmbiguousOutcome(f"server error HTTP {exc.code}") from None
-            # 4xx, including 429: the platform definitely did not send it.
+            if exc.code == 429:
+                # NOT a refusal. Throttling happens before the platform reads
+                # the request, so the message provably was not sent - the one
+                # case where a retry cannot double-post. Closing the letter
+                # here recorded a temporary state as a permanent verdict.
+                raise reply.Throttled(f"throttled with HTTP {exc.code}",
+                                      _retry_after(exc)) from None
+            # Other 4xx: the platform definitely did not send it, and would
+            # not if asked again.
             raise reply.DefiniteRefusal(f"refused with HTTP {exc.code}") from None
         except OSError as exc:
             # The POST may have arrived and only the response been lost. This

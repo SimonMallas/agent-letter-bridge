@@ -70,11 +70,17 @@ class Fetch(unittest.TestCase):
         """A bad token is not a second consumer. Reporting every HTTP failure
         as a conflict sends a 3am operator hunting a phantom poller instead of
         reading the auth error in front of them."""
-        for code in (401, 404, 500):
+        for code in (401, 404):
             with self.subTest(code=code):
                 with mock.patch.object(api, "_request", side_effect=http_error(code)):
                     with self.assertRaises(api.FetchFailed):
                         self.client.fetch(offset=None)
+        # 500 used to be listed here as fatal. It is not a conflict and it is
+        # not fatal either: a gateway failure is a thing to wait out, and this
+        # test's claim is about conflicts, not about what kills the bridge.
+        with mock.patch.object(api, "_request", side_effect=http_error(500)):
+            with self.assertRaises(api.TransientFailure):
+                self.client.fetch(offset=None)
 
     def test_a_fetch_failure_is_not_mistaken_for_a_conflict(self):
         with mock.patch.object(api, "_request", side_effect=http_error(401)):
@@ -214,9 +220,15 @@ class Send(unittest.TestCase):
     def setUp(self):
         self.client = api.Telegram("123:FAKE")
 
-    def test_a_rate_limit_is_a_definite_refusal(self):
+    def test_a_rate_limit_is_not_a_refusal(self):
+        """This test used to assert the opposite, and the opposite was the bug.
+
+        A 429 was recorded as DefiniteRefusal, which closed a letter
+        permanently against a condition that clears in seconds. It read as
+        correct because the message truly was not sent - the error was calling
+        a temporary state a final verdict."""
         with mock.patch.object(api, "_request", side_effect=http_error(429)):
-            with self.assertRaises(reply.DefiniteRefusal):
+            with self.assertRaises(reply.Throttled):
                 self.client.send("111", "hello")
 
     def test_a_network_failure_is_ambiguous(self):
@@ -247,3 +259,80 @@ class TokenHygiene(unittest.TestCase):
             with self.assertRaises(reply.AmbiguousOutcome) as caught:
                 client.send("111", "hello")
         self.assertNotIn("FAKE", str(caught.exception))
+
+
+class RecoverableConditionsAreNotTerminal(unittest.TestCase):
+    """Piece 0: the bridge must not die for a condition that clears itself.
+
+    Grok's bridge ran for weeks and then exited on "HTTP 429" - the platform
+    asking it to wait. Every non-409 status was fatal, so a rate-limit notice
+    and a revoked token were the same event. They are not: one resolves in
+    seconds, the other never resolves at all, and the difference is the whole
+    of this class.
+    """
+
+    def setUp(self):
+        self.client = api.Telegram("123:FAKE")
+
+    def _raises(self, error):
+        return mock.patch.object(api, "_request", side_effect=error)
+
+    def test_a_rate_limit_is_waited_out_not_died_on(self):
+        with self._raises(http_error(429)):
+            with self.assertRaises(api.TransientFailure):
+                self.client.fetch(offset=None)
+
+    def test_a_gateway_failure_is_waited_out(self):
+        with self._raises(http_error(502)):
+            with self.assertRaises(api.TransientFailure):
+                self.client.fetch(offset=None)
+
+    def test_a_revoked_token_still_kills_the_bridge_promptly(self):
+        """The healthy control. Without it, "survives everything" and "hangs
+        forever doing nothing" pass the same tests, and retrying a dead
+        credential forever is how you hammer a platform."""
+        with self._raises(http_error(401)):
+            with self.assertRaises(api.FetchFailed):
+                self.client.fetch(offset=None)
+
+    def test_a_conflict_still_yields_rather_than_fighting(self):
+        with self._raises(http_error(409)):
+            with self.assertRaises(loop.PlatformConflict):
+                self.client.fetch(offset=None)
+
+    def test_the_platforms_own_wait_is_honoured_when_it_sends_one(self):
+        err = urllib.error.HTTPError(
+            "u", 429, "err", {"Retry-After": "17"}, None)
+        err.close()
+        with self._raises(err):
+            with self.assertRaises(api.TransientFailure) as caught:
+                self.client.fetch(offset=None)
+        self.assertEqual(getattr(caught.exception, "retry_after", None), 17)
+
+
+class ThrottledIsNotRefused(unittest.TestCase):
+    """A 429 on send is pre-processing: the platform never looked at the
+    message. Recording that as a permanent refusal writes a temporary state
+    into a durable record as a final verdict - wrong in a way that looks
+    right, because the message genuinely was not sent."""
+
+    def setUp(self):
+        self.client = api.Telegram("123:FAKE")
+
+    def _raises(self, error):
+        return mock.patch.object(api, "_request", side_effect=error)
+
+    def test_a_throttled_send_is_its_own_outcome(self):
+        with self._raises(http_error(429)):
+            with self.assertRaises(reply.Throttled):
+                self.client.send("111", "hi")
+
+    def test_a_real_refusal_is_still_a_refusal(self):
+        with self._raises(http_error(400)):
+            with self.assertRaises(reply.DefiniteRefusal):
+                self.client.send("111", "hi")
+
+    def test_a_server_error_is_still_ambiguous_and_never_retried(self):
+        with self._raises(http_error(503)):
+            with self.assertRaises(reply.AmbiguousOutcome):
+                self.client.send("111", "hi")
