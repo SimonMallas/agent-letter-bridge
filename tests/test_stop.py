@@ -286,7 +286,8 @@ class HonouredIsProvedNotInferred(unittest.TestCase):
         return rc, said
 
     def test_a_recorded_stand_down_is_reported_as_honoured(self):
-        rc, said = self._run_stop({"state": "yielded", "reason": "requested"})
+        rc, said = self._run_stop({"state": "yielded", "reason": "requested",
+                                   "generation": "gen-A"})
         self.assertEqual(rc, 0)
         self.assertIn("stopped", said)
 
@@ -298,6 +299,59 @@ class HonouredIsProvedNotInferred(unittest.TestCase):
         self.assertNotIn("stopped", said.replace("never read", ""))
 
     def test_an_old_stand_down_from_a_previous_run_proves_nothing(self):
-        rc, said = self._run_stop({"state": "yielded", "reason": "requested"},
-                                  age=9999)
+        rc, said = self._run_stop({"state": "yielded", "reason": "requested",
+                                   "generation": "gen-A"}, age=9999)
+        self.assertNotIn("stopped", said.replace("never read", ""))
+
+
+class AStandDownProvesWhichRunStoodDown(unittest.TestCase):
+    """Pi: timestamp is not run identity. _recorded_stand_down checked state,
+    reason and recency - so a stand-down written by a LATER run satisfied a
+    caller asking about an earlier one. Recency is a proxy for identity and
+    the generation is the identity itself."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "state").mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _stop_seeing(self, health):
+        from unittest import mock
+        from alb import cli
+        calls = {"n": 0}
+
+        def running_pid(root):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return 4242
+            payload = dict(health)
+            payload["heartbeat"] = time.time()
+            (self.root / "state" / "health.json").write_text(
+                json.dumps(payload), encoding="utf-8")
+            return None
+
+        with mock.patch.multiple(
+                cli.singleton, request_stop=lambda root: "gen-A",
+                running_pid=running_pid,
+                stop_requested=lambda root, generation: False,
+                clear_stop_request=lambda root: None):
+            with mock.patch.object(cli.sys, "stdout") as out:
+                cli.main(["--stop", "--root", str(self.root)])
+        return " ".join(str(c) for c in out.method_calls)
+
+    def test_our_own_generation_standing_down_is_honoured(self):
+        said = self._stop_seeing(
+            {"state": "yielded", "reason": "requested", "generation": "gen-A"})
+        self.assertIn("stopped", said)
+
+    def test_another_runs_stand_down_does_not_answer_for_ours(self):
+        said = self._stop_seeing(
+            {"state": "yielded", "reason": "requested", "generation": "gen-B"})
+        self.assertNotIn("stopped", said.replace("never read", ""))
+
+    def test_a_stand_down_naming_no_run_proves_nothing(self):
+        said = self._stop_seeing({"state": "yielded", "reason": "requested"})
         self.assertNotIn("stopped", said.replace("never read", ""))

@@ -178,7 +178,7 @@ def main(argv=None):
                 # absence cannot tell those apart. So the claim rests on what
                 # the bridge RECORDED - a requested stand-down, written after
                 # we asked. Positive evidence, or no claim.
-                if _recorded_stand_down(root=args.root, since=requested_at):
+                if _recorded_stand_down(args.root, requested_at, asked):
                     print("stopped")
                     return 0
                 print("the bridge is gone. It did not record standing down for "
@@ -486,7 +486,7 @@ def log(root, message):
         pass
 
 
-def _recorded_stand_down(root, since):
+def _recorded_stand_down(root, since, generation):
     """Did the bridge WRITE that it stood down for a request, after we asked?
 
     Positive evidence for a claim that was previously inferred from the
@@ -499,6 +499,7 @@ def _recorded_stand_down(root, since):
                           .read_text(encoding="utf-8"))
         return (data.get("state") == "yielded"
                 and data.get("reason") == "requested"
+                and data.get("generation") == generation
                 and float(data["heartbeat"]) >= since)
     except (OSError, ValueError, KeyError, TypeError):
         return False
@@ -600,7 +601,8 @@ def _poll_forever(platform, transport, surface, root, args, config,
             # know WHICH - one means somebody asked, the other means somebody
             # else is holding the token.
             _loop._write_heartbeat(root / "state" / "health.json",
-                                   state="yielded", reason="requested")
+                                   state="yielded", reason="requested",
+                                   generation=generation)
             return 0
         try:
             published = run.run_once(

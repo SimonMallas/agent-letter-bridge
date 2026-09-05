@@ -398,21 +398,30 @@ def _chat_ids(console, token, reader):
     return [str(found[index - 1]["chat_id"])]
 
 
+class UnreadableConfig(Exception):
+    """The file exists and the loader refuses it. Not the same as empty."""
+
+
 def _effective(env_path):
     """What the RUNTIME would read, not what the file happens to contain.
 
-    Pi's four: a commented line contains "ALB_SURFACE=" and configures
-    nothing; an empty assignment contains it and configures nothing; so a
-    substring check answers a question about shape when the question is about
-    meaning. Parsed with the same loader the bridge uses, so setup and runtime
-    cannot disagree about what is set.
+    A commented line contains "ALB_SURFACE=" and configures nothing; an empty
+    assignment contains it and configures nothing. A substring check answers a
+    question about shape when the question is about meaning, so this parses
+    with the same loader the bridge uses and setup cannot disagree with
+    runtime about what is set.
+
+    A loader REFUSAL raises rather than returning empty. Treating "I cannot
+    read this" as "there is nothing here" is how a duplicate key gets appended
+    to a config whose permissions are merely wrong - and when those are
+    repaired, the effective pin has silently changed underneath the operator.
     """
     from alb.bridge import run
 
     try:
         return run.load_config(env_path)
-    except Exception:  # noqa: BLE001 - unreadable is indistinguishable from unset here
-        return {}
+    except Exception as exc:  # noqa: BLE001 - any refusal, for the same reason
+        raise UnreadableConfig(str(exc)) from None
 
 
 def _persist_ring(console, env_path, env_path_existed, surface, notifier,
@@ -424,14 +433,28 @@ def _persist_ring(console, env_path, env_path_existed, surface, notifier,
     newline turns the next line into a continuation of the token's value,
     changing the one secret in the file while reporting success.
     """
-    config = _effective(env_path) if env_path_existed else {}
+    try:
+        config = _effective(env_path) if env_path_existed else {}
+    except UnreadableConfig as exc:
+        # Stop, do not append. The bytes stay exactly as they are.
+        console.say(f"  bridge.env exists but cannot be read as config: {exc}")
+        console.say("  Not writing to it. Fix the file, then re-run.")
+        summary["ring"] = "not configured"
+        return
+
     lines = []
-    if not config.get("ALB_SURFACE"):
+    retained_surface = config.get("ALB_SURFACE")
+    if not retained_surface:
         lines.append(f"ALB_SURFACE={surface}\n")
     else:
         console.say("  bridge.env already names a surface; leaving it alone. "
                     "Edit it yourself if that pane is wrong.")
-    if notifier and not config.get("ALB_NOTIFIER"):
+
+    # A notifier describes the surface that will actually be used. If we are
+    # RETAINING someone else's surface, the pane just selected says nothing
+    # about its type - so labelling the retained one from the new selection
+    # would save a pair that cannot both be true.
+    if notifier and not config.get("ALB_NOTIFIER") and not retained_surface:
         lines.append(f"ALB_NOTIFIER={notifier}\n")
 
     if lines:
@@ -444,13 +467,19 @@ def _persist_ring(console, env_path, env_path_existed, surface, notifier,
                 handle.write("\n")
             handle.writelines(lines)
 
-    # Configured means the RUNTIME would find a usable ring - not that
-    # somebody typed one. And a pane from one multiplexer under a notifier
-    # naming another is not a ring; it is two settings that cannot both be
-    # true.
-    after = _effective(env_path)
+    try:
+        after = _effective(env_path)
+    except UnreadableConfig:
+        summary["ring"] = "not configured"
+        return
     chosen = (after.get("ALB_NOTIFIER") or "").strip().lower()
     if not after.get("ALB_SURFACE"):
+        summary["ring"] = "not configured"
+    elif retained_surface and notifier and (chosen or "cmux") != notifier:
+        console.say(f"  bridge.env keeps {retained_surface}, which is a "
+                    f"{chosen or 'cmux'} surface, and you picked a {notifier} "
+                    f"pane. Those cannot both be the ring. Fix the env or pick "
+                    f"a {chosen or 'cmux'} pane.")
         summary["ring"] = "not configured"
     elif notifier and chosen and chosen != notifier:
         console.say(f"  bridge.env says ALB_NOTIFIER={chosen}, and that pane "

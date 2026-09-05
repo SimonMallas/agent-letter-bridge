@@ -90,7 +90,8 @@ REASONS = frozenset({"throttled_429", "upstream_5xx", "network", "starting",
                      "conflict", "requested"})
 
 
-def _write_heartbeat(path, state="running", reason=None):
+def _write_heartbeat(path, state="running", reason=None,
+                     generation=None):
     """Written after every completed poll, and whenever the loop is still
     going round without completing one.
 
@@ -114,6 +115,11 @@ def _write_heartbeat(path, state="running", reason=None):
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         payload = {"heartbeat": time.time(), "state": state}
+        if generation:
+            # WHICH run this is. A stand-down that cannot say which run made
+            # it cannot answer for any particular one, and recency is a proxy
+            # for identity rather than identity itself.
+            payload["generation"] = generation
         if reason is not None:
             # Bounded, never the caller's text - see REASONS.
             payload["reason"] = reason if reason in REASONS else "unknown"

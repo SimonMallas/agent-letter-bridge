@@ -556,6 +556,10 @@ class RerunningAfterAnIncompleteInstall(Base):
         self.root.mkdir(parents=True, exist_ok=True)
         (self.root / "bridge.env").write_text(
             "ALB_TOKEN=123456:TOKEN\n", encoding="utf-8")
+        # 0600, because that is what init writes. A fixture with looser
+        # permissions is refused by the real loader - correctly, and it made
+        # this test exercise the unreadable path rather than the rerun.
+        (self.root / "bridge.env").chmod(0o600)
 
     def test_a_pasted_pane_reaches_the_env_on_a_rerun(self):
         self._existing_env_without_surface()
@@ -712,4 +716,48 @@ class TheRingClaimIsEstablishedNotAsserted(Base):
 
         self.assertEqual(result.get("ring"), "not configured",
                          "a paste that never landed is not a configured ring")
+        self.assertNotEqual(_init_status(result), 0)
+
+
+class ARetainedSurfaceKeepsItsOwnType(Base):
+    """Pi A: a selected pane cannot establish the type of a DIFFERENT retained
+    one. With a surface already pinned and no notifier (so the runtime default
+    applies), selecting a tmux pane kept the old surface and appended tmux -
+    saving a pair that cannot both be true, and starting on it.
+
+    Pi B: _effective swallowed a loader rejection and returned {}, so an
+    INVALID config read as an ABSENT one and we appended a duplicate key.
+    Repair the permissions later and the effective pin has silently changed.
+    Unreadable is not empty - the same distinction as absence not being death."""
+
+    def _env(self, text, mode=0o600):
+        self.root.mkdir(parents=True, exist_ok=True)
+        (self.root / "bridge.env").write_text(text, encoding="utf-8")
+        (self.root / "bridge.env").chmod(mode)
+
+    def _select(self, pane_id, notifier):
+        return self.run_init(
+            answers=["n", "print", pane_id, "y"],
+            panes=[{"id": pane_id, "label": "agent", "notifier": notifier}],
+            cmux_born=lambda: True,
+            start_pane=lambda title, command: "surface:9")
+
+    def test_a_pane_of_another_type_does_not_relabel_the_retained_one(self):
+        from alb.cli import _init_status
+        self._env("ALB_TOKEN=123456:TOKEN\nALB_SURFACE=surface:old\n")
+        _, result = self._select("%42", "tmux")
+        body = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertIn("ALB_SURFACE=surface:old", body, "non-clobber still holds")
+        self.assertNotIn("ALB_NOTIFIER=tmux", body,
+                         "a tmux label on a retained cmux surface is a lie")
+        self.assertNotEqual(_init_status(result), 0)
+
+    def test_an_unreadable_config_is_not_treated_as_an_empty_one(self):
+        from alb.cli import _init_status
+        self._env("ALB_TOKEN=123456:TOKEN\nALB_SURFACE=surface:old\n", mode=0o644)
+        before = (self.root / "bridge.env").read_text(encoding="utf-8")
+        _, result = self._select("fixture-pane", "cmux")
+        after = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertEqual(before, after,
+                         "a config we cannot validate must not be appended to")
         self.assertNotEqual(_init_status(result), 0)

@@ -514,7 +514,7 @@ EXTRA = {
         '                  "it with cmux send-key ctrl+c, "'),
     "honoured is proved, never inferred from absence": (
         CLI, "tests.test_stop",
-        "                if _recorded_stand_down(root=args.root, since=requested_at):",
+        "                if _recorded_stand_down(args.root, requested_at, asked):",
         "                if True:"),
     "the env is parsed, not pattern-matched": (
         ROOT / "src" / "alb" / "setup" / "wizard.py", "tests.test_setup",
@@ -530,6 +530,18 @@ EXTRA = {
         '    if not after.get("ALB_SURFACE"):\n'
         '        summary["ring"] = "not configured"',
         "    if False:\n        pass"),
+    "a stand-down proves which run stood down": (
+        CLI, "tests.test_stop",
+        '                and data.get("generation") == generation\n',
+        ""),
+    "a retained surface keeps its own type": (
+        ROOT / "src" / "alb" / "setup" / "wizard.py", "tests.test_setup",
+        "    if notifier and not config.get(\"ALB_NOTIFIER\") and not retained_surface:",
+        "    if notifier and not config.get(\"ALB_NOTIFIER\"):"),
+    "an unreadable config stops persistence": (
+        ROOT / "src" / "alb" / "setup" / "wizard.py", "tests.test_setup",
+        "        raise UnreadableConfig(str(exc)) from None",
+        "        return {}"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
