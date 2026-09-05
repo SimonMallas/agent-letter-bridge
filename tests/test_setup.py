@@ -459,9 +459,21 @@ class TheRingAsksForItsSurface(Base):
     def test_a_pasted_surface_is_written_to_the_env(self):
         console, result = self.run_init(
             answers=["n", "print", "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"],
-            panes=[{"id": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "label": "agent"}])
+            panes=[{"id": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "label": "agent",
+                    "notifier": "cmux"}])
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertIn("ALB_SURFACE=0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", env)
+        self.assertIn("ALB_NOTIFIER=cmux", env)
+
+    def test_a_tmux_pane_sets_the_notifier_from_the_paste(self):
+        """latitude-pi shape: cmux absent, tmux present. No extra question."""
+        console, result = self.run_init(
+            answers=["n", "print", "%1"],
+            panes=[{"id": "%1", "label": "main:0.0 zsh", "notifier": "tmux"}])
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertIn("ALB_SURFACE=%1", env)
+        self.assertIn("ALB_NOTIFIER=tmux", env)
+        self.assertEqual(result.get("ring"), "configured")
 
     def test_blank_does_not_write_a_surface(self):
         """Blank is not a skip-to-success. No id, no ALB_SURFACE. The

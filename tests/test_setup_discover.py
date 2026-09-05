@@ -73,6 +73,17 @@ class ListingPanesNeverChooses(unittest.TestCase):
             panes = discover.list_panes("tmux")
         self.assertEqual([p["id"] for p in panes], ["%1", "%2"])
 
+    def test_list_all_panes_tags_each_source(self):
+        """tmux-only machines must not fail-close. Discovery is both lists."""
+        def fake_run(argv, **kw):
+            if argv[0] == "tmux":
+                return mock.Mock(returncode=0, stdout="%1\tmain:0.0 zsh\n")
+            raise OSError("cmux missing")
+        with mock.patch.object(discover.subprocess, "run", side_effect=fake_run):
+            panes = discover.list_all_panes()
+        self.assertEqual(panes, [{"id": "%1", "label": "main:0.0 zsh",
+                                  "notifier": "tmux"}])
+
     def test_a_nonzero_exit_yields_nothing(self):
         completed = mock.Mock(returncode=1, stdout="garbage")
         with mock.patch.object(discover.subprocess, "run", return_value=completed):

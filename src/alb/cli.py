@@ -355,7 +355,7 @@ def _init(args):
         summary = wizard.init(
             args.root, Console(),
             chat_id_reader=discover.read_chat_ids,
-            panes=discover.list_panes(),
+            panes=discover.list_all_panes(),
         )
     except KeyboardInterrupt:
         # Ctrl-C during setup must not leave a token half-written.

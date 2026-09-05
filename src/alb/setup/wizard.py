@@ -212,10 +212,12 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     #    HERE, so the env carries it before the resident offer loads that env.
     #    (Found by codex's consistency review: the old order started a
     #    resident whose ring stayed disabled until a restart nobody mentioned.)
-    surface = _offer_ring(console, panes, summary)
+    surface, notifier = _offer_ring(console, panes, summary)
     if surface and not env_path_existed:
         with open(env_path, "a", encoding="utf-8") as handle:
             handle.write(f"ALB_SURFACE={surface}\n")
+            if notifier:
+                handle.write(f"ALB_NOTIFIER={notifier}\n")
 
     # 6. The resident. Both real installs stalled at "--once looks fine" with
     #    nothing left running - so init finishes the job, or prints exactly
@@ -414,22 +416,30 @@ def _offer_ring(console, panes, summary):
     if panes:
         console.say("Panes I can see:")
         for entry in panes:
-            console.say(f"  {entry['id']}  {entry.get('label', '')}".rstrip())
+            where = entry.get("notifier") or ""
+            tag = f"[{where}] " if where else ""
+            console.say(f"  {entry['id']}  {tag}{entry.get('label', '')}".rstrip())
         console.say("I am not choosing one: a listing cannot tell me which pane")
         console.say("holds your agent, and a doorbell in the wrong pane lands in")
         console.say("somebody else's session. Paste the id of YOUR agent's pane.")
         surface = console.ask("  your agent's pane id", "").strip()
         if surface:
             summary["ring"] = "configured"
-            return surface
+            notifier = ""
+            for entry in panes:
+                if entry.get("id") == surface:
+                    notifier = entry.get("notifier") or ""
+                    break
+            summary["notifier"] = notifier
+            return surface, notifier
         console.say("  no pane id. The ring will not be configured.")
-        return ""
+        return "", ""
 
     console.say("No panes are visible, so the ring cannot be configured.")
-    console.say("Run init from inside cmux with at least one pane, then paste")
-    console.say("your agent's pane id. A later ALB_SURFACE edit is not a")
-    console.say("supported install.")
-    return ""
+    console.say("Run init from inside a multiplexer with at least one pane,")
+    console.say("then paste your agent's pane id. A later ALB_SURFACE edit")
+    console.say("is not a supported install.")
+    return "", ""
 
 
 def _closing(console, root, summary):
