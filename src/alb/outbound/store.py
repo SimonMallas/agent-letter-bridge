@@ -131,10 +131,15 @@ def _history(d):
     """
     events = []
     for path in sorted(d.iterdir(), key=_seq):
-        name, _, rest = path.name.partition("-")
-        if not rest or _seq(path) < 0:
+        _, _, rest = path.name.partition("-")
+        event = rest.removesuffix(".json")
+        # An empty event name is malformed too: "3-.json" carries a dash and a
+        # number, so it passed a filter that only asked those two questions,
+        # and an empty string then sat in the history as the current state -
+        # masking a deferred letter, because "" is in no state set at all.
+        if not event or _seq(path) < 0:
             continue
-        events.append(rest.removesuffix(".json"))
+        events.append(event)
     return events
 
 

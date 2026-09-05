@@ -594,3 +594,25 @@ class MalformedReceiptNamesDoNotCrashReconciliation(LetterFirstOutbound):
         (d / "notanumber-sending.json").write_text("{}", encoding="utf-8")
         verdicts = outbound.reconcile(self.state)
         self.assertEqual(verdicts.get(out_id), "unsent")
+
+
+class AnEmptyEventNameIsAlsoMalformed(LetterFirstOutbound):
+    """Kimi's edge: "3-.json" has a dash and a number, so it passed the
+    malformed filter and put an EMPTY event into the history. As the trailing
+    entry it then masked the deferred verdict - a throttled letter read as
+    unsent, because "" is not in DEFERRED.
+
+    Not a duplicate-send hole: re-composing still meets AlreadyClaimed. But
+    "malformed entries are skipped" was not true, and a claim that is nearly
+    true is the kind the next reader stops checking."""
+
+    def test_a_dash_with_no_event_name_does_not_mask_the_state(self):
+        out_id = f"reply-{self.letter_id}"
+        d = self.state / "receipts" / out_id
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "1-composed.json").write_text("{}", encoding="utf-8")
+        (d / "2-sending.json").write_text("{}", encoding="utf-8")
+        (d / "3-throttled.json").write_text("{}", encoding="utf-8")
+        (d / "4-.json").write_text("{}", encoding="utf-8")
+        self.assertEqual(outbound.reconcile(self.state).get(out_id), "throttled",
+                         "an empty event name must not hide the real state")

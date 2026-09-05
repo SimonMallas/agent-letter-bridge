@@ -412,7 +412,7 @@ EXTRA = {
         "    for path in sorted(d.iterdir()):"),
     "a stray receipt file does not crash the startup pass": (
         OUTBOUND, "tests.test_send",
-        "        if not rest or _seq(path) < 0:\n            continue\n",
+        "        if not event or _seq(path) < 0:\n            continue\n",
         ""),
     "only one resumer crosses the send boundary": (
         SEND, "tests.test_send",
