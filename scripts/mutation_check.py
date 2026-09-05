@@ -483,25 +483,23 @@ EXTRA = {
         "        if not math.isfinite(heartbeat):\n"
         '            raise ValueError("non-finite heartbeat")\n',
         ""),
-    "a stop signals only a holder the lock proves is alive": (
+    "a stop request names the run it was meant for": (
         ROOT / "src" / "alb" / "bridge" / "singleton.py", "tests.test_stop",
-        "            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
-        "        except OSError:\n"
-        "            # Held: someone is alive. Read who.",
-        "            pass\n"
-        "        except OSError:\n"
-        "            # Held: someone is alive. Read who."),
-    "the holder records its pid": (
+        '        return data.get("generation") == generation',
+        "        return True"),
+    "nothing running leaves no trap for the next bridge": (
         ROOT / "src" / "alb" / "bridge" / "singleton.py", "tests.test_stop",
-        '        os.write(fd, json.dumps({"pid": os.getpid()}).encode("utf-8"))',
-        "        pass"),
-    "a stop is a request, never a signal": (
+        "    generation = current_generation(root)\n"
+        "    if generation is None:\n"
+        "        return None\n",
+        "    generation = current_generation(root) or \"any\"\n"),
+    "the holder mints a generation": (
         ROOT / "src" / "alb" / "bridge" / "singleton.py", "tests.test_stop",
-        '    (path / STOP_REQUEST).write_text("", encoding="utf-8")',
-        "    pass"),
+        "        generation = secrets.token_hex(8)",
+        '        generation = "fixed"'),
     "the bridge honours a stop request": (
         CLI, "tests.test_poll_backoff",
-        "        if singleton.stop_requested(root):",
+        "        if generation is not None and singleton.stop_requested(root, generation):",
         "        if False:"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",

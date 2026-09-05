@@ -137,11 +137,11 @@ def main(argv=None):
         # confidence of having proved they were ours. So the request is left
         # for the process that owns the work, and the lock going free is the
         # only thing accepted as proof it was honoured.
-        pid = singleton.running_pid(args.root)
-        if pid is None:
+        if singleton.request_stop(args.root) is None:
+            # No request is left behind. One written now would be a trap for
+            # whichever bridge starts next.
             print("nothing to stop: no bridge holds this root")
             return 0
-        singleton.request_stop(args.root)
         for _ in range(150):
             if singleton.running_pid(args.root) is None:
                 print("stopped")
@@ -346,14 +346,15 @@ def main(argv=None):
 
     try:
         lock = singleton.hold(root)
-        lock.__enter__()
+        generation = lock.__enter__()
     except singleton.AlreadyRunning as exc:
         # Refuse locally rather than race until the platform notices.
         print(f"alb: {exc}", file=sys.stderr)
         return 4
 
     with lock_guard(lock):
-        return _poll_forever(platform, transport, surface, root, args, config)
+        return _poll_forever(platform, transport, surface, root, args, config,
+                             generation=generation)
 
 
 class Console:
@@ -500,7 +501,8 @@ def _report(cycle, once):
         print("alb: " + " · ".join(parts))
 
 
-def _poll_forever(platform, transport, surface, root, args, config):
+def _poll_forever(platform, transport, surface, root, args, config,
+                  generation=None):
     # First act on rising: reconcile outbound letters left in flight by a
     # crash - each dead-letters for a human, once, before any new work.
     from alb.outbound import store as outbound
@@ -518,7 +520,7 @@ def _poll_forever(platform, transport, surface, root, args, config):
         # Checked before reaching for the platform, so a stop is honoured
         # without one more round trip - and before anything can fail in a way
         # that would obscure why we are leaving.
-        if singleton.stop_requested(root):
+        if generation is not None and singleton.stop_requested(root, generation):
             singleton.clear_stop_request(root)
             log(root, "stop requested; standing down")
             # Its own reason. A requested stop and a token conflict are both

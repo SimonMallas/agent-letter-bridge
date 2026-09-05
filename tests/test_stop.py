@@ -83,15 +83,47 @@ class StoppingTheBridge(unittest.TestCase):
         finally:
             child.kill()
 
-    def test_a_running_bridge_honours_the_request_and_stands_down(self):
+    def test_a_request_names_the_run_it_was_meant_for(self):
         from alb.bridge import singleton
-        (self.root / "state").mkdir(parents=True, exist_ok=True)
-        (self.root / "state" / "stop-requested").write_text("", encoding="utf-8")
-        self.assertTrue(singleton.stop_requested(self.root))
+        with singleton.hold(self.root) as generation:
+            asked = singleton.request_stop(self.root)
+            self.assertEqual(asked, generation)
+            self.assertTrue(singleton.stop_requested(self.root, generation))
+
+    def test_a_request_for_an_earlier_run_never_stops_a_later_one(self):
+        """Pi's race. Holder A is asked to stop and dies before reading it;
+        B starts on the same root. Without a generation, B stands down for a
+        request that was never about it - the stop becoming an outage."""
+        from alb.bridge import singleton
+        with singleton.hold(self.root) as first:
+            singleton.request_stop(self.root)
+        with singleton.hold(self.root) as second:
+            self.assertNotEqual(first, second)
+            self.assertFalse(singleton.stop_requested(self.root, second),
+                             "a stale request must not stop the next bridge")
 
     def test_a_bridge_with_no_request_keeps_going(self):
         from alb.bridge import singleton
-        self.assertFalse(singleton.stop_requested(self.root))
+        with singleton.hold(self.root) as generation:
+            self.assertFalse(singleton.stop_requested(self.root, generation))
+
+    def test_nothing_running_leaves_no_trap_for_the_next_bridge(self):
+        from alb.bridge import singleton
+        self.assertIsNone(singleton.request_stop(self.root))
+        self.assertFalse((self.root / "state" / "stop-requested").exists())
+
+    def test_a_malformed_request_is_not_a_stop(self):
+        """Fails closed: an unreadable request is not a reason to stop
+        handling mail, and 'I could not read it' must never mean 'stop'."""
+        from alb.bridge import singleton
+        (self.root / "state").mkdir(parents=True, exist_ok=True)
+        for raw in ("{not json", "", "[]", '{"generation": null}'):
+            with self.subTest(raw=raw[:12]):
+                (self.root / "state" / "stop-requested").write_text(
+                    raw, encoding="utf-8")
+                with singleton.hold(self.root) as generation:
+                    self.assertFalse(
+                        singleton.stop_requested(self.root, generation))
 
     def test_it_refuses_a_pid_that_no_longer_holds_the_lock(self):
         """A stale record from a crashed bridge names a pid the kernel has

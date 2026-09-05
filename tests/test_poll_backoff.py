@@ -190,12 +190,15 @@ class TheBridgeStandsDownWhenAsked(unittest.TestCase):
 
     def test_a_requested_stop_ends_the_loop_cleanly(self):
         from alb.bridge import singleton
-        singleton.request_stop(self.root)
+        gen = "abc123"
+        (self.root / "state" / "stop-requested").write_text(
+            json.dumps({"generation": gen}), encoding="utf-8")
         platform = mock.Mock()
         platform.fetch.side_effect = AssertionError(
             "must stand down BEFORE reaching for the platform")
         rc = cli._poll_forever(platform, mock.Mock(), "surface:1",
-                               self.root, self.args, {"ALB_TO": "agent"})
+                               self.root, self.args, {"ALB_TO": "agent"},
+                               generation=gen)
         self.assertEqual(rc, 0, "a requested stop is success, not failure")
         health = json.loads(
             (self.root / "state" / "health.json").read_text(encoding="utf-8"))
@@ -206,8 +209,11 @@ class TheBridgeStandsDownWhenAsked(unittest.TestCase):
 
     def test_the_request_is_cleared_so_the_next_start_is_not_stopped(self):
         from alb.bridge import singleton
-        singleton.request_stop(self.root)
+        gen = "abc123"
+        (self.root / "state" / "stop-requested").write_text(
+            json.dumps({"generation": gen}), encoding="utf-8")
         cli._poll_forever(mock.Mock(), mock.Mock(), "surface:1",
-                          self.root, self.args, {"ALB_TO": "agent"})
-        self.assertFalse(singleton.stop_requested(self.root),
+                          self.root, self.args, {"ALB_TO": "agent"},
+                          generation=gen)
+        self.assertFalse(singleton.stop_requested(self.root, gen),
                          "an honoured request must not stop the next bridge too")

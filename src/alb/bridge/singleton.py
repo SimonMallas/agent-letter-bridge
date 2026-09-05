@@ -13,6 +13,7 @@ import fcntl
 import json
 import os
 import pathlib
+import secrets
 
 
 class AlreadyRunning(Exception):
@@ -37,10 +38,18 @@ def hold(root):
         # lock is reading a pid that is provably still alive. A stale record
         # from a crashed bridge is unreachable by construction, which is what
         # keeps a stop from signalling a stranger who inherited the number.
+        # A fresh opaque generation per RUN, minted only after the lock is
+        # held. Pi's second block: a stop request that names only a root can
+        # outlive the bridge it was meant for - holder A is asked to stop,
+        # crashes before reading it, and holder B starts and stands down for
+        # a request that was never about it. The generation binds a request to
+        # one specific run, so a stale one is recognisable rather than obeyed.
+        generation = secrets.token_hex(8)
         os.ftruncate(fd, 0)
-        os.write(fd, json.dumps({"pid": os.getpid()}).encode("utf-8"))
+        os.write(fd, json.dumps(
+            {"pid": os.getpid(), "generation": generation}).encode("utf-8"))
         os.fsync(fd)
-        yield
+        yield generation
     finally:
         os.close(fd)
 
@@ -48,36 +57,69 @@ def hold(root):
 STOP_REQUEST = "stop-requested"
 
 
-def request_stop(root):
-    """Ask the bridge to stand down. Signals nothing.
+def current_generation(root):
+    """The generation of the bridge running NOW, or None if none is.
 
-    Pi's block on the signalling design: a failed flock proves someone held
-    the lock at that instant, not at the instant of the kill. The holder can
-    exit, release, and have its pid reused in between - and a stop would then
-    signal a stranger with the confidence of having proved they were ours,
-    which is worse than guessing because it looks verified.
-
-    So the only process that ever acts on a stop is the one that owns the
-    work. A stale request cannot reach anybody else, because nobody else is
-    running our loop.
+    Read through the lock: if the lock can be taken nobody is running, and
+    whatever the file says belongs to a run that has ended.
     """
+    if running_pid(root) is None:
+        return None
+    try:
+        data = json.loads(
+            (pathlib.Path(root) / "bridge.lock").read_text(encoding="utf-8"))
+        generation = data["generation"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return generation if isinstance(generation, str) and generation else None
+
+
+def request_stop(root):
+    """Ask the bridge running RIGHT NOW to stand down. Signals nothing.
+
+    Returns the generation asked to stop, or None if nothing was running -
+    in which case no request is left at all, because a request with nobody to
+    honour it is a trap for the next bridge to start.
+    """
+    generation = current_generation(root)
+    if generation is None:
+        return None
     path = pathlib.Path(root) / "state"
     path.mkdir(parents=True, exist_ok=True)
-    (path / STOP_REQUEST).write_text("", encoding="utf-8")
+    request = path / STOP_REQUEST
+    tmp = path / f".{STOP_REQUEST}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump({"generation": generation}, handle)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp, request)
+    return generation
 
 
-def stop_requested(root):
-    """Checked by the bridge at its own boundary. Never raises: a stop that
-    cannot be read is not a reason to stop handling mail."""
+def stop_requested(root, generation):
+    """True only if a stop was asked of THIS run.
+
+    Fails closed in every uncertain direction: an unreadable, malformed or
+    mismatched request is not a reason to stop handling mail, and a stop that
+    cannot be read is not a stop.
+    """
     try:
-        return (pathlib.Path(root) / "state" / STOP_REQUEST).exists()
-    except OSError:
+        data = json.loads(
+            (pathlib.Path(root) / "state" / STOP_REQUEST)
+            .read_text(encoding="utf-8"))
+        # Valid JSON of the wrong SHAPE is the case that slips through: a list
+        # has no .get and would raise where an unreadable file returns cleanly.
+        if not isinstance(data, dict):
+            return False
+        return data.get("generation") == generation
+    except (OSError, ValueError, TypeError, AttributeError):
         return False
 
 
 def clear_stop_request(root):
-    """Cleared by the bridge as it stands down, so the next start is not
-    stopped by a request that has already been honoured."""
+    """Cleared by the holder as it stands down, so an honoured request cannot
+    stop the next bridge as well."""
     with contextlib.suppress(OSError):
         (pathlib.Path(root) / "state" / STOP_REQUEST).unlink()
 
