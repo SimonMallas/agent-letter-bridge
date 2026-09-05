@@ -19,17 +19,17 @@ yields. A throttled send becomes `Throttled` rather than a permanent refusal,
 keeps its claim, survives a restart as a deferred state rather than being
 dead-lettered as ambiguous, and can be finished by retyping the same reply.
 
-Found by three rounds of adversarial review, each after the previous round's
-gates were green: receipt ordering was lexical and broke past nine events;
-resume was check-then-act and two resumers could both send; and the lock added
-to fix that built its path from unvalidated caller text.
+Three further defects were found and fixed in the same work, each after the
+previous fix's gates were green: receipt ordering was lexical and broke past
+nine events; resume was check-then-act, so two resumers could both send; and
+the lock added to fix that built its path from unvalidated caller text.
 
 ## [0.2.1] — 2026-09-04
 
 Package metadata correction. 0.2.0 shipped with `version = "0.1.1"` in
 `pyproject.toml`, so `alb --version` reported the previous release on a tree
-tagged v0.2.0 — a stranger could not tell which world they had cloned. Caught
-by an outside reviewer within hours of the flip. The tag stands as published;
+tagged v0.2.0 — a stranger could not tell which world they had cloned. The tag
+stands as published;
 this release makes the metadata tell the truth.
 
 Also in this release: the README no longer describes the ring as something that
@@ -67,7 +67,7 @@ credential.
 
 ### Coverage
 
-344 tests and 99 mutation-pinned invariants. Automated coverage still uses
+The invariants are pinned by mutation testing. Automated coverage still uses
 fakes — the suite proves the invariants, live runs prove the transports, and
 those are different claims. The inbound path has real live mileage; the paths
 added here are covered and reviewed but newer.
@@ -75,7 +75,7 @@ added here are covered and reviewed but newer.
 ## [0.1.1] — 2026-09-02
 
 First complete release (0.1.0 tagged earlier the same day; 0.1.1 lands the
-findings of a full-repo consistency review performed by an outside agent —
+findings of a full-repo consistency review —
 init writes the pasted pane id before the resident offer reads the config,
 claims scoped to what the envelope actually records, roles-not-processes
 stated honestly, integrated `--mail-root` documented with its true shape, and
@@ -101,17 +101,16 @@ repository owner flips it; the version marks "finished", not "published".
   a state directory.
 - Two install routes: `INSTALL.md` for people, `docs/agent-install.md` as a
   brief for a CLI agent installing on someone's behalf — the latter hardened
-  by three real agent wrong-turns the same day they happened.
+  against the ways an install actually goes wrong.
 - `docs/COMPARE.md`: the field, checked against each tool's current code and
   docs, our own limitations stated first, every citation dated.
-- Verified live by three agents — Claude Code, Grok Build, Codex — including
-  a full phone → letter → doorbell → read → reply loop, and an install
-  performed end-to-end by the agent itself from the docs.
+- Verified live: a full phone → letter → doorbell → read → reply loop, and an
+  install performed end-to-end by a CLI agent working from the docs.
 
 ### Proven by
-277 tests, 85 mutation-pinned invariants (each proved by disabling it and
-watching the suite go red), privacy and dependency gates in pre-commit and
-CI, and the live deployments above.
+Invariants pinned by mutation testing — each proved by disabling it and
+watching the suite go red — privacy and dependency gates in pre-commit and
+CI, and the live runs above.
 
 ### Added
 - Durable-letter store: atomic publish, two-fence parsing, exact-id resolution,
@@ -133,6 +132,4 @@ CI, and the live deployments above.
 
 ### Notes
 - The ring requires a multiplexer. There is no notifier that works without one.
-- Verified live against a sacrificial bot. (Superseded above: since this note
-  was written, three agents have run it live, including an install performed
-  by the agent itself.)
+- Verified live against a sacrificial bot. (Superseded above.)

@@ -166,8 +166,8 @@ Waking an agent that already handles other mail: [`docs/agent-setup.md`](docs/ag
 ## Status
 
 **v0.2.1.** Inbound delivery, ringing and bounded replies have been
-exercised live against real bots on macOS and Linux, cmux and tmux, including by
-someone other than the author. v0.2 adds durable outbound letters, correspondent
+exercised live against real bots on macOS and Linux, cmux and tmux. v0.2 adds
+durable outbound letters, correspondent
 identity and threading, and read-only retrieval (`--list`, `--show`, `--search`,
 `--thread`, `--export`); those are covered by the suite and reviewed, but have
 not yet had the same live mileage as the inbound path. **Automated coverage
