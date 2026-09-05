@@ -218,3 +218,46 @@ class ReconcileRunsAtStartup(Base):
         self.compose()
         self.assertEqual(outbound.reconcile_at_startup(self.root / "state"), [])
         self.assertEqual(list((self.root / "state" / "dead-letters").glob("*")), [])
+
+
+class AThrottleIsNotAnUnknown(Base):
+    """A throttle is the one non-terminal state whose outcome we KNOW: the
+    platform declined to read the request, so nothing was delivered.
+
+    Reconciliation classifies "sending with no terminal event" as ambiguous
+    and dead-letters it, which is right for a send whose fate is genuinely
+    unknown. Applied to a throttle it manufactures the exact outcome the
+    throttle path exists to prevent - one restart later, quietly, with a
+    dead-letter that claims uncertainty we do not have.
+    """
+
+    def _throttled(self):
+        letter_id = self.compose()
+        state = self.root / "state"
+        outbound.record_event(state, letter_id, "sending")
+        outbound.record_event(state, letter_id, "throttled",
+                              detail="throttled with HTTP 429")
+        return letter_id
+
+    def test_reconcile_does_not_call_a_throttle_ambiguous(self):
+        letter_id = self._throttled()
+        verdicts = outbound.reconcile(self.root / "state")
+        self.assertEqual(verdicts.get(letter_id), "throttled")
+
+    def test_a_restart_leaves_a_throttled_letter_resumable(self):
+        letter_id = self._throttled()
+        outbound.reconcile_at_startup(self.root / "state")
+        dead = self.root / "state" / "dead-letters"
+        self.assertFalse(dead.exists() and any(dead.iterdir()),
+                         "a throttle is provably undelivered - never dead-lettered")
+        events = [p.name for p in (self.root / "state" / "receipts" / letter_id).iterdir()]
+        self.assertFalse(any("dead" in name for name in events), events)
+
+    def test_a_genuinely_ambiguous_send_still_dead_letters(self):
+        """The healthy control. Without it, "throttles are spared" and
+        "reconciliation stopped working" pass the same test."""
+        letter_id = self.compose()
+        outbound.record_event(self.root / "state", letter_id, "sending")
+        outbound.reconcile_at_startup(self.root / "state")
+        dead = self.root / "state" / "dead-letters"
+        self.assertTrue(dead.exists() and any(dead.iterdir()))

@@ -114,6 +114,14 @@ def _event_path(d, event):
 
 TERMINAL = {"sent", "refused", "ambiguous", "dead"}
 
+# Not terminal, and deliberately not ambiguous either: a throttle is the one
+# in-flight state whose outcome is KNOWN. The platform declined to read the
+# request, so nothing was delivered and there is nothing to be uncertain
+# about. Treating it as ambiguous - which is what "sending with no terminal
+# event" means everywhere else - would dead-letter it on the next restart and
+# manufacture the very outcome the throttle path exists to prevent.
+DEFERRED = {"throttled"}
+
 
 def reconcile(state):
     """Startup pass: classify every outbound letter's delivery state.
@@ -131,6 +139,12 @@ def reconcile(state):
         events = [p.name.split("-", 1)[1].removesuffix(".json")
                   for p in sorted(d.iterdir())]
         if any(e in TERMINAL for e in events):
+            continue
+        if events and events[-1] in DEFERRED:
+            # Ordering is by the event files' numbered names, so the LAST
+            # event is the current state: a throttle followed by another
+            # attempt is no longer deferred, and only the tail can say so.
+            verdicts[d.name] = "throttled"
             continue
         verdicts[d.name] = "ambiguous" if "sending" in events else "unsent"
     return verdicts

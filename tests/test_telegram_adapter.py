@@ -1,4 +1,5 @@
 """Telegram adapter: the only place that talks to the platform."""
+import io
 import json
 import pathlib
 import tempfile
@@ -336,3 +337,53 @@ class ThrottledIsNotRefused(unittest.TestCase):
         with self._raises(http_error(503)):
             with self.assertRaises(reply.AmbiguousOutcome):
                 self.client.send("111", "hi")
+
+
+class TheWaitComesFromWhereThePlatformPutsIt(unittest.TestCase):
+    """Telegram documents retry_after inside the JSON error body
+    (parameters.retry_after), not the HTTP header. Reading only the header
+    means the floor is usually absent in production while the tests, which
+    fabricate a header, look green."""
+
+    def setUp(self):
+        self.client = api.Telegram("123:FAKE")
+
+    def _error(self, body, headers=None):
+        err = urllib.error.HTTPError(
+            "u", 429, "err", headers or {},
+            io.BytesIO(body.encode("utf-8")) if body is not None else None)
+        return err
+
+    def test_the_documented_json_body_is_read(self):
+        err = self._error(json.dumps(
+            {"ok": False, "error_code": 429,
+             "parameters": {"retry_after": 23}}))
+        with mock.patch.object(api, "_request", side_effect=err):
+            with self.assertRaises(api.TransientFailure) as caught:
+                self.client.fetch(offset=None)
+        self.assertEqual(caught.exception.retry_after, 23)
+
+    def test_a_header_still_works_when_there_is_no_body(self):
+        err = self._error(None, {"Retry-After": "17"})
+        with mock.patch.object(api, "_request", side_effect=err):
+            with self.assertRaises(api.TransientFailure) as caught:
+                self.client.fetch(offset=None)
+        self.assertEqual(caught.exception.retry_after, 17)
+
+    def test_a_malformed_body_degrades_to_plain_backoff(self):
+        """A crash while classifying an error loses the classification
+        entirely, which is worse than losing the floor."""
+        for body in ("{not json", "", "[]", json.dumps({"parameters": "no"})):
+            with self.subTest(body=body[:12]):
+                with mock.patch.object(api, "_request",
+                                       side_effect=self._error(body)):
+                    with self.assertRaises(api.TransientFailure) as caught:
+                        self.client.fetch(offset=None)
+                self.assertIsNone(caught.exception.retry_after)
+
+    def test_an_absurd_wait_is_refused_rather_than_obeyed(self):
+        err = self._error(json.dumps({"parameters": {"retry_after": 999999}}))
+        with mock.patch.object(api, "_request", side_effect=err):
+            with self.assertRaises(api.TransientFailure) as caught:
+                self.client.fetch(offset=None)
+        self.assertIsNone(caught.exception.retry_after)

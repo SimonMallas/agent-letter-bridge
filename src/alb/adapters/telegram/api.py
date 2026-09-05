@@ -55,22 +55,51 @@ class TransientFailure(Exception):
         self.retry_after = retry_after
 
 
+# A wait longer than this is not a wait, it is an outage, and obeying it
+# would park the bridge for hours on a number we did not choose.
+MAX_RETRY_AFTER = 3600
+
+
+def _sane(seconds):
+    try:
+        seconds = int(str(seconds).strip())
+    except (TypeError, ValueError):
+        return None
+    return seconds if 0 < seconds <= MAX_RETRY_AFTER else None
+
+
 def _retry_after(exc):
     """Seconds the platform asked us to wait, if it named a number.
 
-    Read defensively: a missing, malformed or absurd header must degrade to
-    plain backoff rather than raise inside the error path, because a crash
-    while classifying an error loses the classification entirely.
+    Telegram documents this in the JSON error body as parameters.retry_after,
+    NOT as an HTTP header - so the body is read first and the header is only a
+    fallback. Reading the header alone passes a test that fabricates one and
+    finds nothing in production, which is a green suite over a floor that is
+    never applied.
+
+    Read defensively throughout: a missing, malformed, oversized or absurd
+    response must degrade to plain backoff rather than raise, because a crash
+    while classifying an error loses the classification entirely and turns a
+    survivable condition back into a dead bridge.
     """
     try:
-        raw = (exc.headers or {}).get("Retry-After")
+        raw = exc.read(8192)
     except Exception:  # noqa: BLE001 - never fail while handling a failure
-        return None
+        raw = None
+    if raw:
+        try:
+            payload = json.loads(raw.decode("utf-8", "replace"))
+            params = payload.get("parameters") if isinstance(payload, dict) else None
+            if isinstance(params, dict):
+                seconds = _sane(params.get("retry_after"))
+                if seconds is not None:
+                    return seconds
+        except Exception:  # noqa: BLE001 - same reason
+            pass
     try:
-        seconds = int(str(raw).strip())
-    except (TypeError, ValueError):
+        return _sane((exc.headers or {}).get("Retry-After"))
+    except Exception:  # noqa: BLE001 - same reason
         return None
-    return seconds if 0 < seconds <= 3600 else None
 
 
 BASE = "https://api.telegram.org"

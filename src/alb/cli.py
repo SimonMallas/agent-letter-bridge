@@ -255,6 +255,16 @@ def main(argv=None):
             print(f"alb: AMBIGUOUS - dead-lettered for a human, NOT retried: {exc}",
                   file=sys.stderr)
             return 3
+        except reply.Throttled as exc:
+            # Not a refusal, and saying "refused" here would undo the whole
+            # point of the outcome: nothing was delivered, nothing was lost,
+            # and the letter is still claimed and waiting.
+            wait = getattr(exc, "retry_after", None)
+            when = f" for {wait}s" if wait else ""
+            print(f"alb: DEFERRED - the platform asked us to wait{when}. "
+                  f"The reply is composed and still claimed; nothing was sent "
+                  f"and nothing was lost: {exc}", file=sys.stderr)
+            return 4
         except Exception as exc:
             print(f"alb: refused: {type(exc).__name__}: {exc}", file=sys.stderr)
             return 1
@@ -390,8 +400,15 @@ def _poll_forever(platform, transport, surface, root, args, config):
         except api.TransientFailure as exc:
             # Ordinary on a long poll. Wait it out rather than dying: the
             # bridge exists to survive exactly this.
+            # The platform's own number is a FLOOR, not a suggestion: sleeping
+            # our default 10s against a stated 17s just earns the next 429, and
+            # capping at 30 silently violates any longer wait it asks for. Our
+            # backoff applies on top, because a server naming a time for us has
+            # not told us how many others it named it for.
+            backoff = min(args.interval * 5, 30)
+            floor = getattr(exc, "retry_after", None) or 0
             print(f"alb: transient, retrying: {exc}", file=sys.stderr)
-            time.sleep(min(args.interval * 5, 30))
+            time.sleep(max(backoff, floor))
             continue
         except api.FetchFailed as exc:
             # NOT a conflict. Do not send an operator hunting a second poller.

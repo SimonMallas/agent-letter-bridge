@@ -25,6 +25,8 @@ MSGINDEX = ROOT / "src" / "alb" / "msgindex.py"
 RETRIEVAL = ROOT / "src" / "alb" / "retrieval.py"
 POLL = ROOT / "src" / "alb" / "poller" / "loop.py"
 NOTIFY = ROOT / "src" / "alb" / "notifier" / "ring.py"
+CLI = ROOT / "src" / "alb" / "cli.py"
+OUTBOUND = ROOT / "src" / "alb" / "outbound" / "store.py"
 ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
 TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
@@ -374,6 +376,22 @@ EXTRA = {
         TG, "tests.test_telegram_adapter",
         '            if exc.code == 429:',
         "            if False:"),
+    "the stated wait is a floor, not a suggestion": (
+        CLI, "tests.test_poll_backoff",
+        "            time.sleep(max(backoff, floor))",
+        "            time.sleep(backoff)"),
+    "the wait is read from where the platform puts it": (
+        TG, "tests.test_telegram_adapter",
+        "            payload = json.loads(raw.decode(\"utf-8\", \"replace\"))",
+        "            payload = {}"),
+    "a throttle survives a restart": (
+        OUTBOUND, "tests.test_outbound",
+        "        if events and events[-1] in DEFERRED:",
+        "        if False:"),
+    "resume refuses a letter that is not waiting": (
+        SEND, "tests.test_send",
+        '        raise NotDeferred(f"{out_id}: not waiting on a throttle")',
+        "        pass"),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

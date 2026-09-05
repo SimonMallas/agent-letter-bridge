@@ -39,6 +39,16 @@ class DefiniteRefusal(Exception):
     """
 
 
+class NotDeferred(Exception):
+    """Asked to resume a letter that is not waiting on a throttle.
+
+    Resume exists to finish ONE interrupted attempt, not to re-send whatever
+    it is pointed at. A letter that already reached a terminal state, or that
+    was never throttled, must refuse here - a resume that re-sends a delivered
+    message is the double-send this whole design is built to prevent.
+    """
+
+
 class Throttled(Exception):
     """The platform refused to look at it yet. Retryable, uniquely.
 
@@ -231,6 +241,68 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
                           platform_message_id=str(platform_id))
     # Both directions in the index: a phone reply to the bot's own message
     # must resolve to the outbound letter it answers.
+    from alb import msgindex
+    msgindex.record(state, "telegram", chat_id, str(platform_id), out_id)
+    return out_id
+
+
+def resume_throttled(sender, inbox, state, allowlist_path, out_id, outbox):
+    """Make ONE further attempt on an outbound letter left waiting by a 429.
+
+    The letter is not re-composed and the claim is not released: this reuses
+    the immutable letter that already exists, which is the only way a retry
+    can be safe. Composing again would raise AlreadyClaimed - correctly - and
+    releasing the claim first would open the window where a second composer
+    posts the duplicate the never-retry doctrine exists to prevent.
+
+    Refuses anything not actually deferred. The state is read from the events,
+    not from the caller's belief about them.
+    """
+    # Function-level import for the same cycle reason as send_reply.
+    from alb.outbound import store as outbound
+
+    state = pathlib.Path(state)
+    if outbound.reconcile(state).get(out_id) != "throttled":
+        raise NotDeferred(f"{out_id}: not waiting on a throttle")
+    letter = store.resolve(pathlib.Path(outbox), out_id)
+    # The outbound letter stores a HASHED correspondent, never the raw chat -
+    # that is Gate 0, and it is why the destination cannot be recovered from
+    # the outbound letter alone. So resume reads it the same way the first
+    # attempt did: from the stored SOURCE letter this reply answers, named by
+    # the envelope's `re`. A resume therefore cannot reach a chat the original
+    # letter did not name.
+    source_id = letter.meta.get("re", "")
+    if not source_id:
+        raise NotDeferred(f"{out_id}: the letter names no source to answer")
+    chat_id = destination(store.resolve(pathlib.Path(inbox), source_id).meta)
+    if not chat_id:
+        raise NotPermitted(f"{source_id}: the letter names no destination")
+    # Gated again, deliberately: an allowlist can change between the first
+    # attempt and the resume, and the later send is a NEW reach for the
+    # platform however old the claim is.
+    if not gate.allows(allowlist_path, chat_id):
+        raise NotPermitted("destination not permitted at resume time")
+    outbound.record_event(state, out_id, "sending")
+    try:
+        platform_id = sender.send(chat_id, letter.body)
+    except AmbiguousOutcome as exc:
+        outbound.record_event(state, out_id, "ambiguous", detail=str(exc))
+        _dead_letter(state, out_id, out_id, str(exc))
+        raise
+    except DefiniteRefusal as exc:
+        outbound.record_event(state, out_id, "refused", detail=str(exc))
+        raise
+    except Throttled as exc:
+        outbound.record_event(state, out_id, "throttled", detail=str(exc))
+        raise
+    except Exception as exc:  # noqa: BLE001 - same safety net as the first attempt
+        outbound.record_event(state, out_id, "ambiguous",
+                              detail=f"unclassified {type(exc).__name__}: {exc}")
+        _dead_letter(state, out_id, out_id,
+                     f"unclassified {type(exc).__name__}: {exc}")
+        raise AmbiguousOutcome(f"unclassified sender failure: {exc}") from exc
+    outbound.record_event(state, out_id, "sent",
+                          platform_message_id=str(platform_id))
     from alb import msgindex
     msgindex.record(state, "telegram", chat_id, str(platform_id), out_id)
     return out_id

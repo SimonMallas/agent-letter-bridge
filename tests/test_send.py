@@ -12,6 +12,7 @@ from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 from alb.letter import store  # noqa: E402
+from alb.outbound import store as outbound  # noqa: E402
 from alb.send import reply  # noqa: E402
 
 
@@ -346,3 +347,55 @@ class ThrottledKeepsTheClaim(LetterFirstOutbound):
         out_id = f"reply-{self.letter_id}"
         self.assertTrue((self.outbox / f"{out_id}.md").exists(),
                         "the letter IS the claim; a throttle must not release it")
+
+
+class AThrottledSendCanBeResumed(LetterFirstOutbound):
+    """The claim is the letter, so a second compose refuses - correctly. But
+    that means a throttled send had no way back: the retry policy was said to
+    be "the caller's", while the caller was structurally unable to retry.
+
+    Resume reuses the existing letter rather than composing a new one, and
+    refuses to touch anything that is not actually waiting."""
+
+    class Throttling:
+        def send(self, chat_id, text):
+            raise reply.Throttled("throttled with HTTP 429", retry_after=1)
+
+    class Working:
+        def __init__(self):
+            self.sent = []
+
+        def send(self, chat_id, text):
+            self.sent.append((chat_id, text))
+            return "9001"
+
+    def test_a_second_compose_still_refuses(self):
+        """Unchanged, and it must stay that way: the whole no-double-send
+        property rests on it."""
+        with self.assertRaises(reply.Throttled):
+            self._send(self.Throttling())
+        with self.assertRaises(outbound.AlreadyClaimed):
+            self._send(self.Throttling())
+
+    def test_resume_sends_the_waiting_letter_without_reclaiming(self):
+        with self.assertRaises(reply.Throttled):
+            self._send(self.Throttling())
+        sender = self.Working()
+        out_id = reply.resume_throttled(
+            sender, self.inbox, self.state, self.allow,
+            f"reply-{self.letter_id}", outbox=self.outbox)
+        self.assertEqual(out_id, f"reply-{self.letter_id}")
+        self.assertEqual(len(sender.sent), 1)
+        events = self.events(out_id)
+        self.assertTrue(any("sent" in name for name in events), events)
+
+    def test_resume_refuses_a_letter_that_is_not_waiting(self):
+        """A letter already sent, or never throttled, must not be re-sent by
+        a resume - that is the double-send this design exists to prevent."""
+        sender = self.Working()
+        self._send(sender)
+        with self.assertRaises(reply.NotDeferred):
+            reply.resume_throttled(
+                sender, self.inbox, self.state, self.allow,
+            f"reply-{self.letter_id}", outbox=self.outbox)
+        self.assertEqual(len(sender.sent), 1, "resume must not re-send")
