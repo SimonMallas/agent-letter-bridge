@@ -492,6 +492,13 @@ def _poll_forever(platform, transport, surface, root, args, config):
             # keeps running. Under a restart-on-crash-only policy this stays
             # down by design - that is the intended behaviour, not a failure.
             log(root, f"yielding, {exc}")
+            # Record the stand-down before leaving. Without this the last
+            # word in the health file is whatever we were doing before, it
+            # goes stale, and a wake-check reads a deliberate yield as a
+            # death - restarting a bridge to fight for a token it refused to
+            # fight for. The conflict rule undone from outside.
+            _loop._write_heartbeat(root / "state" / "health.json",
+                                   state="yielded", reason="conflict")
             return 0
         except api.TransientFailure as exc:
             # Ordinary on a long poll. Wait it out rather than dying: the

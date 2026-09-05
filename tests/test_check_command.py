@@ -25,10 +25,12 @@ class TheCommandAnAgentRunsOnWaking(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def write(self, age=0, state="running"):
+    def write(self, age=0, state="running", reason=None):
+        payload = {"heartbeat": time.time() - age, "state": state}
+        if reason:
+            payload["reason"] = reason
         (self.root / "state" / "health.json").write_text(
-            json.dumps({"heartbeat": time.time() - age, "state": state}),
-            encoding="utf-8")
+            json.dumps(payload), encoding="utf-8")
 
     def check(self):
         return subprocess.run([ALB, "--check", "--root", str(self.root)],
@@ -49,7 +51,10 @@ class TheCommandAnAgentRunsOnWaking(unittest.TestCase):
     def test_a_waiting_relay_exits_zero_because_nothing_should_be_done(self):
         """Exit codes carry the ACTION, not the state. An agent that branches
         on 'is it degraded' would restart a bridge that is behaving."""
-        self.write(age=200, state="degraded")
+        # With its reason: a degraded record that cannot say WHY is now
+        # investigated rather than accepted, because a legitimate wait and a
+        # stuck process look identical without it.
+        self.write(age=200, state="degraded", reason="throttled_429")
         got = self.check()
         self.assertEqual(got.returncode, 0)
 

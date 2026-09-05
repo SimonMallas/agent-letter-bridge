@@ -86,3 +86,62 @@ class TheVerdictAnAgentActsOn(unittest.TestCase):
         self.path.write_text(json.dumps({"heartbeat": time.time()}),
                              encoding="utf-8")
         self.assertEqual(health.verdict(self.path).action, "none")
+
+
+class TheVerdictKnowsWhatItDoesNotKnow(unittest.TestCase):
+    """Codex's block. A supervisor that decides needs enough validated state
+    to be authoritative, and this one was deciding on four things it had not
+    checked."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = pathlib.Path(self.tmp.name) / "health.json"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write(self, **payload):
+        payload.setdefault("heartbeat", time.time())
+        self.path.write_text(json.dumps(payload), encoding="utf-8")
+
+    def test_a_wait_the_platform_itself_asked_for_is_never_called_dead(self):
+        """Telegram may ask for up to an hour, and our own classifier accepts
+        it. Declaring death at half that makes the supervisor break the retry
+        contract the bridge is correctly keeping."""
+        from alb.adapters.telegram import api
+        self.write(heartbeat=time.time() - (api.MAX_RETRY_AFTER - 60),
+                   state="degraded", reason="throttled_429")
+        self.assertEqual(health.verdict(self.path).action, "none")
+
+    def test_a_state_we_do_not_recognise_is_investigated_not_accepted(self):
+        """A future version, a typo or a corrupted field is exactly what an
+        operator should look at - and silence is the one answer that hides it."""
+        self.write(state="new_state")
+        v = health.verdict(self.path)
+        self.assertEqual(v.action, "investigate")
+        self.assertNotEqual(v.action, "restart", "never act on what we cannot read")
+
+    def test_a_degraded_record_with_no_reason_is_investigated(self):
+        self.write(state="degraded")
+        self.assertEqual(health.verdict(self.path).action, "investigate")
+
+    def test_a_timestamp_from_the_future_is_investigated(self):
+        """Clock rollback or a foreign writer. Left alone it reads as fresh
+        forever, so the deader it gets the healthier it looks."""
+        self.write(heartbeat=time.time() + 3600, state="running")
+        self.assertEqual(health.verdict(self.path).action, "investigate")
+
+    def test_small_clock_skew_is_tolerated_rather_than_alarmed_about(self):
+        self.write(heartbeat=time.time() + 2, state="running")
+        self.assertEqual(health.verdict(self.path).action, "none")
+
+    def test_a_bridge_that_yielded_the_token_is_never_restarted(self):
+        """The sharpest one. A 409 means another consumer holds the token and
+        the bridge deliberately stood down. Restarting it would make the
+        supervisor fight for a token the bridge refused to fight for - undoing
+        the yield-never-fight rule from the outside."""
+        self.write(heartbeat=time.time() - 99999, state="yielded",
+                   reason="conflict")
+        v = health.verdict(self.path)
+        self.assertEqual(v.action, "investigate")
+        self.assertNotEqual(v.action, "restart")

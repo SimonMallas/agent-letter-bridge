@@ -141,3 +141,33 @@ class AStartingBridgeSaysSoBeforeItBlocks(unittest.TestCase):
                              "a restarted bridge must not present the previous "
                              "process's timestamp while it blocks")
         self.assertEqual(seen["at_first_fetch"]["state"], "starting")
+
+
+class AYieldIsRecordedBeforeLeaving(unittest.TestCase):
+    """Codex F4. The bridge yields a contested token and exits 0 - correctly.
+    But it used to leave without saying so, the last health record went stale,
+    and a wake-check five minutes later called a deliberate stand-down a
+    death. The supervisor would then restart it to fight for the token it had
+    just refused to fight for."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        for sub in ("state", "inbox", "processed", "outbox"):
+            (self.root / sub).mkdir()
+        (self.root / "allowlist.json").write_text(json.dumps({"chats": []}))
+        self.args = argparse.Namespace(interval=2, once=False, mail_root=None)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_health_file_says_yielded_after_a_conflict(self):
+        from alb.poller import loop as poller
+        platform = mock.Mock()
+        platform.fetch.side_effect = poller.PlatformConflict("another consumer")
+        rc = cli._poll_forever(platform, mock.Mock(), "surface:1",
+                               self.root, self.args, {"ALB_TO": "agent"})
+        self.assertEqual(rc, 0, "yielding is success, not failure")
+        health = json.loads(
+            (self.root / "state" / "health.json").read_text(encoding="utf-8"))
+        self.assertEqual(health["state"], "yielded")

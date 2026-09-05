@@ -15,6 +15,8 @@ import json
 import pathlib
 import time
 
+from alb.adapters.telegram.api import MAX_RETRY_AFTER as _MAX_PLATFORM_WAIT
+
 
 class Status:
     def __init__(self, state, reason):
@@ -49,9 +51,24 @@ def status(path, max_age):
 ALLOWANCE = {
     "running": 120,     # a long poll plus slack
     "starting": 300,    # a first poll can block; five minutes is not a start
-    "degraded": 1800,   # backoff can legitimately run minutes, not half a day
+    # DERIVED, not chosen: the classifier accepts a platform wait of up to
+    # MAX_RETRY_AFTER, so anything smaller here would declare a bridge dead
+    # while it correctly honours a floor the platform asked for - the
+    # supervisor breaking the retry contract the bridge is keeping. The slack
+    # covers the backoff applied on top of that floor.
+    "degraded": _MAX_PLATFORM_WAIT + 300,
+    # A bridge that yielded a contested token is not dead and must never be
+    # restarted: doing so fights for a token it deliberately stood down from,
+    # undoing yield-never-fight from the outside. It stays quiet forever by
+    # design, so no allowance applies.
+    "yielded": None,
 }
 DEFAULT_ALLOWANCE = 120
+
+# A timestamp ahead of us is a clock rollback, a corrupted file or a foreign
+# writer. Left unchecked it reads as fresh indefinitely - the longer it is
+# wrong, the healthier it looks. Small skew is ordinary and tolerated.
+CLOCK_SKEW_TOLERANCE = 30
 
 
 class Verdict:
@@ -87,7 +104,32 @@ def verdict(path):
     # seats upgrade at different times and a missing field is not corruption.
     state = data.get("state", "running")
     age = int(now() - heartbeat)
+
+    if age < -CLOCK_SKEW_TOLERANCE:
+        return Verdict("unknown", "investigate",
+                       f"heartbeat is {-age}s in the FUTURE: a clock moved, "
+                       f"the file is corrupt, or something else is writing it")
+
+    if state not in ALLOWANCE and state != "running":
+        # Never act on a record we cannot read. A future version, a typo or a
+        # corrupted field is precisely what an operator should see, and "none"
+        # is the one answer that hides it.
+        return Verdict("unknown", "investigate",
+                       f"unrecognised state {state!r}: this file was written "
+                       f"by something this version does not understand")
+
+    if state == "degraded" and data.get("reason") not in (
+            "throttled_429", "upstream_5xx", "network"):
+        return Verdict("unknown", "investigate",
+                       "degraded without a reason this version knows: cannot "
+                       "tell a legitimate wait from a stuck one")
+
     allowance = ALLOWANCE.get(state, DEFAULT_ALLOWANCE)
+    if allowance is None:
+        return Verdict(state, "investigate",
+                       "the bridge yielded a contested token and stood down. "
+                       "Restarting it would fight for a token it refused to "
+                       "fight for - find the other consumer first")
 
     if age <= allowance:
         if state == "degraded":

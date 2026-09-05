@@ -457,6 +457,23 @@ EXTRA = {
         ROOT / "src" / "alb" / "watchdog" / "health.py", "tests.test_wake_check",
         '        return Verdict("unknown", "investigate",',
         '        return Verdict("dead", "restart",'),
+    "a yielded bridge is never restarted": (
+        ROOT / "src" / "alb" / "watchdog" / "health.py", "tests.test_wake_check",
+        '    if allowance is None:',
+        "    if False:"),
+    "an unreadable state is investigated, never acted on": (
+        ROOT / "src" / "alb" / "watchdog" / "health.py", "tests.test_wake_check",
+        '    if state not in ALLOWANCE and state != "running":',
+        "    if False:"),
+    "a future timestamp is not freshness": (
+        ROOT / "src" / "alb" / "watchdog" / "health.py", "tests.test_wake_check",
+        "    if age < -CLOCK_SKEW_TOLERANCE:",
+        "    if False:"),
+    "the yield is recorded before the bridge leaves": (
+        CLI, "tests.test_poll_backoff",
+        '            _loop._write_heartbeat(root / "state" / "health.json",\n'
+        '                                   state="yielded", reason="conflict")\n',
+        ""),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
