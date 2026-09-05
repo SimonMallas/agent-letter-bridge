@@ -145,5 +145,14 @@ def verdict(path):
                            f"heartbeat {age}s old - leave it alone")
         return Verdict(state, "none", f"heartbeat {age}s old")
 
-    return Verdict("dead", "restart",
-                   f"last seen {age}s ago while {state}; allowance {allowance}s")
+    # NOT "dead". Pi's allowance analysis: no honest finite allowance exists
+    # for this implementation - the ring paths are only now bounded, the HTTP
+    # timeout is per-read rather than end-to-end, and startup classifies an
+    # unbounded receipts tree before it pulses. So silence past the allowance
+    # is SUSPICION, and these numbers are policy rather than proof. The action
+    # is still restart, because a suspected-dead relay is worth restarting -
+    # but the word must not promise a certainty the threshold cannot carry.
+    return Verdict("unresponsive", "restart",
+                   f"last seen {age}s ago while {state}, past the {allowance}s "
+                   f"policy allowance. That is grounds to restart, not proof "
+                   f"it is dead")

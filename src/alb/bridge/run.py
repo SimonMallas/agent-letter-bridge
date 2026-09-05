@@ -200,6 +200,14 @@ def prepare_mail_root(mail_root):
     return mail_root
 
 
+# A ring that cannot finish can stop the bridge. Pi's allowance analysis:
+# while any notifier call is unbounded, no finite liveness allowance is
+# provable, because the number would describe a path with no ceiling - and a
+# bridge stuck in a subprocess looks exactly like the death a supervisor
+# exists to detect. A bounded ring can fail; an unbounded one can hang.
+RING_TIMEOUT = 10
+
+
 def _bus_ring(recipient, kind, letter_id, binary=None):
     """Ring through the letterbox's own helper rather than imitating it.
 
@@ -213,7 +221,7 @@ def _bus_ring(recipient, kind, letter_id, binary=None):
     """
     result = subprocess.run(
         [binary or BUS_BINARY, "ring", recipient, kind, letter_id],
-        capture_output=True, text=True)
+        capture_output=True, text=True, timeout=RING_TIMEOUT)
 
     # THE EXIT CODE IS NOT THE OUTCOME. The helper exits 0 whether the knock
     # was submitted, merely pasted into a pane without being submitted, or had

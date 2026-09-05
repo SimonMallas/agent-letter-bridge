@@ -546,6 +546,15 @@ EXTRA = {
         CLI, "tests.test_stop",
         '                print("the bridge is gone; consumption unconfirmed. It did not "',
         '                print("the bridge is gone. It ended for its own reasons. "'),
+    "a ring cannot hang the bridge": (
+        ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py", "tests.test_notifier_bounds",
+        "    subprocess.run(argv, check=True, capture_output=True,\n"
+        "                   timeout=RING_TIMEOUT)",
+        "    subprocess.run(argv, check=True, capture_output=True)"),
+    "silence is suspicion, not proof of death": (
+        ROOT / "src" / "alb" / "watchdog" / "health.py", "tests.test_wake_check",
+        '    return Verdict("unresponsive", "restart",',
+        '    return Verdict("dead", "restart",'),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

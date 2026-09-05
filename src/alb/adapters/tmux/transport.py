@@ -21,9 +21,18 @@ from alb.notifier import ring
 TMUX = "tmux"
 
 
+# A ring that cannot finish can stop the bridge. Pi's allowance analysis:
+# while any notifier call is unbounded, no finite liveness allowance is
+# provable, because the number would describe a path with no ceiling - and a
+# bridge stuck in a subprocess looks exactly like the death a supervisor
+# exists to detect. A bounded ring can fail; an unbounded one can hang.
+RING_TIMEOUT = 10
+
+
 def _run(argv):
     """Separated so tests never spawn a process."""
-    subprocess.run(argv, check=True, capture_output=True)
+    subprocess.run(argv, check=True, capture_output=True,
+                   timeout=RING_TIMEOUT)
 
 
 class Tmux:

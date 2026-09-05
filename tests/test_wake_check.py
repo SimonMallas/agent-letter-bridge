@@ -43,7 +43,7 @@ class TheVerdictAnAgentActsOn(unittest.TestCase):
         self.write(age=600)
         v = health.verdict(self.path)
         self.assertEqual(v.action, "restart")
-        self.assertEqual(v.state, "dead")
+        self.assertEqual(v.state, "unresponsive")
 
     def test_a_bridge_waiting_out_a_rate_limit_is_left_alone(self):
         """The one that matters. It is quiet because it is behaving, and the
