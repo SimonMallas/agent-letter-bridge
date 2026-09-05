@@ -236,3 +236,68 @@ class TheSeamItselfIsPinned(unittest.TestCase):
                       "consumption must be checked against what we ASKED")
         self.assertEqual(seen["cleared"], 1,
                          "an unhonoured request must be cleared")
+
+
+class HonouredIsProvedNotInferred(unittest.TestCase):
+    """Pi's counterexample. --stop watched the request DISAPPEAR and called
+    that honoured - but absence has two causes: the bridge consumed it, or
+    something else cleared it after the bridge died for its own reasons. An
+    inference from absence cannot tell them apart.
+
+    The bridge already records a requested stand-down in its health file. That
+    is positive evidence, and it is what the claim should rest on."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "state").mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _run_stop(self, health, age=0):
+        """The bridge writes its health AFTER we ask - so the record lands
+        while --stop waits, not before it starts. Modelling that order is the
+        point: a record from before our request proves nothing about it."""
+        from unittest import mock
+        from alb import cli
+        calls = {"n": 0}
+
+        def running_pid(root):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return 4242                      # alive when we ask
+            if health is not None:
+                payload = dict(health)
+                payload["heartbeat"] = time.time() - age
+                (self.root / "state" / "health.json").write_text(
+                    json.dumps(payload), encoding="utf-8")
+            return None                          # gone by the first check
+
+        with mock.patch.multiple(
+                cli.singleton,
+                request_stop=lambda root: "gen-A",
+                running_pid=running_pid,
+                stop_requested=lambda root, generation: False,
+                clear_stop_request=lambda root: None):
+            with mock.patch.object(cli.sys, "stdout") as out:
+                rc = cli.main(["--stop", "--root", str(self.root)])
+        said = " ".join(str(c) for c in out.method_calls)
+        return rc, said
+
+    def test_a_recorded_stand_down_is_reported_as_honoured(self):
+        rc, said = self._run_stop({"state": "yielded", "reason": "requested"})
+        self.assertEqual(rc, 0)
+        self.assertIn("stopped", said)
+
+    def test_a_bridge_that_died_for_another_reason_is_not_called_honoured(self):
+        """It yielded a contested token in the same window. The request
+        vanished, but nothing about that was our doing."""
+        rc, said = self._run_stop({"state": "yielded", "reason": "conflict"})
+        self.assertEqual(rc, 0)
+        self.assertNotIn("stopped", said.replace("never read", ""))
+
+    def test_an_old_stand_down_from_a_previous_run_proves_nothing(self):
+        rc, said = self._run_stop({"state": "yielded", "reason": "requested"},
+                                  age=9999)
+        self.assertNotIn("stopped", said.replace("never read", ""))

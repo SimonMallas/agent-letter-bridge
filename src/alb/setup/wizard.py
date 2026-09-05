@@ -213,11 +213,34 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     #    (Found by codex's consistency review: the old order started a
     #    resident whose ring stayed disabled until a restart nobody mentioned.)
     surface, notifier = _offer_ring(console, panes, summary)
-    if surface and not env_path_existed:
-        with open(env_path, "a", encoding="utf-8") as handle:
-            handle.write(f"ALB_SURFACE={surface}\n")
-            if notifier:
-                handle.write(f"ALB_NOTIFIER={notifier}\n")
+    if surface:
+        # Non-clobber protects what is THERE. Declining to add a key that is
+        # ABSENT is not protection - it is a silent failure wearing a safety's
+        # clothes, and it broke the recovery we prescribe: a first init
+        # finishes bell-less, we tell the operator to re-run and paste a pane,
+        # and on that run bridge.env exists, so the paste was accepted, marked
+        # configured, and never written. Bell-less again, reported as success.
+        existing = ""
+        if env_path_existed:
+            try:
+                existing = env_path.read_text(encoding="utf-8")
+            except OSError:
+                existing = ""
+        lines = []
+        if "ALB_SURFACE=" not in existing:
+            lines.append(f"ALB_SURFACE={surface}\n")
+        if notifier and "ALB_NOTIFIER=" not in existing:
+            lines.append(f"ALB_NOTIFIER={notifier}\n")
+        if lines:
+            with open(env_path, "a", encoding="utf-8") as handle:
+                handle.writelines(lines)
+        elif env_path_existed and "ALB_SURFACE=" in existing:
+            # A surface is already pinned and it is not ours to replace.
+            console.say("  bridge.env already names a surface; leaving it "
+                        "alone. Edit it yourself if that pane is wrong.")
+        # Configured means it reached the file, not that it was typed.
+        if "ALB_SURFACE" not in (existing + "".join(lines)):
+            summary["ring"] = "not configured"
 
     # 6. The resident. Both real installs stalled at "--once looks fine" with
     #    nothing left running - so init finishes the job, or prints exactly

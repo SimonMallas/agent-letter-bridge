@@ -536,3 +536,65 @@ class TheRingAsksForItsSurface(Base):
         self.assertIn("no ring", out)
         self.assertIn("not an install", out)
         self.assertEqual(result.get("resident"), "incomplete")
+
+
+class RerunningAfterAnIncompleteInstall(Base):
+    """Pi's find, and it breaks the recovery path our own message prescribes.
+
+    When a first init finishes bell-less, the wizard tells the operator to
+    re-run it and paste a pane id. On that second run bridge.env already
+    exists - so the non-clobber guard skipped writing ALB_SURFACE, while the
+    ring had already been marked configured from the paste. The bridge then
+    started, init exited 0, and the env still had no surface.
+
+    Piece 2's exact defect, reached through the guard that protects the token,
+    on the path we documented as the fix for it. Non-clobber must protect what
+    is THERE; declining to add a key that is absent is not protection, it is a
+    silent failure wearing a safety's clothes."""
+
+    def _existing_env_without_surface(self):
+        self.root.mkdir(parents=True, exist_ok=True)
+        (self.root / "bridge.env").write_text(
+            "ALB_TOKEN=123456:TOKEN\n", encoding="utf-8")
+
+    def test_a_pasted_pane_reaches_the_env_on_a_rerun(self):
+        self._existing_env_without_surface()
+        started = []
+        self.run_init(
+            answers=["n", "print", "fixture-pane", "y"],
+            secrets=("123456:TOKEN",),
+            panes=[{"id": "fixture-pane", "label": "agent", "notifier": "cmux"}],
+            cmux_born=lambda: True,
+            start_pane=lambda title, command: started.append(title) or "surface:9")
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertIn("ALB_SURFACE=fixture-pane", env,
+                      "the paste must reach the file it was asked for")
+
+    def test_it_does_not_report_success_without_the_surface_it_claimed(self):
+        """The control that matters: if the surface cannot be persisted, the
+        install must not exit 0 having started a bell-less bridge."""
+        from alb.cli import _init_status
+        self._existing_env_without_surface()
+        _, result = self.run_init(
+            answers=["n", "print", "fixture-pane", "y"],
+            panes=[{"id": "fixture-pane", "label": "agent", "notifier": "cmux"}],
+            cmux_born=lambda: True,
+            start_pane=lambda title, command: "surface:9")
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        if "ALB_SURFACE" not in env:
+            self.assertNotEqual(_init_status(result), 0,
+                                "a ring that never reached the env is not a "
+                                "configured ring")
+
+    def test_an_existing_token_is_never_overwritten(self):
+        """Non-clobber still holds for what is actually there."""
+        self._existing_env_without_surface()
+        self.run_init(
+            answers=["n", "print", "fixture-pane", "y"],
+            secrets=("999999:DIFFERENT",),
+            panes=[{"id": "fixture-pane", "label": "agent", "notifier": "cmux"}],
+            cmux_born=lambda: True,
+            start_pane=lambda title, command: "surface:9")
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertIn("ALB_TOKEN=123456:TOKEN", env)
+        self.assertNotIn("999999:DIFFERENT", env)

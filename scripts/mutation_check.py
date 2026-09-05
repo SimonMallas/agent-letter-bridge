@@ -512,6 +512,15 @@ EXTRA = {
         '                  "running one first with `alb --stop --root <your root>`, "',
         '            print("action: restart the bridge in its own pane. Interrupt "\n'
         '                  "it with cmux send-key ctrl+c, "'),
+    "honoured is proved, never inferred from absence": (
+        CLI, "tests.test_stop",
+        "                if _recorded_stand_down(root=args.root, since=requested_at):",
+        "                if True:"),
+    "a rerun writes the surface it was given": (
+        ROOT / "src" / "alb" / "setup" / "wizard.py", "tests.test_setup",
+        '        if "ALB_SURFACE=" not in existing:\n'
+        '            lines.append(f"ALB_SURFACE={surface}\\n")\n',
+        ""),
     "no surface means no ring": (
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',

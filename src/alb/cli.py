@@ -34,6 +34,7 @@ supervision it will stay stopped, which is intended. See docs/operations.md.
 """
 import argparse
 import contextlib
+import json
 import os
 import pathlib
 import signal
@@ -142,6 +143,7 @@ def main(argv=None):
         # the two calls, the re-read comes back None, and the unhonoured
         # request is then neither recognised nor cleared. Codex found me
         # going back to disk for a value I already had in my hand.
+        requested_at = time.time()
         asked = singleton.request_stop(args.root)
         if asked is None:
             # Nothing is running, so no request is written - one now would be a
@@ -170,7 +172,18 @@ def main(argv=None):
                           "it stopped for another reason. Request cleared so it "
                           "cannot reach the next one.")
                     return 0
-                print("stopped")
+                # The request being ABSENT is not evidence that the bridge
+                # consumed it: something else could have cleared it after the
+                # bridge died for its own reasons, and an inference from
+                # absence cannot tell those apart. So the claim rests on what
+                # the bridge RECORDED - a requested stand-down, written after
+                # we asked. Positive evidence, or no claim.
+                if _recorded_stand_down(root=args.root, since=requested_at):
+                    print("stopped")
+                    return 0
+                print("the bridge is gone. It did not record standing down for "
+                      "our request, so it ended for its own reasons - check "
+                      "alb.log before starting another.")
                 return 0
             time.sleep(0.2)
         print("stop requested; the bridge is still running. It checks at its "
@@ -471,6 +484,24 @@ def log(root, message):
             handle.write(f"{stamp} {message}\n")
     except Exception:  # noqa: BLE001 - see docstring; never fail while failing
         pass
+
+
+def _recorded_stand_down(root, since):
+    """Did the bridge WRITE that it stood down for a request, after we asked?
+
+    Positive evidence for a claim that was previously inferred from the
+    request file disappearing - which something else could have done. A record
+    older than our own request belongs to a previous run and proves nothing
+    about this one.
+    """
+    try:
+        data = json.loads((pathlib.Path(root) / "state" / "health.json")
+                          .read_text(encoding="utf-8"))
+        return (data.get("state") == "yielded"
+                and data.get("reason") == "requested"
+                and float(data["heartbeat"]) >= since)
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
 
 
 def _reply_or_resume(sender, inbox, state, allowlist_path, letter_id, text,
