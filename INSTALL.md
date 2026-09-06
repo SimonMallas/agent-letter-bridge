@@ -201,6 +201,24 @@ immediately — **it is what makes the bridge feel alive.** Without it, letters
 land durably and sit unread until something sweeps: a dead drop, not a dead
 loss. The design's promise is narrower than "optional": the ring may *fail*
 without costing a letter. Skip it only if your agent checks its own mail on a
+**Which settings your mode actually uses.** Setting one the other mode reads
+is the quiet way to end up with a config that looks configured and rings
+nothing:
+
+| | standalone | integrated |
+| --- | --- | --- |
+| `ALB_TOKEN` | required | required |
+| `ALB_MAIL_ROOT`, `ALB_TO` | not used | **required** — they are one route, and setup refuses half of each |
+| `ALB_SURFACE` | **required for a ring** | **not read.** Do not set it; nothing will ever consult it |
+| `ALB_NOTIFIER` | `cmux` (default) or `tmux` | not used |
+| `ALB_BUS_BINARY` | not used | the doorbell helper, if it is not on `PATH` |
+
+Where the bridge may RUN differs too. A standalone cmux ring must be started
+inside cmux; a tmux ring has no such rule. Integrated mode runs the helper *in
+the bridge's own context*, so whatever the helper needs, the bridge needs — if
+it reaches a cmux pane, the bridge must be inside cmux as well. Prove it rather
+than assume it: send a message and check the ring reports `delivered`.
+
 schedule; `alb --status` reports the ring as `disabled` with a reason, so a
 missing bell is never confused with a broken one.
 
@@ -362,8 +380,28 @@ what the agent must BE: an agentic model, with unattended permission to read
 the inbox and run the reply command. An agent that must ask a human before
 each action has no phone line — the human is away; that is the premise.
 
-**[integrated] Nothing to do.** Letters arrive in the inbox it already sweeps
-and the doorbell is the one it already knows.
+**[integrated]** The mailbox and the doorbell are ones the agent already
+knows, so there is no new grammar to teach — but it still does not know this
+tool exists. Give it three things:
+
+```sh
+alb --config ~/.alb/bridge.env --root ~/.alb --reply-to <letter-id> --text "..."
+alb --check --root ~/.alb
+alb --stop  --root ~/.alb
+```
+
+- **Reply** takes its destination from the letter; the agent never picks one,
+  and a letter can be answered once.
+- **Check** is what it runs when it wakes: `0` nothing to do, `2` silent past
+  the threshold and here is how to restart it, `3` something a restart will not
+  fix.
+- **Stop** asks the holder to stand down. **If it returns non-zero or times
+  out, do not start a replacement** — an unconfirmed stop is not a stop, and
+  two pollers on one token is the thing it exists to prevent.
+
+Note both flags: integrated installs keep letters in the agent's mailbox and
+private state under the root, so the reply command needs `--config` and
+`--root` together.
 
 ---
 
@@ -387,6 +425,11 @@ Repeat Steps 3–7 with a different directory, e.g. `~/.alb/grok`.
 | Check | Command | Healthy |
 | --- | --- | --- |
 | Should I worry? | `alb --status --root ~/.alb` | ring `ok` or `disabled`, no dead letters |
+
+`--status` reads the health file the bridge writes. It is evidence of what the
+last cycle recorded, not proof that a process is holding the lock right now —
+for that, `--doctor` reports the lock and what else on this machine may hold
+the same bot.
 | What is wrong? | `alb --doctor --root ~/.alb` | allowlist present, config readable |
 | Can it send? | `alb --canary --config ~/.alb/bridge.env --root ~/.alb` | a message arrives in your own chat |
 

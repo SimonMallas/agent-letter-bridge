@@ -202,11 +202,25 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     # Reconcile a config that was already here. A summary is a report, never
     # a wish: if the mailbox keys are not in the file afterwards, this is not
     # an integrated install and must not be called one.
+    # A REFUSAL IS TERMINAL. Downgrading to standalone and carrying on turned
+    # "I will not write this" into a DIFFERENT install: a pane offered, a
+    # surface written, a resident started. And where the old config held a
+    # complete integrated route, the summary said standalone while the
+    # runtime went on reading the old mailbox and recipient - a report that
+    # disagreed with the file it described.
+    #
+    # Nothing further is written and nothing is started. The operator still
+    # has the install they had.
     if integrated and not _persist_mailbox(console, env_path, env_path_existed,
                                            mailbox, recipient, helper, summary):
-        integrated = False
-        summary["mode"] = "standalone"
+        summary["mode"] = "refused"
+        summary["ring"] = "not configured"
+        summary["resident"] = "not started"
         summary.pop("mail_root", None)
+        console.say()
+        console.say("Setup stopped. Your existing configuration is untouched.")
+        _closing(console, root, summary)
+        return summary
 
     # 4. The allowlist. Written deny-all whatever else happens; an entry is
     #    added only from a value the operator supplied or explicitly asked us
@@ -347,10 +361,18 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running, start_pan
         # adopt a multiplexer they do not need, and an integrated one to worry
         # about panes that play no part in their bell.
         if summary.get("ring") == "helper":
-            console.say("Run that wherever it will keep running - a pane you")
-            console.say("leave open, or your service manager. The bell goes")
-            console.say("through your letterbox's doorbell, so where this runs")
-            console.say("does not change whether it rings.")
+            # NOT a broker. The helper is executed in the BRIDGE's context, so
+            # whatever it needs, the bridge needs - and a helper that reaches
+            # a cmux pane still meets cmux's born-inside rule. Saying the
+            # location does not matter sells an operator a service unit that
+            # delivers mail silently forever.
+            console.say("Run that in a context your doorbell helper supports.")
+            console.say("The helper runs from here, so whatever it needs, this")
+            console.say("needs: if it reaches a cmux pane, this has to be")
+            console.say("started inside cmux too.")
+            console.say("Then prove the bell rather than assume it - send a")
+            console.say("message and check `alb --status` reports the ring")
+            console.say("delivered, not disabled or failing.")
         elif (summary.get("notifier") or "").strip().lower() == "tmux":
             console.say("Run that in a tmux pane you leave open, or from your")
             console.say("service manager. tmux has no born-inside rule, so the")

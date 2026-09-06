@@ -215,6 +215,22 @@ from `ALB_TO`.
 `--mail-root` by hand, it takes the directory CONTAINING the inbox (the
 mailbox), never the inbox itself.
 
+**First establish which route you are on.** Only one process may hold a root.
+If `init` offered to start the bridge and the human accepted, it is running and
+`--once` will exit `4` — the lock working, not a fault.
+
+```sh
+alb --status --root ~/.alb
+```
+
+If a bridge is already running, do NOT run `--once` and do NOT weaken the lock.
+Verify the live resident instead: ask the human to send a message and watch the
+inbox. To return to one-shot checks, `alb --stop --root ~/.alb` first — and if
+that returns non-zero or times out, **start nothing**; an unconfirmed stop is
+not a stop.
+
+Otherwise:
+
 ```sh
 alb --config ~/.alb/bridge.env --root ~/.alb --once
 ```

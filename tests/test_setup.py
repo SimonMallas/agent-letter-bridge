@@ -975,14 +975,91 @@ class TheStartAdviceMatchesTheRing(Base):
         self.assertIn("tmux", transcript)
         self.assertNotIn("cmux refuses processes", transcript)
 
-    def test_an_integrated_install_is_not_told_about_panes_at_all(self):
+    def test_an_integrated_install_is_not_promised_it_can_run_anywhere(self):
+        """The correction to my own overreach. `_bus_ring` runs the helper in
+        the BRIDGE's context - it is not a broker that reaches the pane from
+        wherever the bridge happens to live. So a helper that ends up talking
+        to cmux still meets cmux's born-inside rule, and telling an operator
+        that where it runs 'does not change whether it rings' sells them a
+        LaunchAgent that delivers mail silently forever."""
         mailbox = pathlib.Path(self.tmp.name) / "mail"
         mailbox.mkdir()
         transcript, _result = self._advice(["y", str(mailbox), "agent", "print"])
-        self.assertNotIn("cmux refuses processes", transcript)
+        self.assertNotIn("does not change whether it rings", transcript)
+        self.assertIn("supports", transcript)
+
+    def test_an_integrated_install_is_told_to_prove_the_bell(self):
+        mailbox = pathlib.Path(self.tmp.name) / "mail"
+        mailbox.mkdir()
+        transcript, _result = self._advice(["y", str(mailbox), "agent", "print"])
+        self.assertIn("--status", transcript)
 
     def test_a_cmux_install_still_gets_the_born_inside_warning(self):
         """The control: the rule is real where it applies."""
         panes = [{"id": "PANE-1", "label": "agent", "notifier": "cmux"}]
         transcript, _result = self._advice(["n", "print", "PANE-1"], panes=panes)
         self.assertIn("cmux refuses processes", transcript)
+
+
+class ARefusedRouteEndsTheInstall(Base):
+    """Refusing to write the route was not enough: init carried on.
+
+    `_persist_mailbox` returned False, the caller downgraded to standalone,
+    and setup continued - offering a pane, writing a surface, and starting a
+    resident. So a refusal produced a DIFFERENT install rather than none, and
+    where the old config held a complete integrated route the summary said
+    standalone while the runtime kept reading the old mailbox and recipient.
+
+    A refusal has to be terminal. Nothing further is written, nothing is
+    started, and the exit status says so.
+    """
+
+    PANES = [{"id": "PANE-1", "label": "agent", "notifier": "cmux"}]
+
+    def _mailbox(self, name):
+        path = pathlib.Path(self.tmp.name) / name
+        path.mkdir(exist_ok=True)
+        return path
+
+    def _conflict(self, existing):
+        self.root.mkdir(parents=True, exist_ok=True)
+        env = self.root / "bridge.env"
+        env.write_text(existing, encoding="utf-8")
+        env.chmod(0o600)
+        new = self._mailbox("new-mail")
+        started = []
+        # Enough answers to complete a standalone install if the guard leaks.
+        console, result = self.run_init(
+            ["y", str(new), "new-agent", "print", "PANE-1", "y"],
+            panes=self.PANES, cmux_born=lambda: True,
+            start_pane=lambda title, command: started.append(title) or "S-NEW")
+        return console, result, started, env.read_text(encoding="utf-8")
+
+    def test_a_partial_old_route_stops_the_install(self):
+        _c, result, started, env = self._conflict("ALB_TOKEN=1:T\nALB_TO=old-agent\n")
+        self.assertEqual(started, [])
+        self.assertNotIn("ALB_SURFACE", env)
+        from alb.cli import _init_status
+        self.assertNotEqual(_init_status(result), 0)
+
+    def test_a_full_old_route_stops_the_install(self):
+        old = self._mailbox("old-mail")
+        _c, result, started, env = self._conflict(
+            f"ALB_TOKEN=1:T\nALB_MAIL_ROOT={old}\nALB_TO=old-agent\n")
+        self.assertEqual(started, [])
+        self.assertNotIn("ALB_SURFACE", env)
+        from alb.cli import _init_status
+        self.assertNotEqual(_init_status(result), 0)
+
+    def test_the_old_route_is_left_exactly_as_it_was(self):
+        """The runtime keeps reading this file. It must not be half-changed."""
+        old = self._mailbox("old-mail")
+        before = f"ALB_TOKEN=1:T\nALB_MAIL_ROOT={old}\nALB_TO=old-agent\n"
+        _c, _result, _started, after = self._conflict(before)
+        self.assertEqual(after, before)
+
+    def test_it_does_not_claim_standalone_while_a_route_is_still_there(self):
+        old = self._mailbox("old-mail")
+        _c, result, _started, _env = self._conflict(
+            f"ALB_TOKEN=1:T\nALB_MAIL_ROOT={old}\nALB_TO=old-agent\n")
+        self.assertNotEqual(result.get("mode"), "standalone")
