@@ -988,11 +988,16 @@ class TheStartAdviceMatchesTheRing(Base):
         self.assertNotIn("does not change whether it rings", transcript)
         self.assertIn("supports", transcript)
 
-    def test_an_integrated_install_is_told_to_prove_the_bell(self):
+    def test_an_integrated_install_is_told_the_two_facts_are_different(self):
+        """`--status` reporting `delivered` says the helper call returned, not
+        that the intended pane received anything. Offering one as proof of the
+        other is the same overclaim as the heartbeat and the lock file."""
         mailbox = pathlib.Path(self.tmp.name) / "mail"
         mailbox.mkdir()
         transcript, _result = self._advice(["y", str(mailbox), "agent", "print"])
         self.assertIn("--status", transcript)
+        self.assertIn("RETURNED", transcript)
+        self.assertIn("pane", transcript)
 
     def test_a_cmux_install_still_gets_the_born_inside_warning(self):
         """The control: the rule is real where it applies."""

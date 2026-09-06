@@ -35,18 +35,44 @@ Everything else applies to both.
 
 ---
 
-## Step 1 — Check you have Python 3.11 or newer
+## Step 1 — Four things before you install anything
+
+Each of these is decided by the questions in Step 4, and each is painful to
+change afterwards, so settle them now.
+
+**1. Python 3.11 or newer.**
 
 ```sh
 python3 --version
 ```
 
-**Expect:** `Python 3.11.x` or higher.
-
-Older, or "command not found"? Install Python 3.11+ before continuing — from
+Older, or "command not found"? Install Python 3.11+ first — from
 [python.org](https://www.python.org/downloads/), `brew install python@3.12`, or
 `uv python install 3.12`. Nothing else is required: this tool has **zero
 third-party runtime dependencies**.
+
+**2. The source, and an installer.** Everything below runs from inside the
+checkout, and the upgrade path later needs the same source again:
+
+```sh
+git clone https://github.com/SimonMallas/agent-letter-bridge.git
+cd agent-letter-bridge
+```
+
+You also need `pipx` ([installation](https://pipx.pypa.io/stable/installation/))
+or `uv` ([installation](https://docs.astral.sh/uv/getting-started/installation/)).
+Either is fine; the commands below show both.
+
+**3. Your mode, from Step 0.** Standalone and integrated read *different
+settings* — the table in Step 6 shows which. They are not interchangeable, and
+setup refuses a half-changed route rather than inventing one.
+
+**4. Where it will actually run.** The bridge is a process that has to stay up:
+a terminal pane you leave open, or a service. This is not a detail for later,
+because the ring depends on it. A cmux ring must be started **inside** cmux;
+tmux has no such rule; and integrated mode runs your doorbell helper *in the
+bridge's own context*, so whatever the helper needs, the bridge needs. Deciding
+this afterwards is how a bridge ends up delivering mail in silence.
 
 ---
 
@@ -164,8 +190,12 @@ then run `--doctor` again and expect `DELIVERY: 1 chat(s) permitted`.
 
 **Do not skip this.** A correctly-working fail-closed allowlist is
 **indistinguishable from a dead bot** — both produce silence. `--doctor` is the
-only thing that tells you which one you have. It reads files only: no token,
-no network.
+only thing that tells you which one you have.
+
+It never contacts Telegram and never polls. It does read local files, including
+configs that hold a credential, to work out which bot each bridge is set up for
+— it keeps the bot id and never prints the secret half. What it reports is what
+those files say now, which is not proof of what a running process loaded.
 
 ---
 
@@ -194,26 +224,6 @@ than one that will not start at all.
 
 ---
 
-## Step 5.5 — Before you go further, three things must already be true
-
-Setup asks questions whose answers depend on these, and getting them after the
-fact means re-running it:
-
-1. **Python 3.11+**, and the checkout or package you are installing from — the
-   upgrade path later needs the same source, and `pipx install .` over an
-   existing install does nothing without `--force`.
-2. **The mode is decided**: standalone (this bridge gets its own directory) or
-   integrated (letters go to a mailbox your agent already sweeps). The next
-   section's table shows which settings each mode reads; they are not
-   interchangeable, and setup will refuse a half-changed route rather than
-   invent one.
-3. **The context you will RUN it in exists** — the pane, or the service. For a
-   cmux ring that means starting it inside cmux, and integrated mode inherits
-   whatever its doorbell helper needs. Deciding this after the install is how
-   a bridge ends up delivering mail silently.
-
----
-
 ## Step 6 — The ring: do this unless you have a reason not to
 
 The ring types a line into your agent's terminal pane so it notices mail
@@ -239,8 +249,12 @@ nothing:
 Where the bridge may RUN differs too. A standalone cmux ring must be started
 inside cmux; a tmux ring has no such rule. Integrated mode runs the helper *in
 the bridge's own context*, so whatever the helper needs, the bridge needs — if
-it reaches a cmux pane, the bridge must be inside cmux as well. Prove it rather
-than assume it: send a message and check the ring reports `delivered`.
+it reaches a cmux pane, the bridge must be inside cmux as well.
+
+Check that in two steps, because they are two different facts. `alb --status`
+reports what the helper RETURNED — `delivered` means the call succeeded, not
+that the pane you meant received anything. Watching the intended pane while a
+message arrives is the only thing that shows the second.
 
 `alb init` lists your panes in Step 4. To find them again yourself:
 
@@ -461,7 +475,9 @@ last cycle wrote; `--doctor` reports that a lock FILE exists, which a crashed
 bridge also leaves behind. **The only proof that the whole path works is
 watching it work**: send a message and see the letter land and the bell ring.
 
-`--status` and `--doctor` read files only — no token, no network. Safe to run
+`--status` and `--doctor` make no network call and never contact Telegram.
+`--doctor` does read local configs, which hold a credential, to work out
+which bot each bridge is set up for; it keeps only the bot id. Safe to run
 any time, including on a machine you are not sure about.
 
 ---

@@ -63,7 +63,7 @@ and you will need their answer to it either way.
 
 ---
 
-## Step 1 — Preconditions
+## Step 1 — Preconditions, all of them, before you install
 
 ```sh
 python3 --version
@@ -74,6 +74,23 @@ Python runtime unless the human asks.
 
 No other dependencies exist. This tool is stdlib-only, and that is a security
 property rather than a preference: report it if you are asked what it pulls in.
+
+Three more, and all three are decided by questions you are about to ask, so
+establish them now rather than discovering them at Step 7:
+
+- **The source and an installer.** Every command below runs from inside the
+  checkout, and the upgrade path needs the same source later. Confirm you are
+  in it, and that `pipx` or `uv` resolves. If neither does, report it and stop
+  — installing a package manager is the human's call.
+- **The mode**, from Step 0. Standalone and integrated read *different*
+  settings; setup refuses a half-changed route rather than inventing one, and
+  will stop the install if you try.
+- **The execution context it will run in.** A cmux ring must be started inside
+  cmux; tmux has no such rule; integrated mode runs the doorbell helper in the
+  BRIDGE's context, so whatever the helper needs, the bridge needs. If you
+  cannot start a process in a context that satisfies this, say so before the
+  install rather than after — a bridge in the wrong context delivers mail
+  silently and reports success.
 
 ---
 
@@ -173,7 +190,7 @@ exactly as configured. Write the shape exactly — `{"chats": ["<the id>"]}` —
 a bare array is the wrong shape and also denies everything. This file is the
 only thing between a stranger and the agents on this machine.
 
-`--doctor` reads files only: no token, no network. Run it freely.
+`--doctor` makes no network call, so it is safe to run freely. It inspects local files, including configs that hold a credential, to work out which bot each bridge is set up for. It keeps only the bot id and never prints the secret half, never contacts Telegram and never polls. What it reports is what the files say now, not proof of what a running process loaded.
 
 ---
 

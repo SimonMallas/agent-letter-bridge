@@ -370,9 +370,10 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running, start_pan
             console.say("The helper runs from here, so whatever it needs, this")
             console.say("needs: if it reaches a cmux pane, this has to be")
             console.say("started inside cmux too.")
-            console.say("Then prove the bell rather than assume it - send a")
-            console.say("message and check `alb --status` reports the ring")
-            console.say("delivered, not disabled or failing.")
+            console.say("Then check the bell in two steps, because they are")
+            console.say("two different facts: `alb --status` reports what the")
+            console.say("helper RETURNED, and watching the pane is the only way")
+            console.say("to see that the line arrived where you meant it to.")
         elif (summary.get("notifier") or "").strip().lower() == "tmux":
             console.say("Run that in a tmux pane you leave open, or from your")
             console.say("service manager. tmux has no born-inside rule, so the")
