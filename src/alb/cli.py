@@ -584,6 +584,22 @@ def _report(cycle, once):
         print("alb: " + " · ".join(parts))
 
 
+def _transient_reason(exc):
+    """Map a transient to a health reason.
+
+    'network' is already in the vocabulary. Blaming every non-429 on
+    upstream_5xx made a wifi drop look like Telegram's gateway.
+    Prefix match on 'network:' so an HTTP 502 body containing the word
+    network cannot steal the code.
+    """
+    text = str(exc)
+    if "429" in text:
+        return "throttled_429"
+    if text.startswith("network:"):
+        return "network"
+    return "upstream_5xx"
+
+
 def _poll_forever(platform, transport, surface, root, args, config,
                   generation=None):
     # First act on rising: reconcile outbound letters left in flight by a
@@ -651,7 +667,7 @@ def _poll_forever(platform, transport, surface, root, args, config,
             # progressively deader the longer it behaved correctly.
             _loop._write_heartbeat(
                 root / "state" / "health.json", state="degraded",
-                reason="throttled_429" if "429" in str(exc) else "upstream_5xx")
+                reason=_transient_reason(exc))
             time.sleep(max(backoff, floor))
             continue
         except api.FetchFailed as exc:

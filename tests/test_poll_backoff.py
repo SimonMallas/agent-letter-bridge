@@ -103,6 +103,39 @@ class TheLoopSaysItIsStillThereWhileItWaits(unittest.TestCase):
         self.assertEqual(health["state"], "degraded")
         self.assertEqual(health["reason"], "throttled_429")
 
+    def _reason_after(self, message):
+        platform = mock.Mock()
+        platform.fetch.side_effect = api.TransientFailure(message, None)
+
+        def stop(_):
+            raise Slept
+
+        with mock.patch.object(cli.time, "sleep", side_effect=stop):
+            with self.assertRaises(Slept):
+                cli._poll_forever(platform, mock.Mock(), "surface:1",
+                                  self.root, self.args, {"ALB_TO": "agent"})
+        return json.loads(
+            (self.root / "state" / "health.json").read_text(encoding="utf-8"))["reason"]
+
+    def test_a_local_network_fault_is_not_an_upstream_failure(self):
+        """Errno 54/65 is our wifi. The word 'network' already existed and
+        nothing emitted it — so --check sent operators hunting Telegram."""
+        self.assertEqual(
+            self._reason_after("network: [Errno 65] No route to host"),
+            "network")
+
+    def test_a_gateway_failure_is_still_upstream(self):
+        """Healthy control: HTTP 502 must not become 'network' just because
+        the word appears in some bodies."""
+        self.assertEqual(
+            self._reason_after("getUpdates deferred: HTTP 502"),
+            "upstream_5xx")
+
+    def test_the_word_network_in_a_gateway_body_does_not_steal_the_code(self):
+        self.assertEqual(
+            self._reason_after("getUpdates deferred: HTTP 502 network error"),
+            "upstream_5xx")
+
 
 class AStartingBridgeSaysSoBeforeItBlocks(unittest.TestCase):
     """The gate refused this as a pin until the test existed: I had checked
