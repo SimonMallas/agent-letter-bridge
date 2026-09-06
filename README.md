@@ -42,6 +42,13 @@ way home. Since v0.2 the archive runs both ways: an outbound reply is
 written as its own letter *before* the platform is touched, and its delivery
 events are recorded as immutable files beside it.
 
+Sending works the same way round. Your agent answers a letter it holds, and
+the destination comes from that letter rather than from anything the agent
+chose — so a reply goes where the message came from, checked against the
+allowlist again at the moment of sending. Each letter is answered exactly
+once: the claim is an exclusive file create, so a retried or duplicated
+invocation cannot put a second message on the wire.
+
 That is what makes this a front door rather than a pipe. Whatever you build
 behind it — today's agent, tomorrow's memory system — inherits records
 instead of scrollback. The input side of your setup is settled once.
