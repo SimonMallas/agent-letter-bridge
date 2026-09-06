@@ -7,7 +7,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-## [0.2.4] — unreleased
+## [0.2.4] — 2026-09-06
 
 Two things a person installing this would have been misled by.
 
@@ -36,6 +36,10 @@ connection sent operators looking for a platform incident. `network` was
 already in the vocabulary and nothing emitted it. It does now, matched on the
 message prefix so a gateway error that merely contains the word cannot claim
 the code.
+
+> 0.2.2 and 0.2.3 were never published. Upgrading from 0.2.1 brings all three
+> sets of changes at once, which is why the notes below cover more than one
+> version.
 
 ## [0.2.3] — unreleased
 
