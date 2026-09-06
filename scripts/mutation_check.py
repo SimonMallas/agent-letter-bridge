@@ -691,7 +691,22 @@ def _run(name, target, tests, old, new, failures, work):
         _purge_bytecode(work)
     if result.returncode == 0:
         failures.append(f"{name}: DISABLED BUT NO TEST FAILED")
-    print(f"  {'ok  ' if result.returncode else 'FAIL'} {name}")
+        print(f"  FAIL {name}")
+        return
+    # WHICH test died, not merely that something did. Kimi's improvement, born
+    # from a pin that carried the name of a property its own test could not
+    # distinguish: the gate said ok while an unrelated neighbour did the
+    # killing. "Something failed" was always a weaker claim than we treated it
+    # as, and checking by hand is what caught it three times in one day. Now
+    # the harness says it, so the discipline costs nothing.
+    killers = sorted({
+        line.split(" ", 1)[1].split(" ")[0].strip()
+        for line in (result.stderr or "").splitlines()
+        if line.startswith(("FAIL: ", "ERROR: "))
+    })
+    print(f"  ok   {name}"
+          + (f"  [killed by {', '.join(killers)}]" if killers else
+             "  [killer unnamed - check by hand]"))
 
 
 def main():
