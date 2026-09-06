@@ -67,6 +67,13 @@ def _yes(answer):
     return answer.strip().lower() in ("y", "yes")
 
 
+# The two states in which a bell will actually ring. "configured" is a pane
+# the operator pasted; "helper" is integrated mode, where the letterbox
+# resolves the recipient's pane itself. Anything else means no bell, and the
+# resident offer refuses to start a bridge that cannot ring one.
+RINGS = ("configured", "helper")
+
+
 def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
          cmux_born=None, bridge_running=None, start_pane=None):
     """Create the boilerplate under `root`, asking for what cannot be derived.
@@ -208,14 +215,37 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
             console.say(f"  wrote {allow_path} denying everyone.")
             console.say("  NOTHING IS DELIVERED until a chat id is in it.")
 
-    # 5. The ring. Listed, never chosen - but the operator may paste the id
-    #    HERE, so the env carries it before the resident offer loads that env.
-    #    (Found by codex's consistency review: the old order started a
-    #    resident whose ring stayed disabled until a restart nobody mentioned.)
-    surface, notifier = _offer_ring(console, panes, summary)
-    if surface:
-        _persist_ring(console, env_path, env_path_existed, surface, notifier,
-                      summary)
+    # 5. The ring.
+    #
+    #    INTEGRATED MODE ALREADY HAS ONE. The letterbox helper resolves the
+    #    recipient's registered pane itself, and `run.py` rings through it
+    #    whether or not a surface is set - it asks for ALB_SURFACE only when
+    #    NOT integrated. So offering the pane list here would have the
+    #    operator pin a surface nothing ever reads, which is the exact thing
+    #    the runtime's own comment warns against.
+    #
+    #    Getting this wrong cost more than a wasted question: the resident
+    #    offer below gated on a PANE being configured, so a correct
+    #    integrated install was told "a poller with nothing to ping is not an
+    #    install" and refused a start - while two seats on this fleet ran
+    #    that configuration with a working doorbell. The wizard contradicted
+    #    the runtime. Found by installing on the maintainer's own seat.
+    if integrated:
+        console.say()
+        console.say("The doorbell is your letterbox's own, addressed to")
+        console.say(f"  {recipient}")
+        console.say("so there is no pane to choose and none to pin.")
+        summary["ring"] = "helper"
+    else:
+        # Listed, never chosen - but the operator may paste the id HERE, so
+        # the env carries it before the resident offer loads that env.
+        # (Found by codex's consistency review: the old order started a
+        # resident whose ring stayed disabled until a restart nobody
+        # mentioned.)
+        surface, notifier = _offer_ring(console, panes, summary)
+        if surface:
+            _persist_ring(console, env_path, env_path_existed, surface,
+                          notifier, summary)
 
     # 6. The resident. Both real installs stalled at "--once looks fine" with
     #    nothing left running - so init finishes the job, or prints exactly
@@ -290,7 +320,7 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running, start_pan
     console.say(f"  {command}")
     console.say()
 
-    if summary.get("ring") != "configured":
+    if summary.get("ring") not in RINGS:
         # Simon: a full install is not an install without the bell. Starting
         # a poller here would succeed bell-less and --status would say
         # disabled, not broken. That is grok's install.

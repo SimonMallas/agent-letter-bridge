@@ -761,3 +761,47 @@ class ARetainedSurfaceKeepsItsOwnType(Base):
         self.assertEqual(before, after,
                          "a config we cannot validate must not be appended to")
         self.assertNotEqual(_init_status(result), 0)
+
+
+class AnIntegratedInstallIsAnInstall(Base):
+    """The wizard told a correct integrated install it was not an install.
+
+    Found by installing this product on the maintainer's own seat, which was
+    the first cutover that REPLACED a working bridge rather than sitting
+    beside one. `_offer_resident` gated on a pane surface being configured,
+    but integrated mode does not ring through a pane - `run.py` rings through
+    the letterbox helper, and asks for a surface only when NOT integrated.
+
+    So the wizard refused to finish, printed "a poller with nothing to ping
+    is not an install", and told the operator to re-run from a multiplexer.
+    Two seats on this fleet were already running exactly that configuration
+    with a working doorbell. The wizard contradicted the runtime, and the
+    runtime was right.
+    """
+
+    def _integrated(self, **kw):
+        mailbox = pathlib.Path(self.tmp.name) / "mail"
+        mailbox.mkdir()
+        return self.run_init(["y", str(mailbox), "agent", "print"], **kw)
+
+    def test_the_helper_is_named_as_the_ring(self):
+        _console, result = self._integrated()
+        self.assertEqual(result["mode"], "integrated")
+        self.assertNotEqual(result["ring"], "not configured")
+
+    def test_it_does_not_call_a_working_install_incomplete(self):
+        _console, result = self._integrated()
+        self.assertNotEqual(result["resident"], "incomplete")
+
+    def test_it_never_says_a_poller_has_nothing_to_ping(self):
+        console, _result = self._integrated()
+        self.assertNotIn("nothing to ping", console.transcript)
+
+    def test_a_standalone_install_still_demands_its_surface(self):
+        """The control. Without a mailbox there IS no helper to ring through,
+        so the original refusal must survive untouched - this fix must not
+        become a way to ship a bell-less standalone install."""
+        console, result = self.run_init(["n", "print"])
+        self.assertEqual(result["ring"], "not configured")
+        self.assertEqual(result["resident"], "incomplete")
+        self.assertIn("nothing to ping", console.transcript)

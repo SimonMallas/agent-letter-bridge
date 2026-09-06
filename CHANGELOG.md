@@ -7,6 +7,26 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.2.4] — unreleased
+
+Two things a person installing this would have been misled by.
+
+**The setup wizard told a correct install it was not an install.** It gated
+on a terminal pane being chosen, but an integrated install does not ring
+through a pane — it rings through the letterbox's own doorbell, and the
+runtime asks for a pane only when there isn't one. So a correct install was
+told "a poller with nothing to ping is not an install" and refused a start,
+while working deployments ran exactly that configuration with a working
+doorbell. The wizard now recognises the helper as the ring it is, and stops
+asking integrated installs to pin a pane id that nothing ever reads.
+
+**A local network fault was reported as a Telegram outage.** Every transient
+that was not a rate limit was recorded as `upstream_5xx`, so a dropped wifi
+connection sent operators looking for a platform incident. `network` was
+already in the vocabulary and nothing emitted it. It does now, matched on the
+message prefix so a gateway error that merely contains the word cannot claim
+the code.
+
 ## [0.2.3] — unreleased
 
 The relay stops needing a person to notice it died.

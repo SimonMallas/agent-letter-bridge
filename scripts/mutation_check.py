@@ -462,11 +462,24 @@ EXTRA = {
         '    _loop._write_heartbeat(root / "state" / "health.json",\n'
         '                           state="starting", reason="starting")\n',
         ""),
+    # Both halves of the wizard-versus-runtime contradiction. The first
+    # pin makes integrated mode stop being its own ring; the second
+    # restores the gate that then called the result "not an install".
+    "integrated mode IS the ring": (
+        WIZARD, "tests.test_setup",
+        '    if integrated:\n'
+        '        console.say()\n'
+        '        console.say("The doorbell is your letterbox\'s own, addressed to")',
+        "    if False:\n        console.say()\n        console.say(\"unused\")"),
+    "a helper ring is a ring": (
+        WIZARD, "tests.test_setup",
+        '    if summary.get("ring") not in RINGS:',
+        '    if summary.get("ring") != "configured":'),
     "a correct wait still says it is alive": (
         CLI, "tests.test_poll_backoff",
         '            _loop._write_heartbeat(\n'
         '                root / "state" / "health.json", state="degraded",\n'
-        '                reason="throttled_429" if "429" in str(exc) else "upstream_5xx")\n',
+        '                reason=_transient_reason(exc))\n',
         ""),
     "a health reason is a code, never the caller's text": (
         POLL, "tests.test_heartbeat_states",
