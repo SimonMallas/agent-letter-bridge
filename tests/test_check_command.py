@@ -13,7 +13,12 @@ import time
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-ALB = str(ROOT / ".venv" / "bin" / "alb")
+# Invoked as a MODULE, not as an installed console script. The mutation
+# harness runs these in an isolated tree that has no .venv, so a test keyed to
+# the installed binary fails there before anything is mutated - and the gate
+# would then report those pre-existing failures as a mutant's killer. Found by
+# the clean-baseline preflight the moment it existed.
+ALB = [sys.executable, "-m", "alb"]
 ROOT_DIR = ROOT
 
 
@@ -34,7 +39,7 @@ class TheCommandAnAgentRunsOnWaking(unittest.TestCase):
             json.dumps(payload), encoding="utf-8")
 
     def check(self):
-        return subprocess.run([ALB, "--check", "--root", str(self.root)],
+        return subprocess.run([*ALB, "--check", "--root", str(self.root)],
                               capture_output=True, text=True)
 
     def test_a_healthy_relay_exits_zero_and_says_so(self):
@@ -93,9 +98,9 @@ class TheAdviceNamesOnlyThingsThatExist(unittest.TestCase):
 
     def test_every_alb_command_it_recommends_is_a_real_one(self):
         import re
-        out = subprocess.run([ALB, "--check", "--root", str(self.root)],
+        out = subprocess.run([*ALB, "--check", "--root", str(self.root)],
                              capture_output=True, text=True).stdout
-        helptext = subprocess.run([ALB, "--help"], capture_output=True,
+        helptext = subprocess.run([*ALB, "--help"], capture_output=True,
                                   text=True).stdout
         # Only flags advertised as OURS: a recommendation to run a cmux
         # command names cmux's flags, and alb's help says nothing about those.
@@ -117,7 +122,7 @@ class TheDocumentedRitualMatchesTheBinary(unittest.TestCase):
 
     def test_every_alb_flag_the_ritual_names_exists(self):
         import re
-        helptext = subprocess.run([ALB, "--help"], capture_output=True,
+        helptext = subprocess.run([*ALB, "--help"], capture_output=True,
                                   text=True).stdout
         for flag in set(re.findall(r"alb (--[a-z][a-z-]+)", self.doc)):
             with self.subTest(flag=flag):
@@ -160,7 +165,7 @@ class TheTwoRitualsAgree(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_the_restart_verdict_names_the_stop_we_built(self):
-        out = subprocess.run([ALB, "--check", "--root", str(self.root)],
+        out = subprocess.run([*ALB, "--check", "--root", str(self.root)],
                              capture_output=True, text=True).stdout
         self.assertIn("--stop", out,
                       "the verdict must name the adapter-independent stop, "
@@ -169,7 +174,7 @@ class TheTwoRitualsAgree(unittest.TestCase):
                          "naming a cmux key strands every tmux seat")
 
     def test_the_help_does_not_promise_a_signal(self):
-        helptext = subprocess.run([ALB, "--help"], capture_output=True,
+        helptext = subprocess.run([*ALB, "--help"], capture_output=True,
                                   text=True).stdout
         line = [l for l in helptext.splitlines() if "--stop" in l]
         self.assertTrue(line)
@@ -201,7 +206,7 @@ class TheRitualUsesTheVerdictsOwnWords(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_the_doc_says_what_the_binary_says(self):
-        out = subprocess.run([ALB, "--check", "--root", str(self.root)],
+        out = subprocess.run([*ALB, "--check", "--root", str(self.root)],
                              capture_output=True, text=True).stdout.lower()
         self.assertIn("unresponsive", out)
         self.assertIn("unresponsive", self.doc.lower(),

@@ -159,7 +159,11 @@ def main(argv=None):
                 return 0
             print("nothing to stop: no bridge holds this root")
             return 0
-        for _ in range(150):
+        # How long to wait for the holder to honour the request. Overridable
+        # so tests do not each pay a real thirty seconds - a slow test is a
+        # tax on every gate run, and the harness runs this module many times.
+        deadline = float(os.environ.get("ALB_STOP_WAIT_SECONDS", "30"))
+        for _ in range(max(1, int(deadline / 0.2))):
             if singleton.running_pid(args.root) is None:
                 # The lock going free proves the holder is GONE. It does not
                 # prove the holder read the request - it may have crashed, hit

@@ -58,7 +58,10 @@ EXTRA = {
         "if not isinstance(chats, list) or not chats:", "if False:"),
     "allowlist rechecked at send": (
         SEND, "tests.test_send",
-        "    if not gate.allows(allowlist_path, chat_id):", "    if False:"),
+        "    # Re-checked at send: the allowlist is enforced at BOTH ends.\n"
+        "    if not gate.allows(allowlist_path, chat_id):",
+        "    # Re-checked at send: the allowlist is enforced at BOTH ends.\n"
+        "    if False:"),
     "claim before send blocks replay": (
         SEND, "tests.test_send",
         "        raise AlreadyClaimed(f\"{reply_id}: already attempted\")",
@@ -132,8 +135,11 @@ EXTRA = {
         "    return _send_legacy(sender, state, letter_id, chat_id, text)\n    out_id = outbound.compose("),
     "the platform message id lands in the sent event": (
         SEND, "tests.test_send",
-        '    outbound.record_event(state, out_id, "sent",\n                          platform_message_id=str(platform_id))',
-        '    outbound.record_event(state, out_id, "sent")'),
+        '    outbound.record_event(state, out_id, "sent",\n'
+        '                          platform_message_id=str(platform_id))\n'
+        "    # Both directions in the index",
+        '    outbound.record_event(state, out_id, "sent")\n'
+        "    # Both directions in the index"),
     "ambiguous still dead-letters on the letter-first path": (
         SEND, "tests.test_send",
         '        outbound.record_event(state, out_id, "ambiguous", detail=str(exc))\n        _dead_letter(state, out_id, letter_id, str(exc))',
@@ -181,7 +187,9 @@ EXTRA = {
         "        pass"),
     "conflict maps to a yield": (
         TG, "tests.test_telegram_adapter",
+        "                # Another consumer holds this token. Yield; never fight for it.\n"
         '                raise loop.PlatformConflict("another consumer holds this token") from None',
+        "                # Another consumer holds this token. Yield; never fight for it.\n"
         "                pass"),
     "server error is ambiguous, not refused": (
         TG, "tests.test_telegram_adapter",
@@ -234,11 +242,20 @@ EXTRA = {
         "        except urllib.error.HTTPError as exc:"),
     "a transient network failure is not fatal": (
         TG, "tests.test_telegram_adapter",
-        '        except OSError as exc:',
+        "            raise FetchFailed(f\"getUpdates failed: HTTP {exc.code}\") from None\n"
+        "        except OSError as exc:",
+        "            raise FetchFailed(f\"getUpdates failed: HTTP {exc.code}\") from None\n"
         "        except ZeroDivisionError as exc:"),
     "one bridge per state directory": (
         ROOT / "src" / "alb" / "bridge" / "singleton.py", "tests.test_singleton",
-        "            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)", "            pass"),
+        "        try:\n"
+        "            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+        "        except OSError:\n"
+        "            raise AlreadyRunning(",
+        "        try:\n"
+        "            pass\n"
+        "        except OSError:\n"
+        "            raise AlreadyRunning("),
     "the probe matches an executable, not a mention": (
         ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_doctor_probe",
         "        head = argv_for_match[:2]", "        head = argv_for_match"),
@@ -309,7 +326,10 @@ EXTRA = {
         BRIDGE, "tests.test_bridge", "    if unknown:", "    if False:"),
     "a reply finds a letter that has been swept": (
         SEND, "tests.test_send",
-        "    for directory in (searched or [inbox]):", "    for directory in [inbox]:"),
+        "    stored = None\n"
+        "    for directory in (searched or [inbox]):",
+        "    stored = None\n"
+        "    for directory in [inbox]:"),
     "a reply resolves the destination the poller actually writes": (
         SEND, "tests.test_send",
         'DESTINATION_KEYS = ("telegram_chat_id", "chat_id")',
@@ -458,8 +478,10 @@ EXTRA = {
         "    allowance = DEFAULT_ALLOWANCE"),
     "absence is not death": (
         ROOT / "src" / "alb" / "watchdog" / "health.py", "tests.test_wake_check",
-        '        return Verdict("unknown", "investigate",',
-        '        return Verdict("dead", "restart",'),
+        '        return Verdict("unknown", "investigate",\n'
+        '                       "no readable health file: the bridge may never have "',
+        '        return Verdict("dead", "restart",\n'
+        '                       "no readable health file: the bridge may never have "'),
     "a yielded bridge is never restarted": (
         ROOT / "src" / "alb" / "watchdog" / "health.py", "tests.test_wake_check",
         '    if allowance is None:',
@@ -680,9 +702,20 @@ def _in_work(work, target):
 def _run(name, target, tests, old, new, failures, work):
     target = _in_work(work, target)
     original = target.read_text(encoding="utf-8")
-    if old not in original:
+    hits = original.count(old)
+    if hits == 0:
         failures.append(f"{name}: mutation anchor no longer present")
         print(f"  FAIL {name} (anchor missing)")
+        return
+    if hits > 1:
+        # Membership is not uniqueness. replace(old, new, 1) takes the FIRST
+        # occurrence, which need not be the seam the pin is named for - so an
+        # ambiguous anchor can mutate one place and be killed by a test
+        # guarding another. The wrong-seam species, at the level of the tool
+        # we check everything else with.
+        failures.append(f"{name}: ANCHOR IS AMBIGUOUS - {hits} occurrences, so "
+                        f"the mutation may not land on the seam this pin names")
+        print(f"  FAIL {name} (ambiguous anchor x{hits})")
         return
     try:
         _purge_bytecode(work)
@@ -697,6 +730,33 @@ def _run(name, target, tests, old, new, failures, work):
         target.write_text(original, encoding="utf-8")
         _purge_bytecode(work)
     _verdict(name, original.replace(old, new, 1), result, failures)
+
+
+def _baseline(work, failures):
+    """Every selected test module must be GREEN before anything is mutated.
+
+    Codex's second false-positive path: an already-failing or flaky test in a
+    module can be reported as the mutant's killer, so a pin passes on a
+    failure that was there before we broke anything. A kill only means
+    something if the module was clean first.
+    """
+    modules = sorted({tests for _, tests, *_ in
+                      ((n, ts) + tuple() for n, (tg, ts, o, w) in EXTRA.items())}
+                     ) if False else sorted({ts for (_tg, ts, _o, _n) in EXTRA.values()})
+    modules = sorted(set(modules) | {"tests.test_letter"})
+    for module in modules:
+        result = subprocess.run(
+            [sys.executable, "-m", "unittest", module],
+            capture_output=True, text=True, cwd=work,
+            env={**os.environ, "PYTHONPATH": str(work / "src"),
+                 "PYTHONDONTWRITEBYTECODE": "1"},
+        )
+        if result.returncode != 0:
+            failures.append(
+                f"BASELINE NOT CLEAN: {module} fails before any mutation, so "
+                f"any kill it reports proves nothing")
+            print(f"  FAIL baseline {module}")
+    return not failures
 
 
 def _verdict(name, mutated_source, result, failures):
@@ -747,11 +807,24 @@ def main():
     src = _in_work(work, SRC)
     original = src.read_text(encoding="utf-8")
     try:
+        if not _baseline(work, failures):
+            print("\nMUTATION GATE FAILED\n")
+            for line in failures:
+                print(f"  {line}")
+            return 1
         for name, (target, tests, old, new) in EXTRA.items():
             _run(name, target, tests, old, new, failures, work)
         for name, (old, new) in MUTATIONS.items():
-            if old not in original:
+            hits = original.count(old)
+            if hits == 0:
                 failures.append(f"{name}: mutation anchor no longer present")
+                print(f"  FAIL {name} (anchor missing)")
+                continue
+            if hits > 1:
+                failures.append(
+                    f"{name}: ANCHOR IS AMBIGUOUS - {hits} occurrences, so the "
+                    f"mutation may not land on the seam this pin names")
+                print(f"  FAIL {name} (ambiguous anchor x{hits})")
                 continue
             mutated = original.replace(old, new, 1)
             src.write_text(mutated, encoding="utf-8")

@@ -22,7 +22,12 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-ALB = str(ROOT / ".venv" / "bin" / "alb")
+# Invoked as a MODULE, not as an installed console script. The mutation
+# harness runs these in an isolated tree that has no .venv, so a test keyed to
+# the installed binary fails there before anything is mutated - and the gate
+# would then report those pre-existing failures as a mutant's killer. Found by
+# the clean-baseline preflight the moment it existed.
+ALB = [sys.executable, "-m", "alb"]
 from alb.bridge import singleton  # noqa: E402
 
 
@@ -35,8 +40,11 @@ class StoppingTheBridge(unittest.TestCase):
         self.tmp.cleanup()
 
     def stop(self, timeout=20):
-        return subprocess.run([ALB, "--stop", "--root", str(self.root)],
-                              capture_output=True, text=True, timeout=timeout)
+        # A short real wait: the behaviour under test is the refusal and the
+        # message, not the operator's patience.
+        return subprocess.run([*ALB, "--stop", "--root", str(self.root)],
+                              capture_output=True, text=True, timeout=timeout,
+                              env={**os.environ, "ALB_STOP_WAIT_SECONDS": "1"})
 
     def test_the_holder_records_a_pid_so_it_can_be_found(self):
         with singleton.hold(self.root):
@@ -73,7 +81,7 @@ class StoppingTheBridge(unittest.TestCase):
                 break
             time.sleep(0.05)
         try:
-            got = self.stop(timeout=45)
+            got = self.stop(timeout=20)
             # The holder in this test never checks for the request, so the
             # command must report that honestly rather than claim success.
             self.assertNotEqual(got.returncode, 0)
@@ -170,7 +178,7 @@ class TheStopRemembersWhatItAsked(unittest.TestCase):
         asked = singleton.request_stop(self.root)
         self.assertIsNotNone(asked)
         child.kill(); child.wait(timeout=5)  # the holder dies without reading it
-        got = subprocess.run([ALB, "--stop", "--root", str(self.root)],
+        got = subprocess.run([*ALB, "--stop", "--root", str(self.root)],
                              capture_output=True, text=True, timeout=20)
         self.assertEqual(got.returncode, 0, got.stderr)
         self.assertFalse((self.root / "state" / "stop-requested").exists(),
