@@ -101,7 +101,7 @@ def main(argv=None):
                         help="what a waking agent should DO about its relay; "
                              "exit 0 nothing, 2 restart it, 3 investigate")
     parser.add_argument("--doctor", action="store_true",
-                        help="local diagnostics; holds no token, makes no platform call")
+                        help="local diagnostics; makes no platform call. Reads each bridge's config to compare bot ids, keeping the id and discarding the secret")
     parser.add_argument("--list", action="store_true",
                         help="the correspondence, both directions; reads only")
     parser.add_argument("--show", metavar="LETTER_ID",

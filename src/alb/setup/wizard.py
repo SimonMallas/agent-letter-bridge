@@ -341,10 +341,25 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running, start_pan
         return
 
     if not cmux_born():
-        # Same ACL as the ring: a pane created from outside cmux is refused.
-        console.say("Run it from inside a cmux pane (cmux refuses processes")
-        console.say("born outside it, so started from here the bell would not")
-        console.say("work).")
+        # THE ADVICE HAS TO MATCH THE RING. Automatic pane creation exists
+        # only for cmux, and this message once generalised that into a claim
+        # about where the bridge may run at all - telling a tmux operator to
+        # adopt a multiplexer they do not need, and an integrated one to worry
+        # about panes that play no part in their bell.
+        if summary.get("ring") == "helper":
+            console.say("Run that wherever it will keep running - a pane you")
+            console.say("leave open, or your service manager. The bell goes")
+            console.say("through your letterbox's doorbell, so where this runs")
+            console.say("does not change whether it rings.")
+        elif (summary.get("notifier") or "").strip().lower() == "tmux":
+            console.say("Run that in a tmux pane you leave open, or from your")
+            console.say("service manager. tmux has no born-inside rule, so the")
+            console.say("ring works either way.")
+        else:
+            # Real, and only here: cmux refuses a pane created from outside it.
+            console.say("Run it from inside a cmux pane (cmux refuses processes")
+            console.say("born outside it, so started from here the bell would not")
+            console.say("work).")
         summary["resident"] = "printed"
         return
 
@@ -507,6 +522,27 @@ def _persist_mailbox(console, env_path, env_path_existed, mailbox, recipient,
         console.say(f"  bridge.env exists but cannot be read as config: {exc}")
         console.say("  Not writing to it. Fix the file, then re-run.")
         return False
+
+    # THE ROUTE IS A PAIR. Applied per key, append-if-absent synthesises a
+    # destination nobody chose: a config naming an old participant and no
+    # mailbox, re-run with a new pair, kept the old name and took the new
+    # directory. Mail then goes to a participant the operator did not select.
+    #
+    # So retained values are usable only when the pair is empty, or when it
+    # already says exactly what was just selected. Anything else is refused
+    # with both values named and nothing written - non-clobber intact, and
+    # the operator left able to see what disagrees.
+    kept_mailbox = config.get("ALB_MAIL_ROOT") or ""
+    kept_recipient = config.get("ALB_TO") or ""
+    for label, kept, chosen in (("mailbox", kept_mailbox, mailbox),
+                                ("participant", kept_recipient, recipient)):
+        if kept and chosen and kept != chosen:
+            console.say(f"  bridge.env already names a {label}: {kept}")
+            console.say(f"  and you selected: {chosen}")
+            console.say("  A mailbox and a participant are one route, so this")
+            console.say("  will not take half of each. Nothing was written.")
+            console.say("  Edit bridge.env yourself, or start a new root.")
+            return False
 
     lines = []
     for key, value in (("ALB_MAIL_ROOT", mailbox), ("ALB_TO", recipient),

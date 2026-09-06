@@ -243,12 +243,12 @@ class TheReportItselfComparesBots(unittest.TestCase):
 
     def test_a_different_bot_is_not_raised_as_holding_our_bot(self):
         report = self._report("222:OTHERSECRET")
-        self.assertIn("no other bridge found holding your bot", report)
+        self.assertIn("no other bridge whose config names your bot", report)
 
     def test_the_same_bot_still_is(self):
         report = self._report("111:SAMEBOTOTHERSECRET")
         self.assertIn("MAY BE HOLDING YOUR BOT", report)
-        self.assertIn("same bot", report)
+        self.assertIn("its config names your bot", report)
 
     def test_no_secret_reaches_the_report(self):
         self.assertNotIn("SAMEBOTOTHERSECRET", self._report("111:SAMEBOTOTHERSECRET"))
@@ -338,3 +338,38 @@ class NothingIsHiddenFromTheReport(unittest.TestCase):
 
     def test_the_same_bot_is_raised(self):
         self.assertIn("ANOTHER BRIDGE", self._report("111:SAMEBOT"))
+
+
+class TheReportLabelsItsEvidence(unittest.TestCase):
+    """Saying a process is "on a different bot" states more than was checked.
+
+    The classification comes from the config file as it reads NOW. A live
+    process loaded its config at startup and the file may have changed since,
+    so this is an inference about a file, not proof of a running identity.
+    Showing the excluded candidates was the right move and does not by itself
+    turn the inference into proof - the headings have to say which one it is.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "bridge.env").write_text("ALB_TOKEN=111:OURS\n", encoding="utf-8")
+        (self.root / "bridge.env").chmod(0o600)
+        self.addCleanup(self.tmp.cleanup)
+
+    def _report(self, token):
+        other = self.root / "other"
+        other.mkdir()
+        (other / "bridge.env").write_text(f"ALB_TOKEN={token}\n", encoding="utf-8")
+        (other / "bridge.env").chmod(0o600)
+        listing = [f"501 900 /usr/bin/python3 /x/alb --root {other}"]
+        return checks.summary(listing, self_pid=999, root=self.root, environ={})
+
+    def test_an_excluded_candidate_is_described_as_a_config_reading(self):
+        report = self._report("222:THEIRS")
+        self.assertIn("config names a different bot", report)
+        self.assertIn("unverified", report)
+
+    def test_a_clean_result_does_not_claim_more_than_it_checked(self):
+        report = self._report("222:THEIRS")
+        self.assertNotIn("no other bridge found holding your bot", report)

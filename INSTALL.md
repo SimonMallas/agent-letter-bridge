@@ -241,6 +241,22 @@ extra flag is needed. If you ever pass `--mail-root` by hand, give it the
 directory that CONTAINS the inbox (the mailbox), not the inbox itself — the
 bridge creates `inbox/` and `processed/` inside it.
 
+**First, which route are you on?** Only one process may hold a root at a time.
+If `--init` offered to start the bridge and you said yes, it is running now and
+`--once` will exit `4` — that is the lock doing its job, not a fault. Check
+before you type anything:
+
+```sh
+alb --status --root ~/.alb
+```
+
+- **Nothing running** — the checks below use `--once`, exactly as written.
+- **Already running** — skip every `--once` in this section. Message your bot
+  and watch the inbox fill instead; `--status` reports each cycle. To go back to
+  one-shot checks, stop it first with `alb --stop --root ~/.alb`, and **if that
+  returns non-zero or times out, do not start anything else** — a stop that was
+  not confirmed is not a stop.
+
 ```sh
 alb --config ~/.alb/bridge.env --root ~/.alb --once
 ```

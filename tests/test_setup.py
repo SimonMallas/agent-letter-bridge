@@ -880,3 +880,109 @@ class ARerunIntoIntegratedActuallyBecomesIntegrated(Base):
         env_path.write_text("this is not = a config\x00", encoding="utf-8")
         _console, result = self.run_init(["y", str(mailbox), "agent", "print"])
         self.assertNotEqual(result.get("mode"), "integrated")
+
+
+class ARouteIsAPairNotTwoKeys(Base):
+    """Append-if-absent, applied per key, invented routes nobody chose.
+
+    A config carrying `ALB_TO=old-agent` and no mailbox, re-run with a NEW
+    mailbox and a NEW name, kept the old name and took the new mailbox: mail
+    addressed to a participant the operator had not selected, in a directory
+    they had. The mirror case did the same the other way and then reported
+    the mailbox the operator typed rather than the one saved.
+
+    Non-clobber is right and per-key was the wrong grain. The mailbox and the
+    participant are one route: retained values are usable only when the pair
+    is empty, or when they already say exactly what was just selected.
+    Anything else is refused with both values named, and nothing is written.
+    """
+
+    def _rerun(self, existing, answers_mailbox, recipient="new-agent"):
+        (self.root).mkdir(parents=True, exist_ok=True)
+        env = self.root / "bridge.env"
+        env.write_text(existing, encoding="utf-8")
+        env.chmod(0o600)
+        return self.run_init(["y", str(answers_mailbox), recipient])
+
+    def _mailbox(self, name):
+        path = pathlib.Path(self.tmp.name) / name
+        path.mkdir(exist_ok=True)
+        return path
+
+    def test_a_retained_participant_does_not_take_a_new_mailbox(self):
+        new = self._mailbox("new-mail")
+        _console, result = self._rerun(
+            "ALB_TOKEN=1:T\nALB_TO=old-agent\n", new)
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertNotIn(f"ALB_MAIL_ROOT={new}", env)
+        self.assertNotEqual(result.get("mode"), "integrated")
+
+    def test_a_retained_mailbox_does_not_take_a_new_participant(self):
+        old = self._mailbox("old-mail")
+        new = self._mailbox("new-mail")
+        _console, result = self._rerun(
+            f"ALB_TOKEN=1:T\nALB_MAIL_ROOT={old}\n", new)
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertNotIn("ALB_TO=new-agent", env)
+        self.assertNotEqual(result.get("mode"), "integrated")
+
+    def test_the_operator_is_told_which_two_values_disagree(self):
+        new = self._mailbox("new-mail")
+        console, _result = self._rerun(
+            "ALB_TOKEN=1:T\nALB_TO=old-agent\n", new)
+        self.assertIn("old-agent", console.transcript)
+        self.assertIn("new-agent", console.transcript)
+
+    def test_a_retained_route_that_already_matches_is_accepted(self):
+        """Re-running with the same answers must stay idempotent."""
+        old = self._mailbox("old-mail")
+        _console, result = self._rerun(
+            f"ALB_TOKEN=1:T\nALB_MAIL_ROOT={old}\nALB_TO=same-agent\n",
+            old, recipient="same-agent")
+        self.assertEqual(result["mode"], "integrated")
+
+    def test_an_empty_pair_is_still_filled_in(self):
+        """The case the append existed for must keep working."""
+        new = self._mailbox("new-mail")
+        _console, result = self._rerun("ALB_TOKEN=1:T\n", new)
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertIn(f"ALB_MAIL_ROOT={new}", env)
+        self.assertIn("ALB_TO=new-agent", env)
+        self.assertEqual(result["mode"], "integrated")
+
+
+class TheStartAdviceMatchesTheRing(Base):
+    """It told every operator that cmux was required.
+
+    Automatic pane creation is implemented only for cmux, and the message
+    generalised that into a claim about where the bridge may run. It is wrong
+    twice: a tmux ring has no born-inside rule, and an integrated install
+    rings through the letterbox helper, so where the bridge runs says nothing
+    about whether the bell works. A newcomer on tmux, following it literally,
+    is told to install a multiplexer they do not need.
+
+    Printing a correct command is enough; nothing here needs to create a pane.
+    """
+
+    def _advice(self, answers, **kw):
+        kw.setdefault("cmux_born", lambda: False)
+        console, result = self.run_init(answers, **kw)
+        return console.transcript, result
+
+    def test_a_tmux_install_is_not_told_to_use_cmux(self):
+        panes = [{"id": "%3", "label": "agent", "notifier": "tmux"}]
+        transcript, _result = self._advice(["n", "print", "%3"], panes=panes)
+        self.assertIn("tmux", transcript)
+        self.assertNotIn("cmux refuses processes", transcript)
+
+    def test_an_integrated_install_is_not_told_about_panes_at_all(self):
+        mailbox = pathlib.Path(self.tmp.name) / "mail"
+        mailbox.mkdir()
+        transcript, _result = self._advice(["y", str(mailbox), "agent", "print"])
+        self.assertNotIn("cmux refuses processes", transcript)
+
+    def test_a_cmux_install_still_gets_the_born_inside_warning(self):
+        """The control: the rule is real where it applies."""
+        panes = [{"id": "PANE-1", "label": "agent", "notifier": "cmux"}]
+        transcript, _result = self._advice(["n", "print", "PANE-1"], panes=panes)
+        self.assertIn("cmux refuses processes", transcript)

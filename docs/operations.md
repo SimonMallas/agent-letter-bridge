@@ -247,7 +247,10 @@ Two rules follow:
    service manager. Testing by hand exercises the wrong context and proves
    nothing.
 
-`doctor` holds no token and makes no platform calls. Run it with:
+`doctor` makes no platform calls and carries no credential of its own.
+To tell bridges apart it loads each one's config — a file holding a
+token — and keeps only the bot id from it; the secret half is discarded
+and never printed. Run it with:
 
 ```sh
 alb --doctor --root /path/to/state

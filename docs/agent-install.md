@@ -297,7 +297,22 @@ you polling by hand. Only that proves the bell.
 line no existing doorbell convention matches, so an agent with its own sweep
 will receive the doorbell, find nothing, and reasonably report the bridge broken.
 
-**[integrated]** Nothing to hand over.
+**[integrated]** The doorbell and the mailbox are ones the agent already
+knows, so there is no new grammar to teach — but that is not the same as
+nothing to hand over. It still does not know this tool exists. Give it three
+things:
+
+- `alb --reply-to <letter-id> --text "..."` is how it answers. The destination
+  comes from the letter; it never picks one. A letter can be answered once.
+- `alb --check --root <root>` is what it runs when it wakes: `0` nothing to do,
+  `2` silent past the threshold and here is how to restart it, `3` something a
+  restart will not fix.
+- `alb --stop --root <root>` asks the holder to stand down. **If it returns
+  non-zero or times out, do not start a replacement** — an unconfirmed stop is
+  not a stop, and two pollers on one token is the failure it exists to avoid.
+
+The rest of [`agent-setup.md`](agent-setup.md) is about a doorbell convention it
+already has. These three are not.
 
 Report to the human: which mode, the state directory, whether the ring is on,
 and which of the three tests actually passed. **Name any you did not run** —

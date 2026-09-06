@@ -136,7 +136,19 @@ The short version, once you know the shape:
 ```sh
 pipx install .                                  # or: uv tool install .
 alb --init --root ~/.alb                        # creates the files, asks for the rest
+```
+
+**`--init` may offer to start the bridge for you, and what comes next depends
+on your answer.** Only one process may hold a root at a time, so these are two
+routes, not two steps:
+
+```sh
+# (a) you DECLINED the offer, or it was not made — run one cycle by hand:
 alb --config ~/.alb/bridge.env --root ~/.alb --once
+
+# (b) init STARTED it — do not run --once, it will exit 4 against a held
+#     root, which is the lock working. Message the bot and watch instead:
+alb --status --root ~/.alb
 ```
 
 `--init` creates the state directory, a mode-600 config and a **deny-all**
@@ -191,7 +203,11 @@ asking it to slow down. `alb --check` gives an agent a verdict to act on when it
 wakes: nothing to do, restart it and here is how, or something a restart will not
 fix. And `alb --stop` asks the process holding the lock to stand down, rather
 than signalling a pid that may by then belong to something else. Upgrading is
-`pipx install .` over the top; configs and state carry forward untouched. The
+`pipx install --force .` from the checkout — plain `pipx install .` sees the
+existing install, prints `Not modifying existing installation` and stops.
+Stop the running bridge by whatever route the version you are ON supports:
+`alb --stop` is new here, and 0.2.1 will not honour it. Configs, allowlist and
+state carry forward untouched; check with `alb --version` before restarting. The
 full list is in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## What you need

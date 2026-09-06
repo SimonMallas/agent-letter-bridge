@@ -256,8 +256,9 @@ def deliverability(root):
 
 def summary(process_listing, self_pid, root, environ):
     """The operator-facing report. States limits as plainly as findings."""
-    # Our own bot id comes from the config, not the environment: the doctor
-    # deliberately holds no token, and this is the id half only.
+    # Our own bot id comes from the config, not the environment. The
+    # doctor carries no credential of its own; reading one from a config
+    # is a deliberate, narrow exception that keeps only the id half.
     competing = local_consumers(process_listing, self_pid,
                                 our_bot=bot_of_root(root))
     context = daemon_context(environ)
@@ -291,18 +292,25 @@ def summary(process_listing, self_pid, root, environ):
     lines.append("LOCAL SINGLE-CONSUMER PROBE")
     contenders = [c for c in competing if c["bot"] in ("same", "unknown")]
     cleared = [c for c in competing if c["bot"] == "different"]
+    # EVERY HEADING NAMES ITS EVIDENCE. Identity here is read from each
+    # candidate's config as it stands now; a live process loaded its config at
+    # startup and the file may have changed since. That is an inference about
+    # a file, not proof of a running identity, and a heading that forgets the
+    # difference is the same overclaim the name-matching probe made.
     if contenders:
         lines.append("  ANOTHER BRIDGE MAY BE HOLDING YOUR BOT:")
         for c in contenders:
-            tag = "same bot" if c["bot"] == "same" else "bot unknown"
+            tag = ("its config names your bot" if c["bot"] == "same"
+                   else "could not read which bot")
             lines.append(f"    pid {c['pid']}: {c['command']}  [{tag}]")
     else:
-        lines.append("  no other bridge found holding your bot")
+        lines.append("  no other bridge whose config names your bot")
     if cleared:
-        # Listed rather than deleted. The clear is an inference from a file,
-        # and a file can be edited after a process loads it - so the operator
-        # sees what was found as well as what was concluded.
-        lines.append("  other bridges running, on a different bot:")
+        # Listed rather than deleted: a clear made by omission is a wrong
+        # clear nobody can see.
+        lines.append("  other bridges running; current config names a "
+                     "different bot")
+        lines.append("  (running process identity unverified):")
         for c in cleared:
             lines.append(f"    pid {c['pid']}: {c['command']}")
     lines.append(f"  {lock_state(root)}")

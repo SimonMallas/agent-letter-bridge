@@ -57,10 +57,16 @@ structural and mutation-proved.
 > boundary, and must never be written as one. Anyone modifying the poller can
 > send. We do not tell operators otherwise.
 
-**The doctor holds no token, makes no platform calls, and never calls
-`getUpdates`.**
+**The doctor makes no platform calls, carries no credential of its own, and
+never calls `getUpdates`.**
 It proves local state only — process, service, lock, cron — and asserts its own
-environment holds no token. A `getUpdates` conflict probe is **forbidden and
+environment holds no token. Telling one bridge from another is the single
+exception to "reads no credential": it loads each candidate's config through
+the same loader the runtime uses, inheriting that loader's refusal to read a
+token file others can read, and keeps only the bot id. The secret half is
+discarded inside the parser and reaches no caller, report or log. That
+identification is an inference from a file rather than proof of what a live
+process loaded, and the report says so rather than implying otherwise. A `getUpdates` conflict probe is **forbidden and
 uninterpretable**: an "ok" may mean it just terminated another consumer's
 in-flight request, and disambiguating requires the loop the boundary forbids.
 
