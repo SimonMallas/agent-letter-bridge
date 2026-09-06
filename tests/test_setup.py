@@ -805,3 +805,78 @@ class AnIntegratedInstallIsAnInstall(Base):
         self.assertEqual(result["ring"], "not configured")
         self.assertEqual(result["resident"], "incomplete")
         self.assertIn("nothing to ping", console.transcript)
+
+
+class TheExitStatusAgreesWithTheWizard(Base):
+    """Two places judged whether a bell will ring, and only one was taught
+    about integrated mode.
+
+    `_offer_resident` learned that the letterbox helper IS a ring;
+    `cli._init_status` kept its own copy of the same judgement and did not.
+    So a correct integrated install did the right thing and then reported
+    failure - exit 1 with nothing wrong. Found by a review reading it as a
+    stranger, after 214 tests covering this area passed.
+
+    The lesson is the shared constant, not the extra branch: a second
+    private copy of a rule is a second place to forget.
+    """
+
+    def test_a_fresh_integrated_install_exits_zero(self):
+        from alb.cli import _init_status
+        mailbox = pathlib.Path(self.tmp.name) / "mail"
+        mailbox.mkdir()
+        _console, result = self.run_init(["y", str(mailbox), "agent", "print"])
+        self.assertEqual(result["ring"], "helper")
+        self.assertEqual(_init_status(result), 0)
+
+    def test_the_two_judgements_read_the_same_constant(self):
+        """A regression guard with teeth: if either side grows its own
+        literal again, this fails."""
+        from alb import cli
+        from alb.setup import wizard
+        self.assertIs(cli._RINGS, wizard.RINGS)
+
+
+class ARerunIntoIntegratedActuallyBecomesIntegrated(Base):
+    """Answering "yes, integrated" on a re-run reported integrated and then
+    started a bridge whose config was still standalone.
+
+    Non-clobber protects what is THERE. It must not decline to add what is
+    ABSENT - the same defect `_persist_ring` was written to close, in the
+    other half of the file. Without the mailbox keys the runtime has no
+    mailbox and no recipient, so the doorbell it just promised cannot ring,
+    and the summary said so anyway.
+
+    The rule this restores: claim the mode only after re-reading the file and
+    finding it true. A summary is a report, never a wish.
+    """
+
+    def _standalone_then_integrated(self):
+        self.run_init(["n", "print"])                      # leaves a standalone env
+        mailbox = pathlib.Path(self.tmp.name) / "mail"
+        mailbox.mkdir()
+        return self.run_init(["y", str(mailbox), "agent", "print"]), mailbox
+
+    def test_the_mailbox_keys_reach_the_config(self):
+        (_console, result), mailbox = self._standalone_then_integrated()
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertIn(f"ALB_MAIL_ROOT={mailbox}", env)
+        self.assertIn("ALB_TO=agent", env)
+        self.assertEqual(result["mode"], "integrated")
+
+    def test_the_token_already_there_is_untouched(self):
+        """The append must not join onto the last line and change the one
+        secret in the file."""
+        (_console, _result), _mailbox = self._standalone_then_integrated()
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertIn("ALB_TOKEN=123456:TOKEN\n", env)
+
+    def test_a_config_it_cannot_write_is_not_reported_as_integrated(self):
+        """If the keys do not land, the mode must not be claimed."""
+        self.run_init(["n", "print"])
+        mailbox = pathlib.Path(self.tmp.name) / "mail"
+        mailbox.mkdir()
+        env_path = self.root / "bridge.env"
+        env_path.write_text("this is not = a config\x00", encoding="utf-8")
+        _console, result = self.run_init(["y", str(mailbox), "agent", "print"])
+        self.assertNotEqual(result.get("mode"), "integrated")

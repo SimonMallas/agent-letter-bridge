@@ -80,29 +80,52 @@ def bot_id(token):
     return head or None
 
 
-def _root_of(argv):
-    """The --root a candidate was started with, if it names one."""
-    for flag in ("--root", "--config"):
-        if flag in argv:
-            i = argv.index(flag)
-            if i + 1 < len(argv):
-                value = argv[i + 1]
-                return str(pathlib.PurePath(value).parent) if flag == "--config" else value
+def _flag(argv, name):
+    if name in argv:
+        i = argv.index(name)
+        if i + 1 < len(argv):
+            return argv[i + 1]
     return None
 
 
-def bot_of_root(root):
-    """Read only the bot id from a candidate's config. Never the secret."""
-    if not root:
+def _config_path(argv):
+    """The config file a candidate actually loaded.
+
+    Resolved the way the CLI resolves it: an explicit `--config` wins, and
+    `--root` supplies `bridge.env` only when no config was named. Preferring
+    the root meant reading a DIFFERENT file from the one the process loaded,
+    and a bot id read from the wrong file can clear a real competitor.
+    """
+    named = _flag(argv, "--config")
+    if named:
+        return pathlib.Path(named)
+    root = _flag(argv, "--root")
+    return pathlib.Path(root) / "bridge.env" if root else None
+
+
+def bot_of_root(root, config=None):
+    """The bot id from a candidate's config, or None when it cannot be known.
+
+    ASKS THE LOADER THE RUNTIME ASKS. A second parser here read the FIRST
+    `ALB_TOKEN=` while `run.load_config` takes the LAST, so a file with the
+    key twice was attributed to a bot the process had never loaded - and the
+    probe then cleared a genuine same-bot competitor on the strength of it.
+    Reimplementing a parser is how the two drift; there is only one now.
+
+    Inheriting the loader also inherits its refusals: a config whose
+    permissions let others read a token is not read here either. Refusing
+    yields None, which is reported rather than cleared.
+    """
+    from alb.bridge import run
+
+    path = pathlib.Path(config) if config else (
+        pathlib.Path(root) / "bridge.env" if root else None)
+    if path is None:
         return None
     try:
-        text = (pathlib.Path(root) / "bridge.env").read_text(encoding="utf-8")
-    except OSError:
+        return bot_id(run.load_config(path).get("ALB_TOKEN", ""))
+    except Exception:  # noqa: BLE001 - any failure to read is "unknown"
         return None
-    for line in text.splitlines():
-        if line.startswith("ALB_TOKEN="):
-            return bot_id(line.split("=", 1)[1].strip())
-    return None
 
 
 def local_consumers(process_listing, self_pid, our_bot=None, bot_of=None):
@@ -123,7 +146,7 @@ def local_consumers(process_listing, self_pid, our_bot=None, bot_of=None):
     conflict is not evidence of safety, and the case the probe exists for is
     exactly the one it cannot prove.
     """
-    bot_of = bot_of or bot_of_root
+    bot_of = bot_of or (lambda path: bot_of_root(None, config=path))
     found = []
     for line in process_listing:
         fields = line.split()
@@ -154,16 +177,19 @@ def local_consumers(process_listing, self_pid, our_bot=None, bot_of=None):
         head = argv_for_match[:2]
         if not any(pathlib.PurePath(arg).name in _BRIDGE_EXECUTABLES for arg in head):
             continue
-        note = ""
+        verdict = "unknown"
         if our_bot:
-            theirs = bot_of(_root_of(argv))
-            if theirs and theirs != our_bot:
-                # Proven to be a different bot. One consumer per token is
-                # per TOKEN, so this one cannot compete for ours.
-                continue
+            theirs = bot_of(_config_path(argv))
             if theirs == our_bot:
-                note = "  [same bot]"
-        found.append(f"pid {pid}: {' '.join(argv[:6])}{note}")
+                verdict = "same"
+            elif theirs:
+                # One consumer per TOKEN, so a different bot cannot compete
+                # for ours. Reported anyway, never deleted: a file's contents
+                # are not proof of what a live process loaded, and a clear
+                # made by omission is a wrong clear nobody can see.
+                verdict = "different"
+        found.append({"pid": pid, "command": " ".join(argv[:6]),
+                      "bot": verdict})
     return found
 
 
@@ -250,17 +276,35 @@ def summary(process_listing, self_pid, root, environ):
         lines.append(f"DELIVERY: {delivery['reason']}")
         lines.append("")
     lines.append("TOKEN")
-    lines.append(f"  this tool is not holding a bot token : "
+    lines.append(f"  no credential in this tool's own environment : "
                  f"{env_is_token_free(environ)}")
     lines.append("  (only ALB_ variables are checked; your shell's own secrets")
     lines.append("   are none of the doctor's business)")
+    # Say it here rather than let the line above imply otherwise. The probe
+    # below loads each bridge's config, which is a file containing a token -
+    # so "not holding a token" was true of the environment and no longer true
+    # of the run. It keeps the identifying half and discards the secret.
+    lines.append("  to tell bridges apart the probe below loads each one's")
+    lines.append("  config and keeps the bot id only; the secret half is")
+    lines.append("  discarded and never printed")
     lines.append("")
     lines.append("LOCAL SINGLE-CONSUMER PROBE")
-    if competing:
-        lines.append("  ANOTHER BRIDGE APPEARS TO BE RUNNING:")
-        lines.extend(f"    {c}" for c in competing)
+    contenders = [c for c in competing if c["bot"] in ("same", "unknown")]
+    cleared = [c for c in competing if c["bot"] == "different"]
+    if contenders:
+        lines.append("  ANOTHER BRIDGE MAY BE HOLDING YOUR BOT:")
+        for c in contenders:
+            tag = "same bot" if c["bot"] == "same" else "bot unknown"
+            lines.append(f"    pid {c['pid']}: {c['command']}  [{tag}]")
     else:
-        lines.append("  no other bridge process found on this machine")
+        lines.append("  no other bridge found holding your bot")
+    if cleared:
+        # Listed rather than deleted. The clear is an inference from a file,
+        # and a file can be edited after a process loads it - so the operator
+        # sees what was found as well as what was concluded.
+        lines.append("  other bridges running, on a different bot:")
+        for c in cleared:
+            lines.append(f"    pid {c['pid']}: {c['command']}")
     lines.append(f"  {lock_state(root)}")
     lines.append("")
     lines.append("DAEMON CONTEXT")

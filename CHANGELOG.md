@@ -39,11 +39,12 @@ the code.
 
 ## [0.2.3] — unreleased
 
-The relay stops needing a person to notice it died.
+The relay stops needing a person to notice it died - it needs an agent that wakes and asks.
 
 An agent asks `alb --check` when it wakes: exit 0 nothing to do, 2 the
-relay is dead and here is how to restart it, 3 something a restart will
-not fix. The allowance follows the state rather than one number for
+relay has been silent past a policy threshold, which is grounds to restart
+it rather than proof it is dead, and here is how; 3 something a restart
+will not fix. The allowance follows the state rather than one number for
 everything, because a bridge waiting out a rate limit is quiet BECAUSE it
 is behaving, and a bridge that has just started has not finished a poll
 yet. Both used to read as dead.

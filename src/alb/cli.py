@@ -450,15 +450,22 @@ def _init(args):
     return _init_status(summary)
 
 
+from alb.setup.wizard import RINGS as _RINGS
+
 def _init_status(summary):
     """Exit status for agents. Prose is for humans; this is for docs/agent-install.md.
 
     A summary always exists, so `return 0 if summary else 1` reported success
-    for grok's bell-less install. Incomplete (no ring) must be non-zero.
+    for a bell-less install. Incomplete (no ring) must be non-zero.
+
+    The set of ringing states is imported, never restated. This function kept
+    its own copy of that judgement, so when the wizard learned that integrated
+    mode rings through the letterbox helper, this did not: a correct install
+    completed and then exited 1 with nothing wrong.
     """
     if not summary:
         return 1
-    if summary.get("ring") != "configured":
+    if summary.get("ring") not in _RINGS:
         return 1
     if summary.get("resident") == "incomplete":
         return 1

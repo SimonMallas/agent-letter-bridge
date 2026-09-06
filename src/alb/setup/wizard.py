@@ -199,6 +199,15 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
         _write_private(env_path, "".join(lines))
         summary["created"].append(str(env_path))
 
+    # Reconcile a config that was already here. A summary is a report, never
+    # a wish: if the mailbox keys are not in the file afterwards, this is not
+    # an integrated install and must not be called one.
+    if integrated and not _persist_mailbox(console, env_path, env_path_existed,
+                                           mailbox, recipient, helper, summary):
+        integrated = False
+        summary["mode"] = "standalone"
+        summary.pop("mail_root", None)
+
     # 4. The allowlist. Written deny-all whatever else happens; an entry is
     #    added only from a value the operator supplied or explicitly asked us
     #    to read.
@@ -454,6 +463,69 @@ def _effective(env_path):
         raise UnreadableConfig(str(exc)) from None
 
 
+def _append_settings(env_path, lines):
+    """Add settings to an existing config without joining onto the last one.
+
+    A file whose final line lacks its newline turns the next line into a
+    continuation of that value - and the value at the end of this particular
+    file is usually the token, so a careless append changes the one secret in
+    it while reporting success. Found by review, and the reason this is one
+    function rather than two copies: the second copy would not have this
+    comment, and would eventually not have the guard either.
+    """
+    if not lines:
+        return
+    try:
+        existing = env_path.read_text(encoding="utf-8")
+    except OSError:
+        existing = ""
+    with open(env_path, "a", encoding="utf-8") as handle:
+        if existing and not existing.endswith("\n"):
+            handle.write("\n")
+        handle.writelines(lines)
+
+
+def _persist_mailbox(console, env_path, env_path_existed, mailbox, recipient,
+                     helper, summary):
+    """Add the integrated keys to a config that already exists, or say so.
+
+    Non-clobber protects what is THERE; declining to add what is ABSENT is
+    how a re-run answered "yes, integrated" and got a standalone config back
+    while the summary reported integrated. Same shape as `_persist_ring`,
+    including the two rules that one was written to keep: an append must not
+    JOIN onto a last line missing its newline, and the mode is claimed only
+    after re-reading the file and finding it true.
+
+    Returns True when the config really is integrated afterwards.
+    """
+    if not env_path_existed:
+        # init wrote the keys itself a moment ago; nothing to reconcile.
+        return True
+    try:
+        config = _effective(env_path)
+    except UnreadableConfig as exc:
+        console.say(f"  bridge.env exists but cannot be read as config: {exc}")
+        console.say("  Not writing to it. Fix the file, then re-run.")
+        return False
+
+    lines = []
+    for key, value in (("ALB_MAIL_ROOT", mailbox), ("ALB_TO", recipient),
+                       ("ALB_BUS_BINARY", helper)):
+        if value and not config.get(key):
+            lines.append(f"{key}={value}\n")
+    _append_settings(env_path, lines)
+
+    try:
+        after = _effective(env_path)
+    except UnreadableConfig:
+        return False
+    if after.get("ALB_MAIL_ROOT") and after.get("ALB_TO"):
+        return True
+    console.say("  bridge.env still has no mailbox and recipient, so this is")
+    console.say("  NOT an integrated install. Nothing was overwritten.")
+    return False
+
+
 def _persist_ring(console, env_path, env_path_existed, surface, notifier,
                   summary):
     """Write the ring into the env, or refuse to call it configured.
@@ -487,15 +559,7 @@ def _persist_ring(console, env_path, env_path_existed, surface, notifier,
     if notifier and not config.get("ALB_NOTIFIER") and not retained_surface:
         lines.append(f"ALB_NOTIFIER={notifier}\n")
 
-    if lines:
-        try:
-            existing = env_path.read_text(encoding="utf-8") if env_path_existed else ""
-        except OSError:
-            existing = ""
-        with open(env_path, "a", encoding="utf-8") as handle:
-            if existing and not existing.endswith("\n"):
-                handle.write("\n")
-            handle.writelines(lines)
+    _append_settings(env_path, lines)
 
     try:
         after = _effective(env_path)

@@ -264,12 +264,17 @@ EXTRA = {
     # compete. Clearing is the property, and it must be earned by PROOF.
     "a different bot is not a competitor": (
         ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_doctor_probe",
-        "            if theirs and theirs != our_bot:",
-        "            if False:"),
-    "an unreadable bot is reported, not cleared": (
+        "            elif theirs:\n",
+        "            elif False:\n"),
+    "an unreadable bot is unknown, never cleared": (
         ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_doctor_probe",
-        "            if theirs and theirs != our_bot:\n",
-        "            if not theirs or theirs != our_bot:\n"),
+        '        verdict = "unknown"',
+        '        verdict = "different"'),
+    # The config a process LOADED, not one inferred from a neighbouring flag.
+    "the config a candidate loaded is the one that is read": (
+        ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_doctor_probe",
+        '    named = _flag(argv, "--config")\n    if named:\n        return pathlib.Path(named)',
+        '    named = None\n    if named:\n        return pathlib.Path(named)'),
     "the doctor names what it cannot prove": (
         ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_doctor_probe",
         '    lines.append("  A consumer on ANOTHER MACHINE is not detectable from here.")',
@@ -571,8 +576,8 @@ EXTRA = {
         "    config = {}"),
     "an append never joins onto the previous value": (
         ROOT / "src" / "alb" / "setup" / "wizard.py", "tests.test_setup",
-        '            if existing and not existing.endswith("\\n"):\n'
-        '                handle.write("\\n")\n',
+        '        if existing and not existing.endswith("\\n"):\n'
+        '            handle.write("\\n")\n',
         ""),
     "configured means the runtime would find a ring": (
         ROOT / "src" / "alb" / "setup" / "wizard.py", "tests.test_setup",

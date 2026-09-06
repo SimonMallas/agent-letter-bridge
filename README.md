@@ -45,9 +45,11 @@ events are recorded as immutable files beside it.
 Sending works the same way round. Your agent answers a letter it holds, and
 the destination comes from that letter rather than from anything the agent
 chose — so a reply goes where the message came from, checked against the
-allowlist again at the moment of sending. Each letter is answered exactly
+allowlist again at the moment of sending. A letter can be answered only
 once: the claim is an exclusive file create, so a retried or duplicated
-invocation cannot put a second message on the wire.
+invocation cannot put a second message on the wire. That bounds *sending*, not
+delivery — where the outcome is uncertain the letter is dead-lettered with the
+uncertainty recorded, rather than retried into a possible duplicate.
 
 That is what makes this a front door rather than a pipe. Whatever you build
 behind it — today's agent, tomorrow's memory system — inherits records
@@ -172,7 +174,7 @@ Waking an agent that already handles other mail: [`docs/agent-setup.md`](docs/ag
 
 ## Status
 
-**v0.2.1.** Inbound delivery, ringing and bounded replies have been
+**v0.2.4.** Inbound delivery, ringing and bounded replies have been
 exercised live against real bots on macOS and Linux, cmux and tmux. v0.2 adds
 durable outbound letters, correspondent
 identity and threading, and read-only retrieval (`--list`, `--show`, `--search`,
@@ -181,6 +183,16 @@ not yet had the same live mileage as the inbound path. **Automated coverage
 still uses fakes** — the suite proves the invariants, the live runs prove the
 transports, and those are different claims. Not on a package index, and not
 formally audited; see `docs/threat-model.md` for what is and is not claimed.
+
+**Upgrading from v0.2.1**, which is what most installs are on. Three things
+change that you would notice. A rate limit or a gateway error is now waited out
+and retried rather than ending the bridge, so the relay survives the platform
+asking it to slow down. `alb --check` gives an agent a verdict to act on when it
+wakes: nothing to do, restart it and here is how, or something a restart will not
+fix. And `alb --stop` asks the process holding the lock to stand down, rather
+than signalling a pid that may by then belong to something else. Upgrading is
+`pipx install .` over the top; configs and state carry forward untouched. The
+full list is in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## What you need
 

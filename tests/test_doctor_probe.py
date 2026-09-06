@@ -21,7 +21,7 @@ class LocalConsumerProbe(unittest.TestCase):
         ]
         found = checks.local_consumers(listing, self_pid=999)
         self.assertEqual(len(found), 1)
-        self.assertIn("900", found[0])
+        self.assertEqual(found[0]["pid"], 900)
 
     def test_it_does_not_report_itself(self):
         listing = ["501 999 /usr/bin/python3 /somewhere/alb --root /a"]
@@ -155,17 +155,13 @@ class StatesWhatItCannotProve(unittest.TestCase):
 class TheProbeComparesBotsNotNames(unittest.TestCase):
     """It scanned for the word `alb` and never asked which bot each one used.
 
-    Two failures fell out of that on a machine running three seats. It
-    announced Grok's and Codex's relays as competing with a third, when all
-    three hold different bots and cannot conflict; and it could not see the
-    bridge actually being replaced, because that one is not called `alb`.
+    On a machine running three seats it announced two relays that hold other
+    bots and cannot conflict, and could not see the bridge actually being
+    replaced, because that one is not called `alb`. It warned about copies of
+    itself that could not clash and stayed quiet about the one that could.
 
-    So it warned about copies of itself that could not clash and stayed quiet
-    about the one thing that could. A probe that cries wolf teaches the
-    operator to ignore it, which is the same defect as one that misses.
-
-    Fail loud, not fail quiet: a candidate is cleared only when its bot is
-    positively known to be a different one. Unreadable means reported.
+    A candidate is cleared only when its bot is positively known to be a
+    different one. Unreadable means unknown, and unknown is reported.
     """
 
     LISTING = [
@@ -176,30 +172,33 @@ class TheProbeComparesBotsNotNames(unittest.TestCase):
     def _probe(self, bots):
         return checks.local_consumers(
             self.LISTING, self_pid=999, our_bot="111",
-            bot_of=lambda argv: bots.get(argv))
+            bot_of=lambda path: bots.get(str(path)))
 
-    def test_a_bridge_on_another_bot_is_not_a_conflict(self):
-        found = self._probe({"/roots/a": "222", "/roots/b": "333"})
-        self.assertEqual(found, [])
+    def _verdicts(self, bots):
+        return {c["pid"]: c["bot"] for c in self._probe(bots)}
+
+    def test_a_bridge_on_another_bot_is_not_a_contender(self):
+        verdicts = self._verdicts({"/roots/a/bridge.env": "222",
+                                   "/roots/b/bridge.env": "333"})
+        self.assertEqual(set(verdicts.values()), {"different"})
 
     def test_a_bridge_on_the_same_bot_is_named_as_one(self):
-        found = self._probe({"/roots/a": "111", "/roots/b": "333"})
-        self.assertEqual(len(found), 1)
-        self.assertIn("900", found[0])
-        self.assertIn("same bot", found[0])
+        verdicts = self._verdicts({"/roots/a/bridge.env": "111",
+                                   "/roots/b/bridge.env": "333"})
+        self.assertEqual(verdicts[900], "same")
+        self.assertEqual(verdicts[901], "different")
 
-    def test_a_bot_it_cannot_read_is_reported_rather_than_cleared(self):
+    def test_a_bot_it_cannot_read_is_unknown_rather_than_cleared(self):
         """Unreadable is not evidence of safety. The whole point of the probe
         is the case it cannot prove."""
-        found = self._probe({"/roots/a": None, "/roots/b": "333"})
-        self.assertEqual(len(found), 1)
-        self.assertIn("900", found[0])
+        verdicts = self._verdicts({"/roots/a/bridge.env": None,
+                                   "/roots/b/bridge.env": "333"})
+        self.assertEqual(verdicts[900], "unknown")
 
-    def test_without_our_own_bot_every_candidate_is_still_reported(self):
-        """The old behaviour survives where there is nothing to compare
-        against: knowing less must not report less."""
+    def test_without_our_own_bot_nothing_is_cleared(self):
+        """Knowing less must not report less."""
         found = checks.local_consumers(self.LISTING, self_pid=999)
-        self.assertEqual(len(found), 2)
+        self.assertEqual([c["bot"] for c in found], ["unknown", "unknown"])
 
 
 class ABotIdIsNotASecret(unittest.TestCase):
@@ -231,23 +230,111 @@ class TheReportItselfComparesBots(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = pathlib.Path(self.tmp.name)
         (self.root / "bridge.env").write_text("ALB_TOKEN=111:SECRET\n", encoding="utf-8")
+        (self.root / "bridge.env").chmod(0o600)
         self.addCleanup(self.tmp.cleanup)
 
     def _report(self, other_token):
         other = self.root / "other"
         other.mkdir()
         (other / "bridge.env").write_text(f"ALB_TOKEN={other_token}\n", encoding="utf-8")
+        (other / "bridge.env").chmod(0o600)
         listing = [f"501 900 /usr/bin/python3 /x/alb --root {other}"]
         return checks.summary(listing, self_pid=999, root=self.root, environ={})
 
-    def test_a_different_bot_is_not_announced_as_a_competitor(self):
-        self.assertIn("no other bridge process found",
-                      self._report("222:OTHERSECRET"))
+    def test_a_different_bot_is_not_raised_as_holding_our_bot(self):
+        report = self._report("222:OTHERSECRET")
+        self.assertIn("no other bridge found holding your bot", report)
 
     def test_the_same_bot_still_is(self):
         report = self._report("111:SAMEBOTOTHERSECRET")
-        self.assertIn("ANOTHER BRIDGE", report)
+        self.assertIn("MAY BE HOLDING YOUR BOT", report)
         self.assertIn("same bot", report)
 
     def test_no_secret_reaches_the_report(self):
         self.assertNotIn("SAMEBOTOTHERSECRET", self._report("111:SAMEBOTOTHERSECRET"))
+
+
+class TheDoctorReadsAConfigTheWayTheRuntimeDoes(unittest.TestCase):
+    """My own fix could clear a real same-bot competitor.
+
+    Two ways, both from reimplementing something that already existed. The
+    parser took the FIRST `ALB_TOKEN=` while the runtime's loader takes the
+    LAST, so a config with the key twice was read as a different bot than the
+    process had actually loaded. And the config path was guessed from
+    `--root` even when the command line named a different `--config`.
+
+    Either one silently clears the exact case the probe exists to catch. The
+    fix is to stop having a second parser: ask the loader the runtime asks.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = pathlib.Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+
+    def _config(self, name, body):
+        path = self.dir / name
+        path.write_text(body, encoding="utf-8")
+        path.chmod(0o600)
+        return path
+
+    def test_the_last_assignment_wins_as_it_does_at_runtime(self):
+        root = self.dir / "r"
+        root.mkdir()
+        (root / "bridge.env").write_text(
+            "ALB_TOKEN=111:FIRST\nALB_TOKEN=222:LAST\n", encoding="utf-8")
+        (root / "bridge.env").chmod(0o600)
+        self.assertEqual(checks.bot_of_root(str(root)), "222")
+
+    def test_an_explicit_config_beats_the_root(self):
+        root = self.dir / "r2"
+        root.mkdir()
+        (root / "bridge.env").write_text("ALB_TOKEN=111:INROOT\n", encoding="utf-8")
+        (root / "bridge.env").chmod(0o600)
+        named = self._config("named.env", "ALB_TOKEN=222:NAMED\n")
+        argv = ["/x/alb", "--config", str(named), "--root", str(root)]
+        self.assertEqual(checks._config_path(argv), named)
+
+    def test_a_config_that_cannot_be_loaded_is_unknown_not_cleared(self):
+        bad = self._config("bad.env", "ALB_TOKEN=\n")
+        self.assertIsNone(checks.bot_of_root(str(bad.parent), config=bad))
+
+    def test_a_world_readable_config_is_unknown_rather_than_read(self):
+        """The loader refuses a token file others can read. The doctor must
+        inherit that refusal rather than route around it."""
+        loose = self._config("loose.env", "ALB_TOKEN=222:SECRET\n")
+        loose.chmod(0o644)
+        self.assertIsNone(checks.bot_of_root(str(loose.parent), config=loose))
+
+
+class NothingIsHiddenFromTheReport(unittest.TestCase):
+    """Clearing a competitor by OMITTING it means a wrong clear is invisible.
+
+    A file's contents are not proof of what a live process loaded - it may
+    have been edited since. So the probe states what it found and what it
+    concluded, and lets the operator see both, rather than deleting a row on
+    the strength of an inference.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "bridge.env").write_text("ALB_TOKEN=111:OURS\n", encoding="utf-8")
+        (self.root / "bridge.env").chmod(0o600)
+        self.addCleanup(self.tmp.cleanup)
+
+    def _report(self, token):
+        other = self.root / "other"
+        other.mkdir()
+        (other / "bridge.env").write_text(f"ALB_TOKEN={token}\n", encoding="utf-8")
+        (other / "bridge.env").chmod(0o600)
+        listing = [f"501 900 /usr/bin/python3 /x/alb --root {other}"]
+        return checks.summary(listing, self_pid=999, root=self.root, environ={})
+
+    def test_a_different_bot_is_shown_but_not_raised_as_a_conflict(self):
+        report = self._report("222:THEIRS")
+        self.assertIn("900", report)
+        self.assertNotIn("ANOTHER BRIDGE", report)
+
+    def test_the_same_bot_is_raised(self):
+        self.assertIn("ANOTHER BRIDGE", self._report("111:SAMEBOT"))
