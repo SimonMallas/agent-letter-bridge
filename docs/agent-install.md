@@ -273,10 +273,15 @@ sweep. That delay is not a failed ring.
 
 ## Step 8.5 — Leave it running. `--once` is not a bridge.
 
-`--once` exits. After it exits, nothing polls and nothing rings. New messages
-wait at the platform until the next cycle. **Do not tell the human they have
-Telegram access while only `--once` has been run.** That is the failure this
-step exists to prevent.
+**If `init` already started the resident, it is running — do not start
+another.** `alb --status --root ~/.alb` first. A second process against the
+same root exits `4`; against the same bot it is a `409` at the platform. Go
+straight to proving the bell at the end of this step.
+
+Otherwise: `--once` exits. After it exits, nothing polls and nothing rings. New
+messages wait at the platform until the next cycle. **Do not tell the human they
+have Telegram access while only `--once` has been run.** That is the failure
+this step exists to prevent.
 
 If they want a live bell, start the process and keep it started:
 
@@ -300,9 +305,15 @@ Foreground is acceptable for a first live hour:
 ~/.alb/venv/bin/alb --config ~/.alb/bridge.env --root ~/.alb
 ```
 
-Confirm with `alb --status --root ~/.alb` that the heartbeat is moving while
-nobody is running `--once`. Then ask the human to send a message **without**
-you polling by hand. Only that proves the bell.
+`alb --status --root ~/.alb` shows the heartbeat moving while nobody runs
+`--once`, and `--doctor` reports the lock file. Neither is proof: a heartbeat is
+what the last cycle wrote, and a lock file is left behind by a crash too.
+
+**Only observation proves the bell.** Ask the human to send a message while you
+poll nothing by hand, and confirm two things happened: a letter appeared, and
+the line was typed into the intended pane. `--status` reporting the ring as
+`delivered` says the helper returned success, not that the right pane received
+it — the human is the one who can see that, so ask them.
 
 ---
 
@@ -318,7 +329,9 @@ knows, so there is no new grammar to teach — but that is not the same as
 nothing to hand over. It still does not know this tool exists. Give it three
 things:
 
-- `alb --reply-to <letter-id> --text "..."` is how it answers. The destination
+- `alb --config <root>/bridge.env --root <root> --reply-to <letter-id> --text "..."`
+  is how it answers. **Both flags**: integrated keeps letters in the agent's
+  mailbox and private state under the root. The destination
   comes from the letter; it never picks one. A letter can be answered once.
 - `alb --check --root <root>` is what it runs when it wakes: `0` nothing to do,
   `2` silent past the threshold and here is how to restart it, `3` something a

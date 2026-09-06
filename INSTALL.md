@@ -176,7 +176,7 @@ no network.
 | Key | Meaning | Default |
 | --- | --- | --- |
 | `ALB_TOKEN` | your bot token | **required** |
-| `ALB_SURFACE` | the pane to ring on | **required** — init will not start a poller without it |
+| `ALB_SURFACE` | the pane to ring on | **standalone only.** Required there for a ring, and init will not start a poller without one. Integrated mode never reads it — see the per-mode table in Step 6 |
 | `ALB_NOTIFIER` | `cmux` or `tmux` | `cmux` |
 | `ALB_TO` | who the letter is addressed to | `agent` |
 | `ALB_FROM` | who the letter is from | `telegram-bridge` |
@@ -194,6 +194,26 @@ than one that will not start at all.
 
 ---
 
+## Step 5.5 — Before you go further, three things must already be true
+
+Setup asks questions whose answers depend on these, and getting them after the
+fact means re-running it:
+
+1. **Python 3.11+**, and the checkout or package you are installing from — the
+   upgrade path later needs the same source, and `pipx install .` over an
+   existing install does nothing without `--force`.
+2. **The mode is decided**: standalone (this bridge gets its own directory) or
+   integrated (letters go to a mailbox your agent already sweeps). The next
+   section's table shows which settings each mode reads; they are not
+   interchangeable, and setup will refuse a half-changed route rather than
+   invent one.
+3. **The context you will RUN it in exists** — the pane, or the service. For a
+   cmux ring that means starting it inside cmux, and integrated mode inherits
+   whatever its doorbell helper needs. Deciding this after the install is how
+   a bridge ends up delivering mail silently.
+
+---
+
 ## Step 6 — The ring: do this unless you have a reason not to
 
 The ring types a line into your agent's terminal pane so it notices mail
@@ -201,6 +221,9 @@ immediately — **it is what makes the bridge feel alive.** Without it, letters
 land durably and sit unread until something sweeps: a dead drop, not a dead
 loss. The design's promise is narrower than "optional": the ring may *fail*
 without costing a letter. Skip it only if your agent checks its own mail on a
+schedule; `alb --status` reports the ring as `disabled` with a reason, so a
+missing bell is never confused with a broken one.
+
 **Which settings your mode actually uses.** Setting one the other mode reads
 is the quiet way to end up with a config that looks configured and rings
 nothing:
@@ -218,9 +241,6 @@ inside cmux; a tmux ring has no such rule. Integrated mode runs the helper *in
 the bridge's own context*, so whatever the helper needs, the bridge needs — if
 it reaches a cmux pane, the bridge must be inside cmux as well. Prove it rather
 than assume it: send a message and check the ring reports `delivered`.
-
-schedule; `alb --status` reports the ring as `disabled` with a reason, so a
-missing bell is never confused with a broken one.
 
 `alb init` lists your panes in Step 4. To find them again yourself:
 
@@ -336,9 +356,17 @@ working. Only a real ring proves the transport.
 
 ### Then leave it running
 
-`--once` was a test. It exits. If you stop here, the next message from your
-phone sits at Telegram and **no bell rings**. That is not a broken ring; it is
-an install that was never turned on.
+**If `init` already started it, it is running — skip this section.** Check
+first; starting a second one against the same root exits `4`, and against the
+same bot it is a `409` at the platform:
+
+```sh
+alb --status --root ~/.alb
+```
+
+Otherwise: `--once` was a test. It exits. If you stop here, the next message
+from your phone sits at Telegram and **no bell rings**. That is not a broken
+ring; it is an install that was never turned on.
 
 ```sh
 alb --config ~/.alb/bridge.env --root ~/.alb
@@ -425,13 +453,13 @@ Repeat Steps 3–7 with a different directory, e.g. `~/.alb/grok`.
 | Check | Command | Healthy |
 | --- | --- | --- |
 | Should I worry? | `alb --status --root ~/.alb` | ring `ok` or `disabled`, no dead letters |
-
-`--status` reads the health file the bridge writes. It is evidence of what the
-last cycle recorded, not proof that a process is holding the lock right now —
-for that, `--doctor` reports the lock and what else on this machine may hold
-the same bot.
 | What is wrong? | `alb --doctor --root ~/.alb` | allowlist present, config readable |
 | Can it send? | `alb --canary --config ~/.alb/bridge.env --root ~/.alb` | a message arrives in your own chat |
+
+Both read files, and neither proves a live process. `--status` reports what the
+last cycle wrote; `--doctor` reports that a lock FILE exists, which a crashed
+bridge also leaves behind. **The only proof that the whole path works is
+watching it work**: send a message and see the letter land and the bell ring.
 
 `--status` and `--doctor` read files only — no token, no network. Safe to run
 any time, including on a machine you are not sure about.
