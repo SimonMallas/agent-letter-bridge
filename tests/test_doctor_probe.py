@@ -150,3 +150,104 @@ class StatesWhatItCannotProve(unittest.TestCase):
                               root=pathlib.Path("/tmp"), environ={"PATH": "/usr/bin"})
         self.assertIn("another machine", text.lower())
         self.assertIn("getwebhookinfo", text.lower())
+
+
+class TheProbeComparesBotsNotNames(unittest.TestCase):
+    """It scanned for the word `alb` and never asked which bot each one used.
+
+    Two failures fell out of that on a machine running three seats. It
+    announced Grok's and Codex's relays as competing with a third, when all
+    three hold different bots and cannot conflict; and it could not see the
+    bridge actually being replaced, because that one is not called `alb`.
+
+    So it warned about copies of itself that could not clash and stayed quiet
+    about the one thing that could. A probe that cries wolf teaches the
+    operator to ignore it, which is the same defect as one that misses.
+
+    Fail loud, not fail quiet: a candidate is cleared only when its bot is
+    positively known to be a different one. Unreadable means reported.
+    """
+
+    LISTING = [
+        "501 900 /usr/bin/python3 /x/alb --config /roots/a/bridge.env --root /roots/a",
+        "501 901 /usr/bin/python3 /x/alb --config /roots/b/bridge.env --root /roots/b",
+    ]
+
+    def _probe(self, bots):
+        return checks.local_consumers(
+            self.LISTING, self_pid=999, our_bot="111",
+            bot_of=lambda argv: bots.get(argv))
+
+    def test_a_bridge_on_another_bot_is_not_a_conflict(self):
+        found = self._probe({"/roots/a": "222", "/roots/b": "333"})
+        self.assertEqual(found, [])
+
+    def test_a_bridge_on_the_same_bot_is_named_as_one(self):
+        found = self._probe({"/roots/a": "111", "/roots/b": "333"})
+        self.assertEqual(len(found), 1)
+        self.assertIn("900", found[0])
+        self.assertIn("same bot", found[0])
+
+    def test_a_bot_it_cannot_read_is_reported_rather_than_cleared(self):
+        """Unreadable is not evidence of safety. The whole point of the probe
+        is the case it cannot prove."""
+        found = self._probe({"/roots/a": None, "/roots/b": "333"})
+        self.assertEqual(len(found), 1)
+        self.assertIn("900", found[0])
+
+    def test_without_our_own_bot_every_candidate_is_still_reported(self):
+        """The old behaviour survives where there is nothing to compare
+        against: knowing less must not report less."""
+        found = checks.local_consumers(self.LISTING, self_pid=999)
+        self.assertEqual(len(found), 2)
+
+
+class ABotIdIsNotASecret(unittest.TestCase):
+    """Comparing bots must never mean handling the credential half.
+
+    A Telegram token is `<bot id>:<secret>`. Only the id is needed to tell two
+    bridges apart, so only the id is ever taken out of the file - and the
+    secret half must not survive anywhere the report can reach it.
+    """
+
+    def test_only_the_id_half_is_taken(self):
+        self.assertEqual(checks.bot_id("8796396490:AAEsecretsecret"), "8796396490")
+
+    def test_a_token_shaped_wrongly_yields_nothing(self):
+        for value in ("", "no-colon-here", ":leading", "   "):
+            with self.subTest(value=value):
+                self.assertIsNone(checks.bot_id(value))
+
+    def test_the_secret_half_never_appears_in_the_result(self):
+        self.assertNotIn("AAEsecret", checks.bot_id("8796396490:AAEsecret") or "")
+
+
+class TheReportItselfComparesBots(unittest.TestCase):
+    """The comparison has to be reachable from `alb --doctor`, not merely
+    present in the function it lives in. A fix wired to nothing is a fix in
+    name only, and this probe has already been wrong once in public."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "bridge.env").write_text("ALB_TOKEN=111:SECRET\n", encoding="utf-8")
+        self.addCleanup(self.tmp.cleanup)
+
+    def _report(self, other_token):
+        other = self.root / "other"
+        other.mkdir()
+        (other / "bridge.env").write_text(f"ALB_TOKEN={other_token}\n", encoding="utf-8")
+        listing = [f"501 900 /usr/bin/python3 /x/alb --root {other}"]
+        return checks.summary(listing, self_pid=999, root=self.root, environ={})
+
+    def test_a_different_bot_is_not_announced_as_a_competitor(self):
+        self.assertIn("no other bridge process found",
+                      self._report("222:OTHERSECRET"))
+
+    def test_the_same_bot_still_is(self):
+        report = self._report("111:SAMEBOTOTHERSECRET")
+        self.assertIn("ANOTHER BRIDGE", report)
+        self.assertIn("same bot", report)
+
+    def test_no_secret_reaches_the_report(self):
+        self.assertNotIn("SAMEBOTOTHERSECRET", self._report("111:SAMEBOTOTHERSECRET"))

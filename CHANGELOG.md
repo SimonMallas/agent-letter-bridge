@@ -20,6 +20,16 @@ while working deployments ran exactly that configuration with a working
 doorbell. The wizard now recognises the helper as the ring it is, and stops
 asking integrated installs to pin a pane id that nothing ever reads.
 
+**The single-consumer probe now compares bots rather than process names.**
+The platform allows one consumer per token, so what matters is which bot a
+process holds. The probe matched on the executable's name alone, and so
+reported other relays that hold different bots and cannot compete. It now
+reads the identifying half of each candidate's token — never the secret half,
+which is dropped before any value is returned — and reports a process unless
+its bot is positively known to be a different one. An unreadable config is
+reported rather than cleared: being unable to prove a conflict is not the
+same as proving there is none.
+
 **A local network fault was reported as a Telegram outage.** Every transient
 that was not a rate limit was recorded as `upstream_5xx`, so a dropped wifi
 connection sent operators looking for a platform incident. `network` was

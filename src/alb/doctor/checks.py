@@ -67,12 +67,63 @@ def webhook_check_command():
 _BRIDGE_EXECUTABLES = ("alb",)
 
 
-def local_consumers(process_listing, self_pid):
-    """Return lines that look like another bridge on this machine.
+def bot_id(token):
+    """The identifying half of a Telegram token, or None.
+
+    A token is `<bot id>:<secret>`. Telling two bridges apart needs only the
+    id, so only the id is ever lifted out of a config file - the secret half
+    is dropped here and never reaches a caller, a report or a log.
+    """
+    if not isinstance(token, str) or ":" not in token:
+        return None
+    head = token.split(":", 1)[0].strip()
+    return head or None
+
+
+def _root_of(argv):
+    """The --root a candidate was started with, if it names one."""
+    for flag in ("--root", "--config"):
+        if flag in argv:
+            i = argv.index(flag)
+            if i + 1 < len(argv):
+                value = argv[i + 1]
+                return str(pathlib.PurePath(value).parent) if flag == "--config" else value
+    return None
+
+
+def bot_of_root(root):
+    """Read only the bot id from a candidate's config. Never the secret."""
+    if not root:
+        return None
+    try:
+        text = (pathlib.Path(root) / "bridge.env").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        if line.startswith("ALB_TOKEN="):
+            return bot_id(line.split("=", 1)[1].strip())
+    return None
+
+
+def local_consumers(process_listing, self_pid, our_bot=None, bot_of=None):
+    """Return lines for another bridge that may be holding OUR bot.
 
     Takes the listing rather than shelling out, so this is testable and so the
     doctor holds no process-control capability of its own.
+
+    MATCHING ON THE NAME ALONE WAS BOTH WRONG WAYS AT ONCE. On a machine
+    running several seats it announced relays that hold different bots and
+    therefore cannot conflict, while the bridge actually being replaced was
+    invisible because it is not called `alb`. It warned about copies of itself
+    that could not clash and stayed silent about the one that could.
+
+    So a candidate is cleared only when its bot is POSITIVELY KNOWN to be a
+    different one. An unreadable config, an unknown root, or no bot of our own
+    to compare against all leave it reported: not being able to prove a
+    conflict is not evidence of safety, and the case the probe exists for is
+    exactly the one it cannot prove.
     """
+    bot_of = bot_of or bot_of_root
     found = []
     for line in process_listing:
         fields = line.split()
@@ -101,8 +152,18 @@ def local_consumers(process_listing, self_pid):
         else:
             argv_for_match = argv
         head = argv_for_match[:2]
-        if any(pathlib.PurePath(arg).name in _BRIDGE_EXECUTABLES for arg in head):
-            found.append(f"pid {pid}: {' '.join(argv[:6])}")
+        if not any(pathlib.PurePath(arg).name in _BRIDGE_EXECUTABLES for arg in head):
+            continue
+        note = ""
+        if our_bot:
+            theirs = bot_of(_root_of(argv))
+            if theirs and theirs != our_bot:
+                # Proven to be a different bot. One consumer per token is
+                # per TOKEN, so this one cannot compete for ours.
+                continue
+            if theirs == our_bot:
+                note = "  [same bot]"
+        found.append(f"pid {pid}: {' '.join(argv[:6])}{note}")
     return found
 
 
@@ -169,7 +230,10 @@ def deliverability(root):
 
 def summary(process_listing, self_pid, root, environ):
     """The operator-facing report. States limits as plainly as findings."""
-    competing = local_consumers(process_listing, self_pid)
+    # Our own bot id comes from the config, not the environment: the doctor
+    # deliberately holds no token, and this is the id half only.
+    competing = local_consumers(process_listing, self_pid,
+                                our_bot=bot_of_root(root))
     context = daemon_context(environ)
 
     delivery = deliverability(root)

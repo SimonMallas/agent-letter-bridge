@@ -259,6 +259,17 @@ EXTRA = {
     "the probe matches an executable, not a mention": (
         ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_doctor_probe",
         "        head = argv_for_match[:2]", "        head = argv_for_match"),
+    # The probe was wrong both ways at once: it announced relays holding
+    # other bots, and could not see the one bridge that could actually
+    # compete. Clearing is the property, and it must be earned by PROOF.
+    "a different bot is not a competitor": (
+        ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_doctor_probe",
+        "            if theirs and theirs != our_bot:",
+        "            if False:"),
+    "an unreadable bot is reported, not cleared": (
+        ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_doctor_probe",
+        "            if theirs and theirs != our_bot:\n",
+        "            if not theirs or theirs != our_bot:\n"),
     "the doctor names what it cannot prove": (
         ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_doctor_probe",
         '    lines.append("  A consumer on ANOTHER MACHINE is not detectable from here.")',
