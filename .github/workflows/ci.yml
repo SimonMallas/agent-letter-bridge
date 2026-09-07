@@ -18,6 +18,11 @@ jobs:
       # is ever flipped, so this is enforcement, not a pre-release checkpoint.
       - name: Privacy scan
         run: python3 scripts/privacy_scan.py
+      # Binds TREE CONTENT on every commit path, web edits included. Commit
+      # MESSAGES are checked by the commit-msg hook only - a hook-less path
+      # can land a message the policy forbids, and reviewers read for that.
+      - name: Editorial tripwire
+        run: python3 scripts/editorial_check.py --worktree
 
       # Asserts the PROPERTY (no runtime dependencies) rather than the
       # absence of packaging. A build backend is install-time and never

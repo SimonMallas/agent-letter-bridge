@@ -19,6 +19,34 @@ makes a leak permanent.
 **Honest labelling.** A partially-met criterion is labelled PARTIAL. Do not pad
 it to look complete.
 
+## Repository editorial checks
+
+These are this repository's publication policy for all public prose — docs,
+README, CHANGELOG, and commit messages. `scripts/editorial_check.py` trips on
+known banned phrasings at commit and in CI; it is a **known-phrase tripwire,
+not a meaning checker**, so passing it does not certify compliance — reviewers
+still read for meaning. If it refuses your commit, reword per the rule below;
+the check names which one.
+
+**The doorbell is a required part of a working deployment.** Never write it as
+something a deployment can reasonably skip. Durability may be stated — a
+landed letter survives a failed bell — but not in a sentence that presents
+ringing as a choice. Violates the policy (a reviewer catches it even where the
+script does not): "you can disable the ring and rely on the inbox". Passes:
+"mail still lands if the bell fails; a bridge left in that state is not
+installed".
+
+**Comparisons name their subject.** A claim about another tool cites
+[`docs/COMPARE.md`](docs/COMPARE.md) and names the tool; sentences asserting
+something about all tools of a category are refused.
+
+**Public text carries product facts, defects and method.** No numeric test or
+invariant totals in prose or commit messages — state that behaviour is
+covered, don't count it. The script scans all tracked Markdown as it stands
+and your new commit message; historic commit messages are not rescanned. In
+CI only the tree is scanned — messages are checked by the commit-msg hook, so
+a hook-less commit path relies on review for its message.
+
 ## Set up the hooks — they are not automatic
 
 Git hooks are per-clone local config. A fresh clone inherits nothing, so run this

@@ -1,3 +1,4 @@
 #!/bin/sh
 # Assistant trailers must never reach a commit message.
-exec python3 scripts/privacy_scan.py "$1"
+python3 scripts/privacy_scan.py "$1" || exit 1
+exec python3 scripts/editorial_check.py "$1"

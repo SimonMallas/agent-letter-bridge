@@ -17,11 +17,12 @@ launch; these repos move.
 
 ## What we are not claiming
 
-- **Not “zero prompt injection.”** The optional ring still types a short
-  generic line into a pane and presses Enter. The letter body is still
-  untrusted text once an agent reads it. The allowlist is the trust
-  boundary, as [nightmux states for itself][nightmux-sec]. The claim that
-  *is* true: **the Telegram body never enters the composer.**
+- **Not “zero prompt injection.”** When a ring is configured it still types a
+  short generic line into a pane and presses Enter. The letter body is still
+  untrusted text once an agent reads it. The allowlist is the admission
+  boundary — [nightmux states][nightmux-sec] that its own allowlist is the
+  whole product. The claim that *is* true: **the Telegram body never enters
+  the composer.**
 - **Not unique stdlib.** nightmux is also Python stdlib with no relay
   server.
 - **Not unique allowlist.** nightmux has `allow_users`; other bridges have
@@ -39,9 +40,10 @@ inside cmux.** cmux refuses connections from processes that were not
 (`Access denied - only processes started inside cmux can connect`). A
 LaunchAgent can poll Telegram and write letters; it cannot ring unless it
 is given a pane-born socket capability, and that capability goes stale
-when cmux restarts. Mail still lands. The bell does not. That is designed
-once you treat the ring as optional; it is a walk-back if a launch post
-implies “just run a user agent.”
+when cmux restarts. Mail still lands. The bell does not. Durability holding while the
+bell fails is the designed failure shape; a bridge left in that state is not
+installed, and it is a walk-back if a launch post implies “just run a user
+agent.”
 
 tmux injectors do not have this cmux-specific ACL. Do not imply they fail
 the same way.
@@ -56,7 +58,7 @@ below, not collapsed into the mux-inject column.
 
 | | Agent Letter Bridge | nightmux | Claude Code Telegram plugin | ccgram / telemux / tg-cli / claude-telegram-mirror |
 |---|---|---|---|---|
-| Inbound becomes | A Markdown letter on disk (`from`/`to`/ids in the envelope), then an optional generic ring | The full Telegram text, typed into the agent pane with `tmux send-keys` | An MCP notification into the live Claude Code **session** (not a mux inject) | The full message or a tagged line, injected into a tmux (or herdr/agterm) pane |
+| Inbound becomes | A Markdown letter on disk (`from`/`to`/ids in the envelope), then a generic ring (content-free) | The full Telegram text, typed into the agent pane with `tmux send-keys` | An MCP notification into the live Claude Code **session** (not a mux inject) | The full message or a tagged line, injected into a tmux (or herdr/agterm) pane |
 | Platform ack | After the letter exists | After `getUpdates` in the daemon (offset file). The pane is the record | After the plugin consumes `getUpdates`. If the wrong process won the poll, the intended session never sees it | After the daemon consumes the update; the pane is the record |
 | Body in the composer? | No | Yes | Body enters the session as a message, not as tmux keys | Yes |
 | Admission boundary | Fail-closed chat-id allowlist; empty list is silence | `allow_users` in `~/.nightmux.json`; [SECURITY.md][nightmux-sec] is explicit that this is the whole product | Pairing (`/telegram:access`); not a chat-id file in the plugin README | Varies. OctopusGarage `telegram-bridge` empty `ALLOWED_USER_IDS` denies; do not assume the others fail-closed without re-reading |

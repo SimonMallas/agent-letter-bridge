@@ -13,8 +13,8 @@ it. They may be the same agent, in which case read this one first.
 ## Your brief
 
 Install Agent Letter Bridge so that a message sent from your operator's phone
-becomes a durable letter on this machine, and — optionally — a ring in a
-terminal pane.
+becomes a durable letter on this machine and rings a terminal pane. The letter
+is the record; the ring is how anyone learns it arrived.
 
 Work through the steps in order. **Stop at each `ASK` and wait for a human
 answer.** Guessing at any of them produces a bridge that looks installed and
