@@ -20,9 +20,26 @@ into a dedicated environment, and ran `init` from it, got a resident running
 whichever copy `PATH` found first — a different installation, possibly a
 different version, and on a machine with several bridges, one shared with
 another of them. The command now names the running installation absolutely:
-the console script beside the interpreter, or that interpreter and `-m alb`
-where no script exists. What is printed and what the pane runs are still the
-same bytes.
+the console script beside the interpreter, quoted as one argv so a path
+containing a space survives the shell — a root with a space was rejected by
+argument parsing, and an interpreter with one failed to execute at all, both
+ordinary where a home directory carries somebody's name. What is printed and
+what the pane runs are still the same bytes.
+
+Where no command can be named that a fresh shell would resolve to this
+installation, `init` declines to start one and says why. Offering
+`<interpreter> -m alb` instead does not work for a source checkout: that
+process can import the package only because of the path it was started with,
+and a new shell inherits none of it. An autostart that reliably fails is worse
+than no offer.
+
+**The start warning reads the allowlist that was saved**, not the answers
+given during setup. On a re-run those differ, and both directions were wrong:
+an existing deny-all file is kept — correctly, nothing is clobbered — but if
+setup had read a chat id it did not save, it reported delivery as possible and
+offered to start; while an existing, populated allowlist was warned about as
+deny-all. The gate on disk after keep-or-write is the one that gets read, and a
+file that cannot be parsed counts as denying.
 
 **Starting a bridge with a deny-all allowlist is now a deliberate answer
 rather than the default.** The gate is unchanged and still denies everyone
