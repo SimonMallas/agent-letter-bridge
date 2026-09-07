@@ -51,6 +51,19 @@ invocation cannot put a second message on the wire. That bounds *sending*, not
 delivery — where the outcome is uncertain the letter is dead-lettered with the
 uncertainty recorded, rather than retried into a possible duplicate.
 
+**A reply channel, not an open-ended sending channel.** Every outbound message
+is tied to a stored incoming letter and goes back to that letter's chat, which
+is checked against the allowlist again at the moment of sending. There is no
+first-send command and no argument that names a recipient, so the bridge cannot
+open a conversation with anyone — it can only continue one that already exists,
+with someone already permitted.
+
+What that does *not* claim: an agent still chooses which stored letter to
+answer and what to write in it, so this is not immunity to being persuaded into
+sending something. It is a guarantee about where a message can go, not about
+what it says — and it covers this send path, not everything else your agent can
+reach. This describes the current release.
+
 That is what makes this a front door rather than a pipe. Whatever you build
 behind it — today's agent, tomorrow's memory system — inherits records
 instead of scrollback. The input side of your setup is settled once.
@@ -186,8 +199,8 @@ Waking an agent that already handles other mail: [`docs/agent-setup.md`](docs/ag
 
 ## Status
 
-**v0.2.4.** Inbound delivery, ringing and bounded replies have been
-exercised live against real bots on macOS and Linux, cmux and tmux. v0.2 adds
+**v0.2.5.** Across releases, inbound delivery, ringing and bounded replies
+have been exercised live against real bots on macOS and Linux, cmux and tmux. v0.2 adds
 durable outbound letters, correspondent
 identity and threading, and read-only retrieval (`--list`, `--show`, `--search`,
 `--thread`, `--export`); those are covered by the suite and reviewed, but have
