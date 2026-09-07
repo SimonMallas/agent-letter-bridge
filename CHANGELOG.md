@@ -26,6 +26,15 @@ argument parsing, and an interpreter with one failed to execute at all, both
 ordinary where a home directory carries somebody's name. What is printed and
 what the pane runs are still the same bytes.
 
+The check is one of **identity, not availability**. Asking whether an
+interpreter can import `alb` establishes that some copy is reachable, not that
+it is the one running setup — an environment holding an older copy answers yes,
+and the command then starts that older copy. The interpreter is asked where its
+`alb` actually comes from, and the answer is compared with the code running
+`init`. A console script beside the interpreter is subject to the same check:
+proximity is not provenance. Version strings are not compared, because two
+builds can agree about their name and differ.
+
 Where no command can be named that a fresh shell would resolve to this
 installation, `init` declines to start one and says why. Offering
 `<interpreter> -m alb` instead does not work for a source checkout: that
@@ -40,6 +49,12 @@ setup had read a chat id it did not save, it reported delivery as possible and
 offered to start; while an existing, populated allowlist was warned about as
 deny-all. The gate on disk after keep-or-write is the one that gets read, and a
 file that cannot be parsed counts as denying.
+
+The question is now asked of the allowlist itself rather than answered beside
+it. Setup used its own truthiness test, which read `{"chats": "42"}` and
+`{"chats": 42}` as permissive where the gate requires a non-empty list — so the
+gate denied everyone while setup offered to start. The gate was never weakened;
+there were two definitions of an allowlist, and now there is one.
 
 **Starting a bridge with a deny-all allowlist is now a deliberate answer
 rather than the default.** The gate is unchanged and still denies everyone

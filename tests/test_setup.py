@@ -1133,7 +1133,9 @@ class TheStartedBridgeIsTHISInstallation(Base):
         """Straight to the builder. What a shell then DOES with the string is
         a different question, answered in tests/test_resident_launch.py by
         running it."""
+        import alb
         kw.setdefault("script_exists", lambda path: True)
+        kw.setdefault("origin_of", lambda exe: alb.__file__)
         command = wizard._resident_command(self.root, **kw)
         return command, command
 
@@ -1161,8 +1163,9 @@ class TheStartedBridgeIsTHISInstallation(Base):
         """Source checkouts and some install shapes have no console script.
         The interpreter is still absolute and still this installation."""
         from alb.setup import wizard
+        import alb
         resolved = wizard._resident_command("/tmp/r", script_exists=lambda p: False,
-                                            importable=lambda exe: True)
+                                            origin_of=lambda exe: alb.__file__)
         self.assertIn("-m alb", resolved)
         self.assertTrue(resolved.startswith("/"), resolved)
 
@@ -1216,7 +1219,9 @@ class TheCommandSurvivesAShell(Base):
     """
 
     def _command(self, root, **kw):
+        import alb
         from alb.setup import wizard
+        kw.setdefault("origin_of", lambda exe: alb.__file__)
         return wizard._resident_command(root, **kw)
 
     def test_a_root_with_spaces_stays_one_argument(self):
@@ -1278,22 +1283,25 @@ class AutostartRefusesWhatItCannotStart(Base):
     """
 
     def test_an_installed_package_still_uses_its_script(self):
+        import alb
         from alb.setup import wizard
-        command = wizard._resident_command("/tmp/r", script_exists=lambda p: True)
+        command = wizard._resident_command("/tmp/r", script_exists=lambda p: True,
+                                           origin_of=lambda exe: alb.__file__)
         self.assertTrue(command.startswith("/"), command)
 
     def test_a_source_checkout_gets_no_command_rather_than_a_broken_one(self):
         from alb.setup import wizard
         self.assertIsNone(
             wizard._resident_command("/tmp/r", script_exists=lambda p: False,
-                                     importable=lambda exe: False))
+                                     origin_of=lambda exe: None))
 
     def test_an_interpreter_that_can_import_it_may_use_the_module(self):
         import shlex
         from alb.setup import wizard
+        import alb
         command = wizard._resident_command(
             "/tmp/r", script_exists=lambda p: False,
-            importable=lambda exe: True, executable="/venv/bin/python")
+            origin_of=lambda exe: alb.__file__, executable="/venv/bin/python")
         self.assertEqual(shlex.split(command)[:3],
                          ["/venv/bin/python", "-m", "alb"])
 
@@ -1363,3 +1371,54 @@ class TheWarningReadsTheSAVEDAllowlist(Base):
             "{not json", ["n", "print", "P1", ""])
         self.assertFalse(result["delivers"])
         self.assertEqual(started, [])
+
+
+class DeliverabilityMeansWHATTHEGATEMEANS(Base):
+    """The start decision accepted shapes the gate rejects.
+
+    `{"chats": "42"}`, `{"chats": {"42": true}}` and `{"chats": 42}` are all
+    truthy, and a truthiness test read them as "someone can get through". The
+    runtime requires a non-empty LIST, so the gate denied everyone while setup
+    reported delivery as possible and offered to start.
+
+    The gate stayed secure throughout - only the advice was wrong, which is
+    the same defect as the doctor's and has the same cause: a second
+    implementation of a rule that already exists. There is one now.
+    """
+
+    def _delivers(self, body):
+        from alb.setup import wizard
+        path = self.root / "allowlist.json"
+        self.root.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8")
+        return wizard._allowlist_delivers(path)
+
+    def test_a_string_is_not_a_list(self):
+        self.assertFalse(self._delivers('{"chats": "42"}'))
+
+    def test_an_object_is_not_a_list(self):
+        self.assertFalse(self._delivers('{"chats": {"42": true}}'))
+
+    def test_a_number_is_not_a_list(self):
+        self.assertFalse(self._delivers('{"chats": 42}'))
+
+    def test_an_empty_list_delivers_nothing(self):
+        self.assertFalse(self._delivers('{"chats": []}'))
+
+    def test_a_populated_list_delivers(self):
+        self.assertTrue(self._delivers('{"chats": ["42"]}'))
+
+    def test_it_agrees_with_the_gate_on_every_shape(self):
+        """The property, stated directly: if setup says mail can arrive, the
+        gate must let at least one listed id through, and vice versa."""
+        from alb.allowlist import gate
+        from alb.setup import wizard
+        self.root.mkdir(parents=True, exist_ok=True)
+        path = self.root / "allowlist.json"
+        for body in ('{"chats": "42"}', '{"chats": {"42": true}}',
+                     '{"chats": 42}', '{"chats": []}', '{"chats": ["42"]}',
+                     '{"chats": [42]}', "[]", "not json", '{}'):
+            with self.subTest(body=body):
+                path.write_text(body, encoding="utf-8")
+                self.assertEqual(wizard._allowlist_delivers(path),
+                                 gate.allows(path, "42"))

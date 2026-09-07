@@ -336,39 +336,61 @@ def _start_pane(title, command):
 
 
 def _allowlist_delivers(path):
-    """Would the gate on disk let anything through? Fail closed on doubt."""
-    try:
-        data = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, ValueError):
-        return False
-    return bool(isinstance(data, dict) and data.get("chats"))
+    """Would the gate on disk let anything through?
+
+    Asks the gate. Answering it here meant two definitions of an allowlist,
+    and they disagreed: a truthiness test read `{"chats": "42"}` as
+    permissive where the gate requires a non-empty list, so setup offered to
+    start a bridge that would deny everyone.
+    """
+    from alb.allowlist import gate
+    return gate.permits_anyone(path)
 
 
-def _importable_by(executable):
-    """Can THAT interpreter import alb, started fresh with no inherited path?
+def _origin_for(executable):
+    """WHERE that interpreter's alb comes from, started fresh, or None.
 
-    Asked by running it, because the answer cannot be read off this process:
-    a source checkout is importable here only because of how this process was
-    started, and a new shell inherits none of that.
+    Importability was the first version of this question and it is the wrong
+    one: it establishes that SOME alb is reachable, not that it is the one
+    running setup. A temporary environment with an older alb installed answers
+    yes, and the command then starts that older copy - the same class of
+    defect as the bare name, one level further in.
+
+    The environment is cleaned for the same reason. Inheriting this process's
+    PYTHONPATH makes our own source tree reachable from any interpreter, which
+    manufactures the agreement this check exists to test. `/` as cwd, because
+    a cwd on sys.path lies the same way.
     """
     import os
     import subprocess
-    # A CLEAN ENVIRONMENT, or the question answers itself. Inheriting this
-    # process's PYTHONPATH makes a source checkout look importable to any
-    # interpreter, which is precisely the false yes this check exists to
-    # avoid - and it is the same mistake as the bare name: trusting resolution
-    # that the new shell will not have. Run from `/` for the same reason a cwd
-    # on sys.path would lie.
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     try:
-        return subprocess.run([executable, "-c", "import alb"], env=env,
-                              cwd="/", capture_output=True,
-                              timeout=15).returncode == 0
+        result = subprocess.run(
+            [executable, "-c", "import alb, sys; sys.stdout.write(alb.__file__ or '')"],
+            env=env, cwd="/", capture_output=True, text=True, timeout=15)
     except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout.strip() or None if result.returncode == 0 else None
+
+
+def _same_installation(origin):
+    """Is that the alb running this setup? Compared by resolved location.
+
+    Version equality would not do it: two builds can share a version string
+    and differ, and the thing being promised is that the resident is THIS
+    code, not code that agrees about its name.
+    """
+    import alb
+    ours = getattr(alb, "__file__", None)
+    if not origin or not ours:
+        return False
+    try:
+        return pathlib.Path(origin).resolve() == pathlib.Path(ours).resolve()
+    except OSError:
         return False
 
 
-def _resident_command(root, script_exists=None, importable=None,
+def _resident_command(root, script_exists=None, origin_of=None,
                       executable=None):
     """The command that starts THIS installation, or None if there isn't one.
 
@@ -398,15 +420,18 @@ def _resident_command(root, script_exists=None, importable=None,
     import sys
     exe = executable or sys.executable
     exists = script_exists or (lambda path: path.exists())
-    can_import = importable or _importable_by
+    origin = (origin_of or _origin_for)(exe)
+
+    # IDENTITY BEFORE SHAPE, and for BOTH shapes. A console script beside the
+    # interpreter proves proximity, not provenance - the environment it
+    # belongs to can hold a different alb entirely. So the origin is checked
+    # first, and whichever launcher is then chosen, it is one that reaches
+    # this code.
+    if not _same_installation(origin):
+        return None
 
     script = pathlib.Path(exe).parent / "alb"
-    if exists(script):
-        argv = [str(script)]
-    elif can_import(exe):
-        argv = [exe, "-m", "alb"]
-    else:
-        return None
+    argv = [str(script)] if exists(script) else [exe, "-m", "alb"]
 
     root = str(root)
     return shlex.join(argv + ["--config", f"{root}/bridge.env", "--root", root])

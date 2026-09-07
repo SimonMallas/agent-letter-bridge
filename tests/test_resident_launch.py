@@ -21,6 +21,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 
+import alb  # noqa: E402
 from alb.setup import wizard  # noqa: E402
 
 
@@ -64,7 +65,8 @@ class TheGeneratedCommandRunsTHISInstallation(unittest.TestCase):
     def test_it_reaches_our_launcher_and_not_the_one_on_PATH(self):
         ours = self._ours(self.dir / "install")
         command = wizard._resident_command(
-            self.dir / "root", executable=str(ours.parent / "python"))
+            self.dir / "root", executable=str(ours.parent / "python"),
+            origin_of=lambda exe: alb.__file__)
         result, lines = self._run(command)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(lines[0], "OURS")
@@ -81,20 +83,24 @@ class TheGeneratedCommandRunsTHISInstallation(unittest.TestCase):
         root = self.dir / "My Bridge" / "root"
         ours = self._ours(home)
         command = wizard._resident_command(
-            root, executable=str(ours.parent / "python"))
+            root, executable=str(ours.parent / "python"),
+            origin_of=lambda exe: alb.__file__)
         result, lines = self._run(command)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(lines[0], "OURS")
         self.assertIn(str(root), lines)
         self.assertIn(f"{root}/bridge.env", lines)
 
-    def test_what_is_printed_is_what_runs(self):
-        """Consent is to a named thing. The operator sees this string; the
-        shell must do exactly it."""
+    def test_the_argv_the_shell_delivers_matches_the_printed_string(self):
+        """Consent is to a named thing: the operator sees this string, and the
+        shell must deliver exactly those arguments. This checks the ARGV the
+        launcher received - what init prints to the console, and what it hands
+        the start callback, are checked in tests/test_setup.py."""
         ours = self._ours(self.dir / "install")
         root = self.dir / "root"
         command = wizard._resident_command(
-            root, executable=str(ours.parent / "python"))
+            root, executable=str(ours.parent / "python"),
+            origin_of=lambda exe: alb.__file__)
         _result, lines = self._run(command)
         # lines[0] is the launcher's own marker; the rest is the argv the
         # shell actually delivered. It must equal the printed command's
@@ -102,19 +108,67 @@ class TheGeneratedCommandRunsTHISInstallation(unittest.TestCase):
         self.assertEqual(shlex.split(command)[1:], lines[1:])
         self.assertEqual(shlex.split(command)[0], str(ours))
 
+    def test_a_different_alb_on_that_interpreter_is_not_ours(self):
+        """Importability is not identity.
+
+        A temporary environment with SOME alb installed answers "yes, this
+        interpreter can import alb" — and the command then starts that one,
+        not the installation running setup. Proven by asking the candidate
+        interpreter where its alb actually comes from and comparing it to
+        ours, rather than by trusting that any alb is the right alb.
+        """
+        other = self.dir / "other-install" / "alb" / "__init__.py"
+        other.parent.mkdir(parents=True)
+        other.write_text("", encoding="utf-8")
+        self.assertIsNone(wizard._resident_command(
+            self.dir / "root",
+            script_exists=lambda p: False,
+            origin_of=lambda exe: str(other)))
+
+    def test_the_same_origin_is_accepted(self):
+        import alb
+        command = wizard._resident_command(
+            self.dir / "root", script_exists=lambda p: False,
+            origin_of=lambda exe: alb.__file__, executable="/venv/bin/python")
+        self.assertIsNotNone(command)
+        self.assertIn("-m alb", command)
+
+    def test_an_adjacent_script_is_not_provenance_either(self):
+        """A console script beside the interpreter proves proximity, not that
+        it is this codebase. The origin check applies to both branches."""
+        self.assertIsNone(wizard._resident_command(
+            self.dir / "root",
+            script_exists=lambda p: True,
+            origin_of=lambda exe: "/somewhere/else/alb/__init__.py"))
+
     def test_a_source_checkout_is_declined_rather_than_launched(self):
         """`<interpreter> -m alb` cannot work in a fresh shell for a source
         tree: this process can import alb only because of how it was started.
-        Proven by running it, not by assuming."""
+
+        Proven against a DISPOSABLE interpreter with no alb installed, so it
+        is reproducible whether or not the suite's own runner happens to have
+        one - it used to skip on a developer machine, which is exactly where
+        it would have been most useful.
+        """
+        venv = self.dir / "bare"
+        made = subprocess.run([sys.executable, "-m", "venv", str(venv)],
+                              capture_output=True, timeout=180)
+        if made.returncode != 0:
+            self.skipTest("could not create a disposable interpreter")
+        interpreter = venv / "bin" / "python"
+
+        # Establish the premise rather than assume it: this interpreter has
+        # no alb of its own.
         probe = subprocess.run(
-            [sys.executable, "-c", "import alb"],
-            capture_output=True, text=True, timeout=30,
-            env={"PATH": os.environ.get("PATH", "")}, cwd="/")
-        if probe.returncode == 0:
-            self.skipTest("alb is installed for this interpreter; "
-                          "the source-checkout shape is not reproducible here")
+            [str(interpreter), "-c", "import alb"], cwd="/",
+            env={"PATH": os.environ.get("PATH", "")},
+            capture_output=True, timeout=60)
+        self.assertNotEqual(probe.returncode, 0,
+                            "the disposable interpreter already has alb")
+
         self.assertIsNone(wizard._resident_command(
-            self.dir / "root", script_exists=lambda p: False))
+            self.dir / "root", script_exists=lambda p: False,
+            executable=str(interpreter)))
 
 
 if __name__ == "__main__":

@@ -35,3 +35,23 @@ def allows(path, chat_id):
     # Compare as strings: a numeric id must not slip past a string allowlist,
     # and neither must the reverse.
     return str(chat_id) in {str(c) for c in chats}
+
+
+def permits_anyone(path):
+    """Would this file let ANY sender through?
+
+    Setup needs this to decide whether starting a bridge would deliver
+    anything, and asked it with a truthiness test of its own - which read
+    `{"chats": "42"}` and `{"chats": 42}` as permissive while this function
+    denied them. The gate was never weakened; the advice beside it was wrong,
+    for the same reason the doctor once read a config differently from the
+    runtime. One implementation, asked by both.
+    """
+    try:
+        data = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    chats = data.get("chats")
+    return isinstance(chats, list) and bool(chats)

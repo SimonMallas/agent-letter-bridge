@@ -495,8 +495,8 @@ EXTRA = {
     # meeting a deny-all allowlist - neither of which a fixture had done.
     "the started bridge is THIS installation": (
         WIZARD, "tests.test_setup",
-        "        argv = [str(script)]",
-        '        argv = ["alb"]'),
+        "    argv = [str(script)] if exists(script) else [exe, \"-m\", \"alb\"]",
+        '    argv = ["alb"]'),
     "the offer asks the builder rather than carrying its own literal": (
         WIZARD, "tests.test_setup",
         "    command = _resident_command(root) if command is _UNSET else command",
@@ -507,10 +507,20 @@ EXTRA = {
         '    summary["delivers"] = _allowlist_delivers(allow_path)',
         '    summary["delivers"] = bool(chats)'),
     # A clean environment, or the import question answers itself.
-    "importability is asked of a fresh interpreter": (
+    "the origin is asked of a fresh interpreter": (
         WIZARD, "tests.test_resident_launch",
         '    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}',
         "    env = dict(os.environ)"),
+    # Reaching SOME alb is not reaching THIS one.
+    "identity is checked, not mere importability": (
+        WIZARD, "tests.test_resident_launch",
+        "    if not _same_installation(origin):\n        return None",
+        "    if origin is None:\n        return None"),
+    # A gate and the advice beside it cannot have two definitions.
+    "deliverability is the gate's own definition": (
+        ALLOW, "tests.test_setup",
+        "    return isinstance(chats, list) and bool(chats)",
+        "    return bool(chats)"),
     "an empty allowlist does not start by default": (
         WIZARD, "tests.test_setup",
         '        default = "n"\n'
