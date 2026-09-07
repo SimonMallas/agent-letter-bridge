@@ -178,12 +178,12 @@ machine and is used only against your chosen platform's API, from your own
 machine — there is no service in between. Messages travel over that platform,
 as they must.
 
-**It hands the agent a letter, not a command.** The message body never enters
-the composer, so a stranger's text cannot arrive as something the agent is
-already running. The allowlist is the trust boundary, as it is in every tool of
-this kind; what differs is what arrives once it passes — something to open and
-read, on purpose. Once an agent chooses to read a body, that body is still
-untrusted text, and this tool does not make it safe.
+**It hands the agent a letter, not the message as a command.** The platform
+message body is written to disk and never copied into the composer — the
+terminal input an agent's session would run — so it cannot arrive as text that
+is already running. The allowlist decides which chats may create letters; it
+does not make their contents trusted. Once an agent chooses to read a letter,
+its body is still untrusted text, and this tool does not make it safe.
 
 **The comparisons are checked, not asserted.** Every claim of difference from
 neighbouring tools was verified against their current code and docs before it
