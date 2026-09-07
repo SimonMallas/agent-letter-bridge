@@ -436,8 +436,16 @@ class TheResidentOffer(Base):
         self.assertEqual(started, [])
         self.assertIn("already running", console.transcript.lower())
 
-    def test_default_is_yes(self):
-        console, _, started = self._init(["n", "print", "AGENT-PANE", ""])
+    def test_default_is_yes_once_the_allowlist_can_deliver(self):
+        """Enter starts it - but only for an install that would receive
+        something. This fixture took the `print` route, so nothing is in the
+        allowlist and the default is deliberately no; the reader supplies the
+        chat id the operator would have. See
+        StartingABridgeThatCanReceiveNothing for the empty case."""
+        console, _, started = self._init(
+            ["n", "read", "", "1", "AGENT-PANE", ""],
+            chat_id_reader=lambda token: [{"chat_id": "1460856861",
+                                           "label": "you"}])
         self.assertEqual(len(started), 1)
 
     def test_a_failed_start_degrades_to_the_printed_command(self):
@@ -1068,3 +1076,98 @@ class ARefusedRouteEndsTheInstall(Base):
         _c, result, _started, _env = self._conflict(
             f"ALB_TOKEN=1:T\nALB_MAIL_ROOT={old}\nALB_TO=old-agent\n")
         self.assertNotEqual(result.get("mode"), "standalone")
+
+
+class TheStartedBridgeIsTHISInstallation(Base):
+    """init started a bridge from a DIFFERENT installation than the one that
+    ran it.
+
+    The autostart command was the bare word `alb`, handed to a new shell.
+    That shell resolves it from PATH, so an operator who deliberately
+    installed into a dedicated venv - and ran init from it - got a resident
+    running somebody else's copy. On this machine that copy is shared between
+    two other relays, so the install intended to be independent was silently
+    coupled to them, and its version was whatever that other install happened
+    to be.
+
+    Found on the first REAL install. Every synthetic acceptance run missed it
+    because the fixtures call the CLI directly and never cross a shell, which
+    is exactly where the resolution happens.
+
+    The command must name the installation that is running, absolutely.
+    """
+
+    def _command(self, **kw):
+        kw.setdefault("cmux_born", lambda: True)
+        started = []
+        kw.setdefault("start_pane",
+                      lambda title, command: started.append(command) or "S-1")
+        panes = [{"id": "PANE-1", "label": "agent", "notifier": "cmux"}]
+        console, _result = self.run_init(["n", "print", "PANE-1", "y"],
+                                         panes=panes, **kw)
+        return started[0], console.transcript
+
+    def test_the_command_is_an_absolute_path(self):
+        command, _transcript = self._command()
+        self.assertTrue(command.startswith("/"), command)
+
+    def test_it_is_never_the_bare_name(self):
+        command, _transcript = self._command()
+        self.assertFalse(command.startswith("alb "), command)
+
+    def test_it_names_the_running_installation(self):
+        """A console script beside the running interpreter is this install."""
+        import sys
+        command, _transcript = self._command()
+        self.assertIn(str(pathlib.Path(sys.executable).parent), command)
+
+    def test_the_printed_command_and_the_pane_command_still_match(self):
+        """Consent is to a named thing: what the operator was shown has to be
+        what runs, or the whole offer is a different one."""
+        command, transcript = self._command()
+        self.assertIn(command, transcript)
+
+    def test_it_falls_back_to_the_module_when_no_script_exists(self):
+        """Source checkouts and some install shapes have no console script.
+        The interpreter is still absolute and still this installation."""
+        from alb.setup import wizard
+        resolved = wizard._resident_command("/tmp/r", script_exists=lambda p: False)
+        self.assertIn("-m alb", resolved)
+        self.assertTrue(resolved.startswith("/"), resolved)
+
+
+class StartingABridgeThatCanReceiveNothing(Base):
+    """The wizard offered to start a resident while the allowlist denied
+    everyone, with yes as the default.
+
+    The gate then worked exactly as designed - the first test messages were
+    denied and consumed - which is the confusing part. Security was right and
+    the onboarding was not: an operator sees a bridge they were told is
+    running, sends a message, and nothing arrives, with no error anywhere.
+
+    The fix is NOT to weaken deny-all. It is to make starting in that state a
+    decision the operator takes deliberately rather than by pressing enter.
+    """
+
+    def _offer(self, answers, panes=None):
+        started = []
+        console, result = self.run_init(
+            answers, panes=panes or [{"id": "P1", "label": "a", "notifier": "cmux"}],
+            cmux_born=lambda: True,
+            start_pane=lambda title, command: started.append(command) or "S-1")
+        return console.transcript, result, started
+
+    def test_it_says_plainly_that_nothing_will_arrive(self):
+        transcript, _result, _started = self._offer(["n", "print", "P1", ""])
+        self.assertIn("deny", transcript.lower())
+
+    def test_enter_does_not_start_it(self):
+        """Default is no while the allowlist is empty: pressing enter must not
+        leave a bridge running that cannot receive anything."""
+        _transcript, _result, started = self._offer(["n", "print", "P1", ""])
+        self.assertEqual(started, [])
+
+    def test_an_explicit_yes_is_still_honoured(self):
+        """Not a refusal. An operator who means it can still start one."""
+        _transcript, _result, started = self._offer(["n", "print", "P1", "y"])
+        self.assertEqual(len(started), 1)

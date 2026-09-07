@@ -7,6 +7,31 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.2.5] — unreleased
+
+Both of these were found by the first installation done for real, on a seat
+that had never had one, after the whole install path had already been audited
+against fixtures.
+
+**`init` could start a bridge from a different installation than the one that
+ran it.** The autostart command was the bare word `alb`, handed to a new
+shell, which resolves it from `PATH`. An operator who deliberately installed
+into a dedicated environment, and ran `init` from it, got a resident running
+whichever copy `PATH` found first — a different installation, possibly a
+different version, and on a machine with several bridges, one shared with
+another of them. The command now names the running installation absolutely:
+the console script beside the interpreter, or that interpreter and `-m alb`
+where no script exists. What is printed and what the pane runs are still the
+same bytes.
+
+**Starting a bridge with a deny-all allowlist is now a deliberate answer
+rather than the default.** The gate is unchanged and still denies everyone
+until a chat id is added — that part worked exactly as intended, which is what
+made it confusing: a bridge reported as running, messages sent, nothing
+delivered, and no error anywhere to explain it. The offer now states plainly
+that nothing will arrive, and defaults to no. An operator who means it can
+still say yes.
+
 ## [0.2.4] — 2026-09-06
 
 Two things a person installing this would have been misled by.

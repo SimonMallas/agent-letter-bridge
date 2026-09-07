@@ -491,6 +491,18 @@ EXTRA = {
         WIZARD, "tests.test_setup",
         '    if summary.get("ring") not in RINGS:',
         '    if summary.get("ring") != "configured":'),
+    # Both found on the first REAL install, by crossing a shell and by
+    # meeting a deny-all allowlist - neither of which a fixture had done.
+    "the started bridge is THIS installation": (
+        WIZARD, "tests.test_setup",
+        "    command = _resident_command(root)",
+        '    command = f"alb --config {root}/bridge.env --root {root}"'),
+    "an empty allowlist does not start by default": (
+        WIZARD, "tests.test_setup",
+        '        default = "n"\n'
+        '        prompt = "  start it anyway, with an empty allowlist? [y/N]"',
+        '        default = "y"\n'
+        '        prompt = "  start it anyway, with an empty allowlist? [y/N]"'),
     "a correct wait still says it is alive": (
         CLI, "tests.test_poll_backoff",
         '            _loop._write_heartbeat(\n'

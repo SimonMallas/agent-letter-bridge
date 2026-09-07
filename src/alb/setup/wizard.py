@@ -237,6 +237,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
         if not chats:
             console.say(f"  wrote {allow_path} denying everyone.")
             console.say("  NOTHING IS DELIVERED until a chat id is in it.")
+    summary["delivers"] = bool(chats)
 
     # 5. The ring.
     #
@@ -320,6 +321,31 @@ def _start_pane(title, command):
     return result.stdout.strip() or "created"
 
 
+def _resident_command(root, script_exists=None):
+    """The command that starts THIS installation, named absolutely.
+
+    It used to be the bare word `alb`, handed to a new shell. A shell resolves
+    that from PATH, so an operator who installed into a dedicated venv and ran
+    init from it got a resident running whichever copy PATH found first -
+    a different installation, a possibly different version, and on a machine
+    with several relays, one shared with somebody else.
+
+    Found on the first real install; every synthetic run had missed it,
+    because fixtures call the CLI directly and never cross a shell. The
+    resolution IS the bug, so the fix is to leave nothing to resolve.
+
+    Prefer the console script beside the running interpreter, because that is
+    what an operator recognises and can retype. Fall back to the interpreter
+    and the module, which exists for every install shape including a source
+    checkout.
+    """
+    import sys
+    exists = script_exists or (lambda path: path.exists())
+    script = pathlib.Path(sys.executable).parent / "alb"
+    launcher = str(script) if exists(script) else f"{sys.executable} -m alb"
+    return f"{launcher} --config {root}/bridge.env --root {root}"
+
+
 def _offer_resident(console, root, summary, cmux_born, bridge_running, start_pane):
     """Finish the install, or hand over exactly what remains.
 
@@ -329,7 +355,7 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running, start_pan
     report names what started and how to stop it - a daemon the operator owns
     but cannot find is what costs trust, not a started process.
     """
-    command = f"alb --config {root}/bridge.env --root {root}"
+    command = _resident_command(root)
     title = f"\U0001F4EE {pathlib.Path(root).name} bridge \u2014 DO NOT CLOSE"
 
     console.say()
@@ -387,8 +413,27 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running, start_pan
         return
 
     console.say(f'It can start now, in its own cmux pane titled "{title}".')
-    answer = console.ask("  start the bridge now in its own cmux pane? [Y/n]", "y")
-    if answer.strip().lower() in ("n", "no"):
+    # A BRIDGE THAT CAN RECEIVE NOTHING IS NOT A RUNNING BRIDGE, and starting
+    # one by default is how an operator ends up sending test messages into a
+    # correctly-working deny-all and finding no error anywhere to explain it.
+    # The gate is not weakened; the DEFAULT is. Starting in this state stays
+    # available to anyone who means it, and stops being what enter does.
+    if not summary.get("delivers", True):
+        console.say()
+        console.say("  NOTE: the allowlist currently denies everyone, so a")
+        console.say("  bridge started now would poll correctly and deliver")
+        console.say("  nothing - your own messages included, with no error.")
+        console.say("  Add your chat id first unless you have a reason not to.")
+        default = "n"
+        prompt = "  start it anyway, with an empty allowlist? [y/N]"
+    else:
+        default = "y"
+        prompt = "  start the bridge now in its own cmux pane? [Y/n]"
+    # An empty answer means "the default", whatever the default currently is -
+    # which now differs between the two states above. Reading blank as "no"
+    # would have made enter refuse a start it was offering to make.
+    answer = (console.ask(prompt, default).strip() or default)
+    if answer.lower() in ("n", "no"):
         console.say("Not started. Run the command above from a cmux pane when ready.")
         summary["resident"] = "printed"
         return
