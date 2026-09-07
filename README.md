@@ -108,32 +108,6 @@ fetch and write causes redelivery, never loss.
 Read [`docs/invariants.md`](docs/invariants.md) before trusting this with a token.
 The invariants are the product; the code is how they are kept.
 
-## What this is *not*
-
-- **Not a messaging platform.** It does not send marketing, notifications or
-  customer messages. It carries your own messages to your own agents.
-- **Not [Agent Letterbox](https://github.com/SimonMallas/agent-letterbox-cmux).**
-  Letterbox is where mail rests between agents on one machine. Letter Bridge is
-  how mail crosses in from outside. Different products, legible relationship.
-- **Not injection-proof, and we will not claim it.** The body never enters
-  the composer, which removes the *delivery* path where a stranger's text
-  becomes the agent's next command. But the doorbell is still one typed line, and
-  a letter's body is still untrusted text once an agent chooses to read it.
-  The allowlist is the trust boundary, here as in every tool of this class —
-  the difference is what arrives when it passes: a letter to open, not a
-  command already running.
-- **Not a proxy or interceptor.** The bridge never *interprets* content or turns
-  it into action, and the untrusted poller never inspects content for routing or
-  ringing. (It is not "never reads" — the outbound helper necessarily reads a
-  reply body in order to send it. We state the exact claim, not a flattering one.)
-- **Not asserted, checked.** Every claim of difference from the neighbouring
-  tools was verified against their current code and docs before being made:
-  [`docs/COMPARE.md`](docs/COMPARE.md).
-- **Not a hosted service.** There is no Bridge-operated service; your token is
-  stored locally and sent only to your chosen platform's API, from your own
-  machine. Inbound and outbound messages necessarily traverse that platform —
-  we do not claim otherwise.
-
 ## Install
 
 **Start here: [`INSTALL.md`](INSTALL.md)** — one numbered path from nothing to a
@@ -196,6 +170,28 @@ against — untested transports do not ship here.
 
 Reference and failure modes: [`docs/operations.md`](docs/operations.md).
 Waking an agent that already handles other mail: [`docs/agent-setup.md`](docs/agent-setup.md).
+
+## Scope, plainly
+
+**It carries your own messages to your own agents.** Your token stays on your
+machine and is used only against your chosen platform's API, from your own
+machine — there is no service in between. Messages travel over that platform,
+as they must.
+
+**It hands the agent a letter, not a command.** The message body never enters
+the composer, so a stranger's text cannot arrive as something the agent is
+already running. The allowlist is the trust boundary, as it is in every tool of
+this kind; what differs is what arrives once it passes — something to open and
+read, on purpose. Once an agent chooses to read a body, that body is still
+untrusted text, and this tool does not make it safe.
+
+**The comparisons are checked, not asserted.** Every claim of difference from
+neighbouring tools was verified against their current code and docs before it
+was written down: [`docs/COMPARE.md`](docs/COMPARE.md).
+
+**It pairs with [Agent Letterbox](https://github.com/SimonMallas/agent-letterbox-cmux).**
+Letterbox is where mail rests between agents on one machine. Letter Bridge is
+how mail crosses in from outside.
 
 ## Status
 
