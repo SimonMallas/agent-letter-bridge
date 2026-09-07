@@ -347,27 +347,42 @@ def _allowlist_delivers(path):
     return gate.permits_anyone(path)
 
 
+# The one launcher, and the one way it is asked about. `-I` is isolated mode:
+# PYTHONPATH is ignored, the user site directory is ignored, and the script's
+# directory is not prepended to sys.path. Everything that could substitute a
+# different alb at launch is switched off, and the probe below runs under the
+# SAME flag - which is the whole point. Proving identity under isolation while
+# launching without it proved something about a context the launch never uses.
+_ISOLATED = "-I"
+
+
 def _origin_for(executable):
-    """WHERE that interpreter's alb comes from, started fresh, or None.
+    """WHERE that interpreter's alb comes from under the launch conditions.
 
-    Importability was the first version of this question and it is the wrong
+    Importability was the first version of this question and it was the wrong
     one: it establishes that SOME alb is reachable, not that it is the one
-    running setup. A temporary environment with an older alb installed answers
-    yes, and the command then starts that older copy - the same class of
-    defect as the bare name, one level further in.
+    running setup. An environment holding an older copy answers yes, and the
+    command then starts that older copy.
 
-    The environment is cleaned for the same reason. Inheriting this process's
-    PYTHONPATH makes our own source tree reachable from any interpreter, which
-    manufactures the agreement this check exists to test. `/` as cwd, because
-    a cwd on sys.path lies the same way.
+    Asking it under different conditions from the launch was the second
+    mistake, and a subtler one. This stripped PYTHONPATH and ran from `/`
+    while the generated command enforced neither, so a shell whose PYTHONPATH
+    named another alb - or whose working directory sat beside one - launched
+    that one instead, having been approved on evidence from a context that
+    never existed.
     """
-    import os
     import subprocess
-    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    # No environment surgery here: `-I` implies `-E`, so PYTHON* variables are
+    # already ignored, and `-c` under isolation does not put the working
+    # directory on the path either. Stripping PYTHONPATH by hand as well was
+    # dead code - the mutation gate proved it, by disabling it and finding
+    # nothing that could tell. Defence in depth that no test can distinguish
+    # from its own absence is the hollow-pin problem wearing a helmet.
     try:
         result = subprocess.run(
-            [executable, "-c", "import alb, sys; sys.stdout.write(alb.__file__ or '')"],
-            env=env, cwd="/", capture_output=True, text=True, timeout=15)
+            [executable, _ISOLATED, "-c",
+             "import alb, sys; sys.stdout.write(alb.__file__ or '')"],
+            cwd="/", capture_output=True, text=True, timeout=15)
     except (OSError, subprocess.SubprocessError):
         return None
     return result.stdout.strip() or None if result.returncode == 0 else None
@@ -390,8 +405,7 @@ def _same_installation(origin):
         return False
 
 
-def _resident_command(root, script_exists=None, origin_of=None,
-                      executable=None):
+def _resident_command(root, origin_of=None, executable=None):
     """The command that starts THIS installation, or None if there isn't one.
 
     It used to be the bare word `alb`, handed to a new shell. A shell resolves
@@ -419,19 +433,16 @@ def _resident_command(root, script_exists=None, origin_of=None,
     import shlex
     import sys
     exe = executable or sys.executable
-    exists = script_exists or (lambda path: path.exists())
     origin = (origin_of or _origin_for)(exe)
 
-    # IDENTITY BEFORE SHAPE, and for BOTH shapes. A console script beside the
-    # interpreter proves proximity, not provenance - the environment it
-    # belongs to can hold a different alb entirely. So the origin is checked
-    # first, and whichever launcher is then chosen, it is one that reaches
-    # this code.
     if not _same_installation(origin):
         return None
 
-    script = pathlib.Path(exe).parent / "alb"
-    argv = [str(script)] if exists(script) else [exe, "-m", "alb"]
+    # ONE LAUNCHER, ISOLATED. The console script was friendlier to read and
+    # could not carry this guarantee: it is a shebang into an interpreter that
+    # will still honour PYTHONPATH, the user site, and its own directory. A
+    # script beside the interpreter proved proximity, never provenance.
+    argv = [exe, _ISOLATED, "-m", "alb"]
 
     root = str(root)
     return shlex.join(argv + ["--config", f"{root}/bridge.env", "--root", root])

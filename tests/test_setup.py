@@ -1134,7 +1134,6 @@ class TheStartedBridgeIsTHISInstallation(Base):
         a different question, answered in tests/test_resident_launch.py by
         running it."""
         import alb
-        kw.setdefault("script_exists", lambda path: True)
         kw.setdefault("origin_of", lambda exe: alb.__file__)
         command = wizard._resident_command(self.root, **kw)
         return command, command
@@ -1148,7 +1147,7 @@ class TheStartedBridgeIsTHISInstallation(Base):
         self.assertFalse(command.startswith("alb "), command)
 
     def test_it_names_the_running_installation(self):
-        """A console script beside the running interpreter is this install."""
+        """The running interpreter, absolutely."""
         import sys
         command, _transcript = self._command()
         self.assertIn(str(pathlib.Path(sys.executable).parent), command)
@@ -1164,7 +1163,7 @@ class TheStartedBridgeIsTHISInstallation(Base):
         The interpreter is still absolute and still this installation."""
         from alb.setup import wizard
         import alb
-        resolved = wizard._resident_command("/tmp/r", script_exists=lambda p: False,
+        resolved = wizard._resident_command("/tmp/r",
                                             origin_of=lambda exe: alb.__file__)
         self.assertIn("-m alb", resolved)
         self.assertTrue(resolved.startswith("/"), resolved)
@@ -1226,20 +1225,18 @@ class TheCommandSurvivesAShell(Base):
 
     def test_a_root_with_spaces_stays_one_argument(self):
         import shlex
-        command = self._command("/tmp/My Bridge/root",
-                                script_exists=lambda p: True)
+        command = self._command("/tmp/My Bridge/root")
         self.assertIn("/tmp/My Bridge/root", shlex.split(command))
 
     def test_an_executable_with_spaces_stays_one_argument(self):
         import shlex, sys
-        command = self._command("/tmp/r", script_exists=lambda p: True,
+        command = self._command("/tmp/r",
                                 executable="/opt/My Tools/venv/bin/python")
-        self.assertEqual(shlex.split(command)[0], "/opt/My Tools/venv/bin/alb")
+        self.assertEqual(shlex.split(command)[0], "/opt/My Tools/venv/bin/python")
 
     def test_the_config_path_is_quoted_too(self):
         import shlex
-        command = self._command("/tmp/My Bridge/root",
-                                script_exists=lambda p: True)
+        command = self._command("/tmp/My Bridge/root")
         self.assertIn("/tmp/My Bridge/root/bridge.env", shlex.split(command))
 
 
@@ -1282,28 +1279,27 @@ class AutostartRefusesWhatItCannotStart(Base):
     guess.
     """
 
-    def test_an_installed_package_still_uses_its_script(self):
+    def test_a_recognised_installation_gets_an_absolute_command(self):
         import alb
         from alb.setup import wizard
-        command = wizard._resident_command("/tmp/r", script_exists=lambda p: True,
+        command = wizard._resident_command("/tmp/r",
                                            origin_of=lambda exe: alb.__file__)
         self.assertTrue(command.startswith("/"), command)
 
     def test_a_source_checkout_gets_no_command_rather_than_a_broken_one(self):
         from alb.setup import wizard
         self.assertIsNone(
-            wizard._resident_command("/tmp/r", script_exists=lambda p: False,
-                                     origin_of=lambda exe: None))
+            wizard._resident_command("/tmp/r", origin_of=lambda exe: None))
 
     def test_an_interpreter_that_can_import_it_may_use_the_module(self):
         import shlex
         from alb.setup import wizard
         import alb
         command = wizard._resident_command(
-            "/tmp/r", script_exists=lambda p: False,
-            origin_of=lambda exe: alb.__file__, executable="/venv/bin/python")
-        self.assertEqual(shlex.split(command)[:3],
-                         ["/venv/bin/python", "-m", "alb"])
+            "/tmp/r", origin_of=lambda exe: alb.__file__,
+            executable="/venv/bin/python")
+        self.assertEqual(shlex.split(command)[:4],
+                         ["/venv/bin/python", "-I", "-m", "alb"])
 
     def test_the_offer_is_declined_when_there_is_no_safe_command(self):
         """No command means no start and no pretending: the operator is told

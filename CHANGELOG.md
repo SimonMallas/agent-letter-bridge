@@ -26,14 +26,24 @@ argument parsing, and an interpreter with one failed to execute at all, both
 ordinary where a home directory carries somebody's name. What is printed and
 what the pane runs are still the same bytes.
 
-The check is one of **identity, not availability**. Asking whether an
+The bridge is started as `<interpreter> -I -m alb`. The isolation flag is the
+guarantee, not the absolute path: without it the launched process still honours
+`PYTHONPATH`, the user site directory and its own working directory, any of
+which can supply a different `alb`. The console script was friendlier to read
+and could not carry this — it is a shebang into an interpreter that will honour
+all three.
+
+The check is one of **identity, not availability**, and it is made under the
+same isolation the launch uses. Asking whether an
 interpreter can import `alb` establishes that some copy is reachable, not that
 it is the one running setup — an environment holding an older copy answers yes,
 and the command then starts that older copy. The interpreter is asked where its
 `alb` actually comes from, and the answer is compared with the code running
-`init`. A console script beside the interpreter is subject to the same check:
-proximity is not provenance. Version strings are not compared, because two
-builds can agree about their name and differ.
+`init`. Version strings are not compared, because two builds can agree about
+their name and differ. Proving identity under conditions the launch does not
+apply proves nothing about the launch: an approval obtained with `PYTHONPATH`
+stripped, for a command that honours it, describes a context that never
+happens.
 
 Where no command can be named that a fresh shell would resolve to this
 installation, `init` declines to start one and says why. Offering
