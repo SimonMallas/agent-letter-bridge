@@ -74,8 +74,14 @@ def _yes(answer):
 RINGS = ("configured", "helper")
 
 
+# Distinguishes "caller said None" from "caller said nothing": None is a
+# meaningful answer here, meaning there is no safe command.
+_UNSET = object()
+
+
 def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
-         cmux_born=None, bridge_running=None, start_pane=None):
+         cmux_born=None, bridge_running=None, start_pane=None,
+         resident_command=_UNSET):
     """Create the boilerplate under `root`, asking for what cannot be derived.
 
     `console` supplies say / ask / ask_secret, so the questions are testable
@@ -237,7 +243,14 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
         if not chats:
             console.say(f"  wrote {allow_path} denying everyone.")
             console.say("  NOTHING IS DELIVERED until a chat id is in it.")
-    summary["delivers"] = bool(chats)
+    # READ THE FILE THAT WILL BE READ. Taking this from the answers given this
+    # run is wrong in both directions on a re-run: a kept deny-all looked
+    # deliverable because setup had just read an id it did not save, and a
+    # kept, populated allowlist was warned about as deny-all because this run
+    # took the route that reads nothing. The gate that matters is the one on
+    # disk after keep-or-write. Unreadable counts as denying, because a file
+    # we cannot parse is not evidence that anything gets through.
+    summary["delivers"] = _allowlist_delivers(allow_path)
 
     # 5. The ring.
     #
@@ -277,7 +290,8 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     _offer_resident(console, root, summary,
                     cmux_born or _cmux_born,
                     bridge_running or _bridge_running,
-                    start_pane or _start_pane)
+                    start_pane or _start_pane,
+                    command=resident_command)
 
     _closing(console, root, summary)
     return summary
@@ -321,32 +335,85 @@ def _start_pane(title, command):
     return result.stdout.strip() or "created"
 
 
-def _resident_command(root, script_exists=None):
-    """The command that starts THIS installation, named absolutely.
+def _allowlist_delivers(path):
+    """Would the gate on disk let anything through? Fail closed on doubt."""
+    try:
+        data = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return False
+    return bool(isinstance(data, dict) and data.get("chats"))
+
+
+def _importable_by(executable):
+    """Can THAT interpreter import alb, started fresh with no inherited path?
+
+    Asked by running it, because the answer cannot be read off this process:
+    a source checkout is importable here only because of how this process was
+    started, and a new shell inherits none of that.
+    """
+    import os
+    import subprocess
+    # A CLEAN ENVIRONMENT, or the question answers itself. Inheriting this
+    # process's PYTHONPATH makes a source checkout look importable to any
+    # interpreter, which is precisely the false yes this check exists to
+    # avoid - and it is the same mistake as the bare name: trusting resolution
+    # that the new shell will not have. Run from `/` for the same reason a cwd
+    # on sys.path would lie.
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    try:
+        return subprocess.run([executable, "-c", "import alb"], env=env,
+                              cwd="/", capture_output=True,
+                              timeout=15).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _resident_command(root, script_exists=None, importable=None,
+                      executable=None):
+    """The command that starts THIS installation, or None if there isn't one.
 
     It used to be the bare word `alb`, handed to a new shell. A shell resolves
     that from PATH, so an operator who installed into a dedicated venv and ran
-    init from it got a resident running whichever copy PATH found first -
-    a different installation, a possibly different version, and on a machine
-    with several relays, one shared with somebody else.
+    init from it got a resident running whichever copy PATH found first - a
+    different installation, a possibly different version, and on a machine
+    with several relays, one shared with somebody else. The resolution IS the
+    defect, so nothing here is left to resolve.
 
-    Found on the first real install; every synthetic run had missed it,
-    because fixtures call the CLI directly and never cross a shell. The
-    resolution IS the bug, so the fix is to leave nothing to resolve.
+    Two things this got wrong on the first attempt, both found by executing
+    the result in a real shell rather than reading it:
 
-    Prefer the console script beside the running interpreter, because that is
-    what an operator recognises and can retype. Fall back to the interpreter
-    and the module, which exists for every install shape including a source
-    checkout.
+    - Built by interpolation, a path containing a space became two arguments.
+      A root with a space was rejected by argparse; an interpreter with one
+      failed to execute at all. Both are ordinary on a machine where the home
+      directory is a person's name. The parts are quoted as one argv now.
+
+    - `<interpreter> -m alb` was offered wherever no console script existed.
+      For a source checkout that command fails in a fresh shell - this process
+      can import alb because of the path it was started with, and a new shell
+      inherits none of it. An autostart that reliably fails is worse than no
+      offer, so where no command can be named that a fresh shell will resolve,
+      this returns None and the offer is declined with a reason.
     """
+    import shlex
     import sys
+    exe = executable or sys.executable
     exists = script_exists or (lambda path: path.exists())
-    script = pathlib.Path(sys.executable).parent / "alb"
-    launcher = str(script) if exists(script) else f"{sys.executable} -m alb"
-    return f"{launcher} --config {root}/bridge.env --root {root}"
+    can_import = importable or _importable_by
+
+    script = pathlib.Path(exe).parent / "alb"
+    if exists(script):
+        argv = [str(script)]
+    elif can_import(exe):
+        argv = [exe, "-m", "alb"]
+    else:
+        return None
+
+    root = str(root)
+    return shlex.join(argv + ["--config", f"{root}/bridge.env", "--root", root])
 
 
-def _offer_resident(console, root, summary, cmux_born, bridge_running, start_pane):
+def _offer_resident(console, root, summary, cmux_born, bridge_running,
+                    start_pane, command=_UNSET):
     """Finish the install, or hand over exactly what remains.
 
     The printed command and the pane's command are the same bytes, so both
@@ -355,7 +422,19 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running, start_pan
     report names what started and how to stop it - a daemon the operator owns
     but cannot find is what costs trust, not a started process.
     """
-    command = _resident_command(root)
+    command = _resident_command(root) if command is _UNSET else command
+    if command is None:
+        # No command a fresh shell would resolve to THIS install.
+        # Declining is the honest answer: a pane that exits
+        # immediately looks like a product fault, and a pane
+        # running somebody else's copy is worse.
+        console.say()
+        console.say("This installation has no launcher a new shell")
+        console.say("would resolve to it, so the bridge will not be")
+        console.say("started from here. Install it with pipx or into")
+        console.say("a venv, then start it by its absolute path.")
+        summary["resident"] = "unsupported"
+        return
     title = f"\U0001F4EE {pathlib.Path(root).name} bridge \u2014 DO NOT CLOSE"
 
     console.say()

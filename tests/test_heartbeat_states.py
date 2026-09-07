@@ -64,6 +64,6 @@ class TheHeartbeatSaysWhatKindOfAlive(unittest.TestCase):
         """The reason is a code an operator can act on, not a message that
         might carry a chat id, a body, or a token into a health file."""
         loop._write_heartbeat(self.path, state="degraded",
-                              reason="throttled_429 chat=1460856861 body=hello")
-        self.assertNotIn("1460856861", self.path.read_text(encoding="utf-8"))
+                              reason="throttled_429 chat=424242424 body=hello")
+        self.assertNotIn("424242424", self.path.read_text(encoding="utf-8"))
         self.assertNotIn("hello", self.path.read_text(encoding="utf-8"))

@@ -78,6 +78,13 @@ class Base(unittest.TestCase):
         kw.setdefault("bridge_running", lambda root: False)
         kw.setdefault("start_pane", lambda title, command: (_ for _ in ()).throw(
             AssertionError("start_pane reached without an explicit test override")))
+        # A deterministic launcher. Resolving the real one runs a subprocess
+        # and depends on whether alb is installed for whichever interpreter is
+        # running the suite - so these tests would pass or fail by accident of
+        # environment. The resolution itself is covered where it belongs, in
+        # tests/test_resident_launch.py, against a real shell.
+        kw.setdefault("resident_command",
+                      "/opt/alb/venv/bin/alb --config /opt/r/bridge.env --root /opt/r")
         console = ScriptedConsole(answers, list(secrets))
         result = wizard.init(self.root, console, **kw)
         return console, result
@@ -303,14 +310,34 @@ class TheMailboxQuestionIsSmallFirst(Base):
         self.assertEqual(result["mode"], "standalone")
         self.assertFalse(any("helper" in q.lower() for q in console.asked))
 
-    def test_the_examples_are_not_this_machine(self):
+    def test_the_shipped_examples_are_not_this_machine(self):
         """A shipped example is a path a stranger reads. Ours would either
         leak the team's layout into a repo that may go public, or be
-        confidently wrong on their disk."""
+        confidently wrong on their disk.
+
+        This reads the FILES, which is what the claim is about. It used to
+        read the wizard transcript instead, and that became wrong the moment
+        the resident command started naming the running installation: an
+        absolute path on the operator's own machine is the correct output,
+        not a leak, and a test that forbids it would push us to print
+        something less true.
+        """
+        root = pathlib.Path(__file__).resolve().parents[1] / "examples"
+        for path in sorted(root.iterdir()):
+            if not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8")
+            for leak in ("shared-" "brain", "grok-build", "simon" "ai"):
+                with self.subTest(file=path.name, leak=leak):
+                    self.assertNotIn(leak, text)
+
+    def test_the_transcript_does_not_leak_the_teams_layout(self):
+        """Separate claim, still worth keeping: whatever setup prints about
+        THIS machine is the operator's own business, but our internal names
+        have no reason to appear in it."""
         console, _ = self.run_init(answers=["y", "", "print", ""])
-        transcript = console.transcript
-        for leak in ("shared-" "brain", "grok-build", "simon" "ai", "/Users/"):
-            self.assertNotIn(leak, transcript)
+        for leak in ("shared-" "brain", "grok-build"):
+            self.assertNotIn(leak, console.transcript)
 
 
 class TheHelperIsAskedForOnlyWhenMissing(Base):
@@ -387,6 +414,8 @@ class TheResidentOffer(Base):
 
     def _init(self, answers, started=None, **kw):
         started = started if started is not None else []
+        kw.setdefault("resident_command",
+                      "/opt/alb/venv/bin/alb --config /opt/r/bridge.env --root /opt/r")
         kw.setdefault("cmux_born", lambda: True)
         kw.setdefault("bridge_running", lambda root: False)
         kw.setdefault("start_pane", lambda title, command: started.append((title, command)) or "SURFACE-NEW")
@@ -396,7 +425,9 @@ class TheResidentOffer(Base):
         return console, result, started
 
     def test_yes_starts_the_bridge_in_a_new_pane(self):
-        console, result, started = self._init(["n", "print", "AGENT-PANE", "y"])
+        command = f"/opt/alb/venv/bin/alb --config {self.root}/bridge.env --root {self.root}"
+        console, result, started = self._init(["n", "print", "AGENT-PANE", "y"],
+                                              resident_command=command)
         self.assertEqual(len(started), 1)
         title, command = started[0]
         self.assertIn("DO NOT CLOSE", title)
@@ -407,7 +438,8 @@ class TheResidentOffer(Base):
         """Consent to a named thing, not to "start services?"."""
         console, _, started = self._init(["n", "print", "AGENT-PANE", "y"])
         transcript = console.transcript
-        self.assertIn("alb --config", transcript[:transcript.index("It can start now")])
+        self.assertIn("/opt/alb/venv/bin/alb --config",
+                      transcript[:transcript.index("It can start now")])
 
     def test_the_report_names_the_surface_and_the_stop_path(self):
         console, _, _ = self._init(["n", "print", "AGENT-PANE", "y"])
@@ -444,7 +476,7 @@ class TheResidentOffer(Base):
         StartingABridgeThatCanReceiveNothing for the empty case."""
         console, _, started = self._init(
             ["n", "read", "", "1", "AGENT-PANE", ""],
-            chat_id_reader=lambda token: [{"chat_id": "1460856861",
+            chat_id_reader=lambda token: [{"chat_id": "424242424",
                                            "label": "you"}])
         self.assertEqual(len(started), 1)
 
@@ -1098,14 +1130,12 @@ class TheStartedBridgeIsTHISInstallation(Base):
     """
 
     def _command(self, **kw):
-        kw.setdefault("cmux_born", lambda: True)
-        started = []
-        kw.setdefault("start_pane",
-                      lambda title, command: started.append(command) or "S-1")
-        panes = [{"id": "PANE-1", "label": "agent", "notifier": "cmux"}]
-        console, _result = self.run_init(["n", "print", "PANE-1", "y"],
-                                         panes=panes, **kw)
-        return started[0], console.transcript
+        """Straight to the builder. What a shell then DOES with the string is
+        a different question, answered in tests/test_resident_launch.py by
+        running it."""
+        kw.setdefault("script_exists", lambda path: True)
+        command = wizard._resident_command(self.root, **kw)
+        return command, command
 
     def test_the_command_is_an_absolute_path(self):
         command, _transcript = self._command()
@@ -1131,7 +1161,8 @@ class TheStartedBridgeIsTHISInstallation(Base):
         """Source checkouts and some install shapes have no console script.
         The interpreter is still absolute and still this installation."""
         from alb.setup import wizard
-        resolved = wizard._resident_command("/tmp/r", script_exists=lambda p: False)
+        resolved = wizard._resident_command("/tmp/r", script_exists=lambda p: False,
+                                            importable=lambda exe: True)
         self.assertIn("-m alb", resolved)
         self.assertTrue(resolved.startswith("/"), resolved)
 
@@ -1171,3 +1202,164 @@ class StartingABridgeThatCanReceiveNothing(Base):
         """Not a refusal. An operator who means it can still start one."""
         _transcript, _result, started = self._offer(["n", "print", "P1", "y"])
         self.assertEqual(len(started), 1)
+
+
+class TheCommandSurvivesAShell(Base):
+    """The command is handed to a shell, so it has to be shell-correct.
+
+    Built by string interpolation it was not: a root containing a space split
+    into two arguments and argparse rejected it, and an interpreter path with
+    a space failed to execute at all. Both are ordinary on macOS, where a
+    home directory can be anything the person is called.
+
+    Reproduced through a real `/bin/sh` rather than by reading the string.
+    """
+
+    def _command(self, root, **kw):
+        from alb.setup import wizard
+        return wizard._resident_command(root, **kw)
+
+    def test_a_root_with_spaces_stays_one_argument(self):
+        import shlex
+        command = self._command("/tmp/My Bridge/root",
+                                script_exists=lambda p: True)
+        self.assertIn("/tmp/My Bridge/root", shlex.split(command))
+
+    def test_an_executable_with_spaces_stays_one_argument(self):
+        import shlex, sys
+        command = self._command("/tmp/r", script_exists=lambda p: True,
+                                executable="/opt/My Tools/venv/bin/python")
+        self.assertEqual(shlex.split(command)[0], "/opt/My Tools/venv/bin/alb")
+
+    def test_the_config_path_is_quoted_too(self):
+        import shlex
+        command = self._command("/tmp/My Bridge/root",
+                                script_exists=lambda p: True)
+        self.assertIn("/tmp/My Bridge/root/bridge.env", shlex.split(command))
+
+
+class TheOfferUsesTheBuilder(Base):
+    """The builder can be right and unreachable.
+
+    Making the resident command injectable for tests removed the last thing
+    that exercised the real call site - and the mutation gate said so
+    immediately: the pin for this property stopped killing anything. A
+    default that quietly stopped calling the builder would put the bare name
+    back with every test still green.
+    """
+
+    def test_the_default_path_asks_the_builder(self):
+        from unittest import mock
+        from alb.setup import wizard
+        with mock.patch.object(wizard, "_resident_command",
+                               return_value="/sentinel/alb --root /r") as builder:
+            summary = {"created": [], "kept": [], "ring": "configured",
+                       "delivers": True}
+            console = ScriptedConsole(["n"])
+            wizard._offer_resident(console, self.root, summary,
+                                   lambda: False, lambda root: False,
+                                   lambda t, c: "S")
+        builder.assert_called_once_with(self.root)
+        self.assertIn("/sentinel/alb", console.transcript)
+
+
+class AutostartRefusesWhatItCannotStart(Base):
+    """`<interpreter> -m alb` was offered as the fallback for install shapes
+    with no console script. It does not work.
+
+    A source checkout is importable in THIS process because of the path this
+    process was started with. A new shell inherits none of that, so the
+    command produced `No module named alb` — an autostart that reliably fails,
+    offered with the same confidence as one that works.
+
+    Where the installation cannot be named in a way a fresh shell will
+    resolve, the honest move is to decline the offer and say why, not to
+    guess.
+    """
+
+    def test_an_installed_package_still_uses_its_script(self):
+        from alb.setup import wizard
+        command = wizard._resident_command("/tmp/r", script_exists=lambda p: True)
+        self.assertTrue(command.startswith("/"), command)
+
+    def test_a_source_checkout_gets_no_command_rather_than_a_broken_one(self):
+        from alb.setup import wizard
+        self.assertIsNone(
+            wizard._resident_command("/tmp/r", script_exists=lambda p: False,
+                                     importable=lambda exe: False))
+
+    def test_an_interpreter_that_can_import_it_may_use_the_module(self):
+        import shlex
+        from alb.setup import wizard
+        command = wizard._resident_command(
+            "/tmp/r", script_exists=lambda p: False,
+            importable=lambda exe: True, executable="/venv/bin/python")
+        self.assertEqual(shlex.split(command)[:3],
+                         ["/venv/bin/python", "-m", "alb"])
+
+    def test_the_offer_is_declined_when_there_is_no_safe_command(self):
+        """No command means no start and no pretending: the operator is told
+        the install shape cannot be auto-started, not left with a pane that
+        exits immediately."""
+        from alb.setup import wizard
+        started = []
+        summary = {"created": [], "kept": [], "ring": "configured", "delivers": True}
+        console = ScriptedConsole(["y"])
+        wizard._offer_resident(console, self.root, summary,
+                               lambda: True, lambda root: False,
+                               lambda t, c: started.append(c) or "S",
+                               command=None)
+        self.assertEqual(started, [])
+        self.assertEqual(summary["resident"], "unsupported")
+
+
+class TheWarningReadsTheSAVEDAllowlist(Base):
+    """`delivers` was computed from the answers given THIS run, not from the
+    file that ends up on disk.
+
+    On a re-run those differ, and both directions are wrong. An existing
+    deny-all file is KEPT - correctly, nothing is clobbered - but if setup
+    read a chat id this time round, the summary said deliveries were possible
+    and the start offer defaulted to yes, while the saved gate went on denying
+    everyone. The converse is just as bad: an existing file that already
+    allows someone, re-run through the `print` route, was warned about as
+    deny-all and defaulted to no.
+
+    The gate that matters is the one on disk after keep-or-write. That is what
+    gets read.
+    """
+
+    def _rerun(self, existing, answers, **kw):
+        self.root.mkdir(parents=True, exist_ok=True)
+        allow = self.root / "allowlist.json"
+        allow.write_text(existing, encoding="utf-8")
+        allow.chmod(0o600)
+        (self.root / "bridge.env").write_text("ALB_TOKEN=1:T\n", encoding="utf-8")
+        (self.root / "bridge.env").chmod(0o600)
+        started = []
+        kw.setdefault("cmux_born", lambda: True)
+        kw.setdefault("panes", [{"id": "P1", "label": "a", "notifier": "cmux"}])
+        console, result = self.run_init(
+            answers, start_pane=lambda t, c: started.append(c) or "S-1", **kw)
+        return console, result, started
+
+    def test_a_kept_deny_all_is_not_reported_as_deliverable(self):
+        console, result, started = self._rerun(
+            '{"chats": []}', ["n", "read", "", "1", "P1", ""],
+            chat_id_reader=lambda token: [{"chat_id": "424242424"}])
+        self.assertFalse(result["delivers"])
+        self.assertEqual(started, [])
+
+    def test_a_kept_populated_allowlist_is_not_warned_about(self):
+        console, result, started = self._rerun(
+            '{"chats": ["424242424"]}', ["n", "print", "P1", ""])
+        self.assertTrue(result["delivers"])
+        self.assertNotIn("denies everyone, so a", console.transcript)
+        self.assertEqual(len(started), 1)
+
+    def test_an_unreadable_allowlist_is_treated_as_delivering_nothing(self):
+        """Fail closed: if we cannot tell, do not start by default."""
+        console, result, started = self._rerun(
+            "{not json", ["n", "print", "P1", ""])
+        self.assertFalse(result["delivers"])
+        self.assertEqual(started, [])

@@ -495,8 +495,22 @@ EXTRA = {
     # meeting a deny-all allowlist - neither of which a fixture had done.
     "the started bridge is THIS installation": (
         WIZARD, "tests.test_setup",
-        "    command = _resident_command(root)",
+        "        argv = [str(script)]",
+        '        argv = ["alb"]'),
+    "the offer asks the builder rather than carrying its own literal": (
+        WIZARD, "tests.test_setup",
+        "    command = _resident_command(root) if command is _UNSET else command",
         '    command = f"alb --config {root}/bridge.env --root {root}"'),
+    # Read the file that will be read, not the answers given this run.
+    "the start warning reads the SAVED allowlist": (
+        WIZARD, "tests.test_setup",
+        '    summary["delivers"] = _allowlist_delivers(allow_path)',
+        '    summary["delivers"] = bool(chats)'),
+    # A clean environment, or the import question answers itself.
+    "importability is asked of a fresh interpreter": (
+        WIZARD, "tests.test_resident_launch",
+        '    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}',
+        "    env = dict(os.environ)"),
     "an empty allowlist does not start by default": (
         WIZARD, "tests.test_setup",
         '        default = "n"\n'
