@@ -296,3 +296,96 @@ class EventOrderIsNumericNotAlphabetical(Base):
         letter_id = self.compose()
         self._churn(letter_id, ["sending", "throttled"] * 4 + ["sending", "sent"])
         self.assertNotIn(letter_id, outbound.reconcile(self.root / "state"))
+
+
+class ReconcileWalksOutbox(Base):
+    """The outbound letter is
+    the CLAIM, written and fsynced BEFORE its first receipt. A crash in that
+    window leaves a letter with no receipts dir - invisible to the receipts-only
+    walk. reconcile(state, outbox) closes that: a stem with NO receipts at all
+    is a pre-receipt orphan -> unsent. A terminal letter is kept out of the
+    verdict on purpose, so its absence must NOT be read as an orphan.
+    This is a library primitive; the startup pass takes no outbox."""
+
+    def _orphan_claim(self, body="the reply"):
+        # Crash after the O_EXCL claim, before the first receipt: remove this
+        # letter's receipts dir but leave the receipts parent (other letters).
+        import shutil
+        letter_id = self.compose(body=body)
+        shutil.rmtree(self.root / "state" / "receipts" / letter_id)
+        return letter_id
+
+    def test_receipts_only_walk_is_blind_to_the_orphan(self):
+        # Documents the gap the fix closes: without the outbox, the claim is
+        # invisible to reconcile.
+        self._orphan_claim()
+        self.assertEqual(outbound.reconcile(self.root / "state"), {})
+
+    def test_outbox_walk_classifies_the_orphan_unsent(self):
+        letter_id = self._orphan_claim()
+        verdicts = outbound.reconcile(self.root / "state", self.mail / "outbox")
+        self.assertEqual(verdicts, {letter_id: "unsent"})
+
+    def test_orphan_with_no_receipts_parent_is_classified(self):
+        # The very first letter, crashing before its first receipt, leaves no
+        # receipts directory at all - the parent never gets created.
+        import shutil
+        letter_id = self.compose()
+        shutil.rmtree(self.root / "state" / "receipts")
+        self.assertFalse((self.root / "state" / "receipts").exists())
+        self.assertEqual(outbound.reconcile(self.root / "state"), {})
+        verdicts = outbound.reconcile(self.root / "state", self.mail / "outbox")
+        self.assertEqual(verdicts, {letter_id: "unsent"})
+
+    def test_composed_only_letter_reads_unsent_once(self):
+        # A composed-only letter WITH its receipt still reads unsent exactly
+        # once; the outbox pass must not add a second entry or duplicate it.
+        letter_id = self.compose()
+        verdicts = outbound.reconcile(self.root / "state", self.mail / "outbox")
+        self.assertEqual(verdicts, {letter_id: "unsent"})
+
+    def test_terminal_letters_are_not_reclassified_by_the_outbox_walk(self):
+        # A terminal state is represented by ABSENCE from the
+        # receipts verdict, not by an entry. The outbox walk must not read that
+        # absence as "no receipts" and stamp a delivered/closed letter unsent.
+        import shutil
+        for outcome in ("sent", "refused", "ambiguous", "dead"):
+            with self.subTest(outcome=outcome):
+                lid = self.compose(body=f"body-{outcome}")
+                try:
+                    if outcome == "sent":
+                        outbound.record_event(self.root / "state", lid, "sending")
+                        outbound.record_event(self.root / "state", lid, "sent",
+                                              platform_message_id="1")
+                    else:
+                        outbound.record_event(self.root / "state", lid, outcome)
+                    without = outbound.reconcile(self.root / "state")
+                    withbox = outbound.reconcile(self.root / "state",
+                                                 self.mail / "outbox")
+                    self.assertEqual(withbox, without,
+                                     f"{outcome}: outbox walk changed the verdict")
+                finally:
+                    (self.mail / "outbox" / f"{lid}.md").unlink(missing_ok=True)
+                    shutil.rmtree(self.root / "state" / "receipts" / lid,
+                                  ignore_errors=True)
+
+    def test_directory_or_symlink_named_md_is_not_a_claim(self):
+        # Only an ordinary file is a claim. A directory or a
+        # symlink named "*.md" in the outbox must be ignored, not classified.
+        outbox = self.mail / "outbox"
+        (outbox / "directory.md").mkdir()
+        (outbox / "dangling.md").symlink_to(outbox / "does-not-exist")
+        real = outbox / "target.md"
+        real.write_text("x", encoding="utf-8")
+        (outbox / "link-to-real.md").symlink_to(real)
+        verdicts = outbound.reconcile(self.root / "state", outbox)
+        self.assertEqual(verdicts, {"target": "unsent"})
+
+    def test_the_claim_persists_so_a_resend_meets_already_claimed(self):
+        # Visibility is not recovery: the claim persists, so a fresh send for
+        # the same source meets AlreadyClaimed at compose. Guards against anyone
+        # "fixing" visibility by faking a send path. (compose-level, not the CLI
+        # entry point.)
+        self._orphan_claim()
+        with self.assertRaises(AlreadyClaimed):
+            self.compose()
