@@ -125,6 +125,10 @@ EXTRA = {
         OUTBOUND, "tests.test_outbound",
         '        verdicts[d.name] = "ambiguous" if "sending" in events else "unsent"',
         '        verdicts[d.name] = "unsent"'),
+    "reconcile walks the outbox for orphan claims": (
+        OUTBOUND, "tests.test_outbound",
+        '                verdicts[f.stem] = "unsent"',
+        '                pass'),
     "the correspondent store is authoritative over the derivation": (
         OUTBOUND, "tests.test_outbound",
         "    if origin in table:\n        return table[origin]",

@@ -162,19 +162,35 @@ TERMINAL = {"sent", "refused", "ambiguous", "dead"}
 DEFERRED = {"throttled"}
 
 
-def reconcile(state):
+def reconcile(state, outbox=None):
     """Startup pass: classify every outbound letter's delivery state.
 
     in-flight (sending, no terminal) -> ambiguous: code cannot prove whether
-    the syscall reached the platform. composed-only -> unsent (safe to
-    compose the send again; the letter already exists and is the claim).
+    the syscall reached the platform. composed-only -> unsent: the letter
+    already exists and is the claim, but the CLI cannot finish it (a retype
+    meets AlreadyClaimed) - recovering an unsent claim is Piece A's work.
     Terminal -> clean, not reported.
+
+    When ``outbox`` is given, an orphan claim - an outbound letter with no
+    receipts yet, left by a crash between its O_EXCL create and its first
+    recorded event - is also reported as unsent, so that window is not
+    invisible to the classifier. A stem is an orphan only when it has NO
+    receipts at all: a terminal letter is kept out of `verdicts` on purpose,
+    so its absence must NOT be read as "no receipts" (that would stamp a
+    delivered letter unsent).
+
+    This is a library primitive - reporting a claim unsent makes it VISIBLE to
+    a caller, not sendable: the CLI still cannot finish an unsent claim (a
+    retype meets AlreadyClaimed). Surfacing orphans to the operator at startup,
+    and completing one, are Piece A's work; the startup pass does NOT pass an
+    outbox here.
     """
     receipts = pathlib.Path(state) / "receipts"
     verdicts = {}
-    if not receipts.is_dir():
-        return verdicts
-    for d in receipts.iterdir():
+    # An absent receipts dir is not an early return any more: the outbox walk
+    # below still has to run, so the first-ever letter that crashed before its
+    # first receipt is not missed. The loop body is unchanged.
+    for d in (receipts.iterdir() if receipts.is_dir() else []):
         events = _history(d)
         if any(e in TERMINAL for e in events):
             continue
@@ -185,6 +201,29 @@ def reconcile(state):
             verdicts[d.name] = "throttled"
             continue
         verdicts[d.name] = "ambiguous" if "sending" in events else "unsent"
+    # The outbound letter is the claim,
+    # created and fsynced BEFORE its first receipt. A crash in that window
+    # leaves a letter with no receipts dir - invisible to the walk above. No
+    # receipt means record_event never ran, so nothing was sent: the claim is
+    # unsent, the same verdict a composed-only letter earns. Only a stem with
+    # NO receipts at all is added (see the guard below): a terminal letter's
+    # deliberate absence from the verdict is not read as missing receipts.
+    if outbox is not None:
+        outbox = pathlib.Path(outbox)
+        if outbox.is_dir():
+            for f in outbox.iterdir():
+                # An ordinary .md file only: a directory or a symlink named
+                # "*.md" is not a claim.
+                if f.suffix != ".md" or f.is_symlink() or not f.is_file():
+                    continue
+                # A stem with ANY receipts dir is already represented - by its
+                # verdict, or by the deliberate terminal EXCLUSION that keeps a
+                # sent/refused/ambiguous/dead letter OUT of `verdicts`. Only a
+                # stem with no receipts at all is a pre-receipt orphan:
+                # absence from `verdicts` is not absence of receipts.
+                if (receipts / f.stem).exists():
+                    continue
+                verdicts[f.stem] = "unsent"
     return verdicts
 
 
@@ -192,8 +231,10 @@ def reconcile_at_startup(state):
     """The bridge's first act on rising (grok's flag: reconcile existed and
     was never called). Every in-flight outbound letter dead-letters for a
     human and gains a terminal 'dead' event, making the pass idempotent -
-    the next restart has nothing to re-flag. Composed-only letters are left
-    alone: safely composable again, nobody's emergency."""
+    the next restart has nothing to re-flag. Composed-only (unsent) letters are
+    left alone: the claim is preserved but the CLI cannot finish it (a retype
+    meets AlreadyClaimed) - recovering one is Piece A's work, nobody's
+    emergency here."""
     state = pathlib.Path(state)
     flagged = []
     for letter_id, verdict in reconcile(state).items():
