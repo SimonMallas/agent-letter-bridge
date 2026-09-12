@@ -132,6 +132,40 @@ python3 -m venv ~/.alb/venv && ~/.alb/venv/bin/pip install .
 
 ---
 
+## If your agent already has its own messenger
+
+Some agent runtimes ship a messenger of their own — a gateway process that holds a
+Telegram bot, an official chat plugin, a desktop app. Agent Letter Bridge is **not**
+that messenger, and the two must never share a bot token *at the same time*: the
+platform allows one consumer per token, so a second poller on the messenger's token is
+a `409` conflict, not a merge. If you keep the built-in messenger running, the bridge
+needs its own bot. If you stop the built-in messenger for good — stopped, and unable to
+respawn — the known-consumer cutover below lets the bridge take over that token.
+
+The bridge's job is to turn a phone message into a durable letter in the inbox of the
+pane you already work in, and then ring that pane. The built-in messenger keeps its own
+delivery route: the bridge does not synchronize the messenger's conversation with the
+working pane, and nothing routes the pane's letters back into the messenger. Two routes,
+each landing in a different place, unless you deliberately wire them together.
+
+So, for an agent like this:
+
+1. Create a **new** bot for the bridge while the built-in messenger stays running.
+   Reuse its token only through the cutover path below, after that consumer is stopped
+   and cannot respawn.
+2. Allowlist yourself and configure the required ring. For multiplexer delivery, run
+   the bridge inside the chosen multiplexer, exactly as for any other agent.
+3. **Name the two bots apart** in the phone. Two bots under one agent name is how a
+   message "goes unanswered": it went to the route that does not reach the pane.
+4. Talk to the bridge's bot when you mean the working terminal; talk to the built-in
+   bot only when you mean the messenger's own route. If you want one, keep the bridge
+   and stop or clearly label the other — the human's call, not the agent's.
+5. On the agent's side the reply verb is the bridge's (`alb --reply-to <letter-id>`),
+   not the letterbox's (`bus reply`). Mixing them acknowledges a human on the internal
+   bus, or files a letter without sending anything.
+
+---
+
 ## Step 3 — ASK: the bot token
 
 > "I need a bot token. In Telegram, message @BotFather, send `/newbot`, and
