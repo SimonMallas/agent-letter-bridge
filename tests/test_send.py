@@ -5,6 +5,7 @@ here is a reply to a letter that already exists on disk.
 """
 import json
 import pathlib
+import stat
 import sys
 import tempfile
 import unittest
@@ -73,7 +74,7 @@ class BoundedReply(unittest.TestCase):
                 self.staged = uid
 
         loop.poll_once(OnePlatform(), self.inbox, self.root / "delivered.json",
-                       self.allow)
+                       self.allow, state=self.state)
         # Pick the POLLER's letter explicitly. setUp also publishes one, and
         # sorting picked between them by a random suffix - so this test passed
         # by resolving the hand-built fixture instead of the real letter,
@@ -104,6 +105,71 @@ class BoundedReply(unittest.TestCase):
         reply.send_reply(sender, self.inbox, self.state, self.allow,
                          letter_id, "a reply")
         self.assertEqual(sender.calls[0][0], "8675309")
+
+    def test_new_letter_has_no_raw_chat_id(self):
+        from alb.poller import loop
+
+        class OnePlatform:
+            def fetch(self, offset=None):
+                return [{"update_id": 9, "chat_id": "8675309", "text": "hi"}]
+
+            def ack(self, uid):
+                pass
+
+        loop.poll_once(OnePlatform(), self.inbox, self.root / "delivered.json",
+                       self.allow, state=self.state)
+        letter_id = [p.stem for p in self.inbox.glob("*-u*.md")][0]
+        blob = (self.inbox / f"{letter_id}.md").read_text(encoding="utf-8")
+        self.assertNotIn("telegram_chat_id:", blob)
+        self.assertNotIn("8675309", blob)
+        sender = FakeSender()
+        reply.send_reply(sender, self.inbox, self.state, self.allow,
+                         letter_id, "a reply")
+        self.assertEqual(sender.calls[0][0], "8675309")
+        table = json.loads((self.state / "correspondents.json").read_text())
+        self.assertEqual(stat.S_IMODE((self.state / "correspondents.json").stat().st_mode),
+                         0o600)
+        self.assertNotIn("8675309", blob)
+        salt = (self.state / "correspondent-salt").read_text().strip()
+        self.assertNotIn(salt, blob)
+
+    def test_old_letter_raw_chat_id_fallback_still_replies(self):
+        letter_id = store.publish(self.inbox, "legacy", {"telegram_chat_id": "8675309"})
+        sender = FakeSender()
+        reply.send_reply(sender, self.inbox, self.state, self.allow,
+                         letter_id, "legacy reply")
+        self.assertEqual(sender.calls[0][0], "8675309")
+
+    def test_present_but_unresolved_correspondent_refuses_raw_fallback(self):
+        meta = {"correspondent": "deadbeefdeadbeef", "telegram_chat_id": "8675309"}
+        self.assertIsNone(reply.destination(meta, self.state))
+
+    def test_empty_correspondent_field_is_present_unresolved(self):
+        meta = {"correspondent": "", "telegram_chat_id": "8675309"}
+        self.assertIsNone(reply.destination(meta, self.state))
+
+    def test_non_telegram_origin_does_not_route_telegram(self):
+        (self.state / "correspondents.json").write_text(
+            json.dumps({"other:8675309": "abcdabcdabcdabcd"}), encoding="utf-8")
+        meta = {"correspondent": "abcdabcdabcdabcd", "telegram_chat_id": "8675309"}
+        self.assertIsNone(reply.destination(meta, self.state))
+
+    def test_injected_raw_chat_id_cannot_override_correspondent(self):
+        from alb.poller import loop
+
+        class OnePlatform:
+            def fetch(self, offset=None):
+                return [{"update_id": 11, "chat_id": "8675309", "text": "hi"}]
+
+            def ack(self, uid):
+                pass
+
+        loop.poll_once(OnePlatform(), self.inbox, self.root / "delivered.json",
+                       self.allow, state=self.state)
+        letter_id = [p.stem for p in self.inbox.glob("*-u*.md")][0]
+        stored = store.resolve(self.inbox, letter_id)
+        stored.meta["telegram_chat_id"] = "0000000"
+        self.assertEqual(reply.destination(stored.meta, self.state), "8675309")
 
     def test_the_destination_comes_from_the_stored_letter(self):
         """Never remembered, never configured, never inferred."""
@@ -376,6 +442,33 @@ class AThrottledSendCanBeResumed(LetterFirstOutbound):
             self._send(self.Throttling())
         with self.assertRaises(outbound.AlreadyClaimed):
             self._send(self.Throttling())
+
+    def test_resume_after_throttle_on_polled_letter(self):
+        from alb.poller import loop
+
+        class OnePlatform:
+            def fetch(self, offset=None):
+                return [{"update_id": 21, "chat_id": "8675309", "text": "hi"}]
+
+            def ack(self, uid):
+                pass
+
+        loop.poll_once(OnePlatform(), self.inbox, self.root / "delivered.json",
+                       self.allow, state=self.state)
+        letter_id = [p.stem for p in self.inbox.glob("*-u*.md")][0]
+        blob = (self.inbox / f"{letter_id}.md").read_text(encoding="utf-8")
+        self.assertNotIn("telegram_chat_id:", blob)
+        with self.assertRaises(reply.Throttled):
+            reply.send_reply(
+                self.Throttling(), self.inbox, self.state, self.allow,
+                letter_id, "a reply", outbox=self.outbox, agent="codex")
+        sender = self.Working()
+        out_id = reply.resume_throttled(
+            sender, self.inbox, self.state, self.allow,
+            f"reply-{letter_id}", outbox=self.outbox)
+        self.assertEqual(len(sender.sent), 1)
+        self.assertEqual(sender.sent[0][0], "8675309")
+        self.assertTrue(any("sent" in name for name in self.events(out_id)))
 
     def test_resume_sends_the_waiting_letter_without_reclaiming(self):
         with self.assertRaises(reply.Throttled):

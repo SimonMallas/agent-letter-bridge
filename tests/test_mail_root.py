@@ -11,6 +11,7 @@ import io
 import json
 import pathlib
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -50,7 +51,7 @@ class MailRootIsLettersOnly(unittest.TestCase):
     def _cycle(self, platform, transport=None):
         with mock.patch.object(run, "_bus_ring") as ring:
             run.run_once(platform, transport or NoTransport(), "", self.root,
-                         mail_root=self.mail, recipient="grok-build")
+                         mail_root=self.mail, recipient="research-bot")
         return ring
 
     def test_the_default_mail_root_is_the_state_root(self):
@@ -101,7 +102,7 @@ class MailRootIsLettersOnly(unittest.TestCase):
         ring = self._cycle(FakePlatform([update(1, "111", "hi")]))
         ring.assert_called_once()
         recipient, kind, letter_id = ring.call_args[0][:3]
-        self.assertEqual(recipient, "grok-build")
+        self.assertEqual(recipient, "research-bot")
         self.assertEqual(kind, "info")
         # And the id of the letter that was actually published. Asserting only
         # the recipient and type would pass while ringing about the wrong
@@ -139,7 +140,7 @@ class ReplyFindsLettersWhereTheyLive(unittest.TestCase):
     def _publish(self):
         with mock.patch.object(run, "_bus_ring"):
             run.run_once(FakePlatform([update(1, "111", "hi")]), None, "",
-                         self.root, mail_root=self.mail, recipient="grok-build")
+                         self.root, mail_root=self.mail, recipient="research-bot")
         return [p.stem for p in (self.mail / "inbox").glob("*.md")][0]
 
     def test_a_reply_finds_a_letter_in_the_mailbox(self):
@@ -198,7 +199,7 @@ class ReplyThroughTheBinary(unittest.TestCase):
 
         with mock.patch.object(run, "_bus_ring"):
             run.run_once(FakePlatform([update(1, "111", "hi")]), None, "",
-                         self.root, mail_root=self.mail, recipient="grok-build")
+                         self.root, mail_root=self.mail, recipient="research-bot")
         letter_id = [p.stem for p in (self.mail / "inbox").glob("*.md")][0]
 
         sent = []
@@ -231,27 +232,85 @@ class TheHealthFileMustNotLie(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def _cycle_with_helper_saying(self, output):
-        completed = mock.Mock(returncode=0, stdout=output, stderr="")
-        with mock.patch.object(run.subprocess, "run", return_value=completed):
+    def _cycle_with_helper_saying(self, output, *, side_effect=None):
+        if side_effect is None:
+            completed = mock.Mock(returncode=0, stdout=output, stderr="")
+            runner = mock.Mock(return_value=completed)
+        else:
+            runner = mock.Mock(side_effect=side_effect)
+        with mock.patch.object(run.subprocess, "run", runner), \
+             mock.patch.object(run.time, "sleep"):
             run.run_once(FakePlatform([update(1, "111", "hi")]),
                          None, "", self.root,
-                         mail_root=self.mail, recipient="grok-build")
-        return json.loads((self.root / "state" / "ring-health.json").read_text())
+                         mail_root=self.mail, recipient="research-bot")
+        record = json.loads((self.root / "state" / "ring-health.json").read_text())
+        return record, runner
 
     def test_a_submitted_knock_is_recorded_as_delivered(self):
-        record = self._cycle_with_helper_saying(
-            "bus: doorbell submitted to grok-build on SOME-UUID")
+        record, _ = self._cycle_with_helper_saying(
+            "bus: doorbell submitted to research-bot on SOME-UUID")
         self.assertEqual(record["state"], "ok")
 
     def test_no_live_surface_is_not_recorded_as_delivered(self):
-        record = self._cycle_with_helper_saying("bus: no_live_surface for grok-build")
+        record, runner = self._cycle_with_helper_saying(
+            "bus: doorbell no_live_surface unknown_participant for research-bot")
         self.assertEqual(record["state"], "failing")
-        self.assertIn("no_live_surface", record["reason"])
+        self.assertIn("surface not found", record["reason"])
+        self.assertEqual(runner.call_count, 1)
 
     def test_pasted_but_not_submitted_is_not_delivered(self):
-        record = self._cycle_with_helper_saying("bus: pasted_not_submitted")
+        record, _ = self._cycle_with_helper_saying("bus: pasted_not_submitted")
         self.assertEqual(record["state"], "failing")
+
+    def test_transient_timeout_retries_and_does_not_latch_failing(self):
+        ok = mock.Mock(
+            returncode=0,
+            stdout="bus: doorbell submitted to research-bot on SOME-UUID",
+            stderr="")
+        record, runner = self._cycle_with_helper_saying(
+            "", side_effect=[subprocess.TimeoutExpired("bus", 10), ok])
+        self.assertEqual(record["state"], "ok")
+        self.assertEqual(runner.call_count, 2)
+        self.assertTrue(list((self.mail / "inbox").glob("*.md")))
+
+    def test_persistent_timeout_is_failing_but_honest(self):
+        record, runner = self._cycle_with_helper_saying(
+            "", side_effect=subprocess.TimeoutExpired("bus", 10))
+        self.assertEqual(record["state"], "failing")
+        self.assertIn("timed out", record["reason"])
+        self.assertIn("unconfirmed", record["reason"])
+        self.assertNotIn("surface not found", record["reason"])
+        self.assertNotIn("surface valid", record["reason"])
+        self.assertEqual(runner.call_count, 3)
+        self.assertTrue(list((self.mail / "inbox").glob("*.md")))
+
+    def test_send_failed_with_timeout_suffix_is_not_a_timeout(self):
+        record, runner = self._cycle_with_helper_saying(
+            "bus: doorbell no_live_surface send_failed timeout=3s for research-bot")
+        self.assertEqual(record["state"], "failing")
+        self.assertEqual(record["reason"], "send_failed")
+        self.assertEqual(runner.call_count, 1)
+        self.assertTrue(list((self.mail / "inbox").glob("*.md")))
+
+    def test_surface_not_found_with_timeout_suffix_is_not_a_timeout(self):
+        record, runner = self._cycle_with_helper_saying(
+            "bus: doorbell no_live_surface surface_not_found timeout=3s for research-bot")
+        self.assertEqual(record["state"], "failing")
+        self.assertEqual(record["reason"], "surface not found")
+        self.assertEqual(runner.call_count, 1)
+
+    def test_pasted_not_submitted_outranks_timeout_text(self):
+        record, runner = self._cycle_with_helper_saying(
+            "bus: pasted_not_submitted timeout=3s for research-bot")
+        self.assertEqual(record["state"], "failing")
+        self.assertEqual(runner.call_count, 1)
+
+    def test_unknown_participant_is_surface_not_found(self):
+        record, runner = self._cycle_with_helper_saying(
+            "bus: doorbell no_live_surface unknown_participant for research-bot")
+        self.assertEqual(record["state"], "failing")
+        self.assertEqual(record["reason"], "surface not found")
+        self.assertEqual(runner.call_count, 1)
 
 
 class StandaloneIsUnchanged(unittest.TestCase):

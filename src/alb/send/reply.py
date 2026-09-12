@@ -92,10 +92,23 @@ class Throttled(Exception):
 DESTINATION_KEYS = ("telegram_chat_id", "chat_id")
 
 
-def destination(meta):
-    """The chat a reply goes to, read from the stored letter and nowhere else."""
-    for key in DESTINATION_KEYS:
-        value = meta.get(key)
+def destination(meta, state=None):
+    """The chat a reply goes to, named by the stored letter, never the agent.
+
+    New letters carry an opaque correspondent; the chat is resolved from the
+    operator's private correspondents.json. Old letters still name a raw
+    telegram_chat_id / chat_id; that fallback is for pre-change mail only.
+    """
+    if "correspondent" in meta:
+        key = meta.get("correspondent")
+        if not isinstance(key, str) or not key:
+            return None
+        if state is None:
+            return None
+        from alb.outbound import store as outbound
+        return outbound.origin_chat_for(state, key)
+    for field in DESTINATION_KEYS:
+        value = meta.get(field)
         if value:
             return value
     return None
@@ -196,7 +209,7 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
             continue
     if stored is None:
         raise store.NoSuchLetter(f"{letter_id}: no letter with this exact id")
-    chat_id = destination(stored.meta)
+    chat_id = destination(stored.meta, state)
 
     # Re-checked at send: the allowlist is enforced at BOTH ends.
     if not gate.allows(allowlist_path, chat_id):
@@ -332,7 +345,7 @@ def _resume_locked(sender, inbox, state, allowlist_path, out_id, outbox,
             f"immutable, so this would send the original text under your new "
             f"instruction. Resume with the original words, or wait for this "
             f"one to reach a terminal state before composing another.")
-    chat_id = destination(source.meta)
+    chat_id = destination(source.meta, state)
     if not chat_id:
         raise NotPermitted(f"{source_id}: the letter names no destination")
     # Gated again, deliberately: an allowlist can change between the first

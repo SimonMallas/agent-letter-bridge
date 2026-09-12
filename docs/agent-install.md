@@ -104,6 +104,25 @@ alb --help
 If `alb` is not found, run `pipx ensurepath` and report that the human needs a
 new shell — you cannot fix your own parent process's `PATH`.
 
+`alb --version` reports the version recorded at install time, not the code on
+disk. If the install is editable, a **fresh invocation** runs whatever the
+source tree holds when it starts — but a **process already running** (a
+resident bridge) holds the code it loaded when IT started, which may differ
+from both the tree now and the version string. So neither the number nor "the
+tree right now" tells you what a running process has actually loaded. Two
+different questions, two different checks:
+
+- *Is this install editable, and where does it point?* Read the install's
+  `direct_url.json` (under its `*.dist-info/`): an editable install records
+  `{"dir_info": {"editable": true}, "url": "file://…"}`, naming that it is
+  editable and the source **location**. (Being a checkout on a branch is not by
+  itself proof of an editable install; `direct_url.json` is, and `pip show`
+  won't always print an explicit "editable" verdict.) Note this tells you where
+  the code lives, not which bytes a resident has already loaded.
+- *What does the code in front of me actually carry?* Check the feature surface
+  — `alb --help` shows the flags the code exposes. To be sure a running
+  resident is on the current tree, restart it so it re-loads.
+
 If the human said this will run as a background service, use a venv instead and
 note the absolute path for their unit file:
 
@@ -120,6 +139,21 @@ python3 -m venv ~/.alb/venv && ~/.alb/venv/bin/pip install .
 > else, please revoke and re-issue the token first** — the platform allows one
 > consumer per token, and I cannot prove an old one isn't still being polled.
 > Then send the bot any message, so there is one for setup to find."
+
+"Revoke and re-issue" is the safe default *because* the previous consumer is
+usually unknown and unprovable. But if you **know** the current consumer —
+say a legacy poller you can point to and stop — reuse is clean: stop that
+consumer first, confirm it is down and not supervised into respawning, then
+reuse the same token. This is the cutover path. Its real gain over revoke-and-
+re-issue is **credential continuity** (the same token, no re-issue) and a
+**coordinated** handoff — you can point to the one consumer and prove it
+stopped, rather than trusting that an unknown one isn't still polling. It does
+NOT eliminate the swap gap: stopping the old consumer before starting the new
+one leaves a brief window where nothing is polling, so sequence it tightly and
+expect a short catch-up on start. (Message history and the chat survive either
+way — they live on the platform side.) Handing off a known consumer by
+agreement is a different risk from a token that "might" still be polled
+somewhere.
 
 You cannot do this step. BotFather is an interactive chat the human is in.
 
@@ -148,6 +182,14 @@ belongs to init, which sets the mode at creation.
 If they have no preference, say `print` is the more conservative default and
 let them confirm. **Do not choose silently.**
 
+One more thing decides this for you: `read` issues a `getUpdates` call, and
+the platform allows **one** consumer per token. If anything is *already*
+polling this bot — a legacy bridge, another install — `read` can collide
+with it (often a 409), and two consumers on one token make update
+ownership and recovery ambiguous. So if the token is already in use
+anywhere, choose `print` (or stop the other consumer first). `read` is only
+safe on a bot nothing else is polling.
+
 ---
 
 ## Step 5 — Run `alb init`
@@ -157,8 +199,18 @@ alb --init --root ~/.alb
 ```
 
 It is interactive and refuses to run without a terminal, so **you cannot pipe
-answers into it**. If you are not driving a terminal the human can see, hand
-them the command and the answers, and wait.
+answers into it** — a hidden token prompt needs a real tty. If you are
+driving a terminal the human can see, run it there. If you are an agent in a
+harness with no tty, you have two honest options: hand the human the command
+and the answers and wait, or drive `init` through a **pty** you allocate
+yourself (Python's `pty` module, or wrap the command in `script -q /dev/null`).
+If you drive a pty: match the prompts on **plain-text-stripped**
+output (the wizard's prompts carry ANSI escapes that defeat literal substring
+matching), and **stream the log incrementally** rather than buffering it —
+a harness timeout can kill the process after the files are already written,
+and a buffered log loses the evidence that it succeeded. The files land
+before the final "start now?" offer, so a lost tail does not mean a failed
+install; verify with `--doctor`, not with the transcript.
 
 It creates the state directory `0700`, `bridge.env` `0600`, and
 `allowlist.json` `0600` **denying everyone**. It will not overwrite anything
@@ -166,6 +218,13 @@ that already exists, and it reports what it kept.
 
 **Do not create these files yourself instead.** They have modes that matter and
 `init` sets them at creation, not afterwards.
+
+At the end, `init` offers to start the bridge for you. That offer begins
+polling **immediately** — which is the 409 the stuck-table later blames on
+the operator, if another consumer is still up. Decline it if you are mid-
+handoff or unsure whether the token is free; start the bridge yourself once
+you have confirmed nothing else is polling (Step 8.5). On an empty allowlist
+the offer already defaults to *not* starting, which is correct.
 
 ---
 
@@ -180,9 +239,14 @@ alb --doctor --root ~/.alb
   for the number their command returned and put **exactly that** in
   `~/.alb/allowlist.json` as `{"chats": ["<id>"]}`, then re-run `--doctor`.
 
-**If you do not have an id from the human, stop and ask.** An allowlist entry
-you found in a chat log, a git history, or another config file is not an
-allowlist entry — **and a placeholder is worse than nothing.** An agent
+**If you do not have an id from the human, stop and ask.** An id you *found* — dug out of a chat log, a git history, or an unrelated
+config file to move past this step — is not an allowlist entry, and a
+placeholder is worse than nothing. This is different from an id **the operator
+has explicitly supplied to this install's standing configuration**: that is a
+known, authorized destination, not a guess — and "nearby config exists" is
+not the same as "the operator supplied it here." The rule forbids *inferring*
+a destination; it does not forbid one the operator has deliberately given this
+install. When unsure which case you are in, ask — one sentence settles it. An agent
 following this document once wrote the literal string `YOUR_CHAT_ID_HERE`
 into the file to move past the step; fail-closed ate it silently, and the
 operator spent the next ten minutes debugging a "dead bot" that was working

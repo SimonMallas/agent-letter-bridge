@@ -51,12 +51,15 @@ invocation cannot put a second message on the wire. That bounds *sending*, not
 delivery — where the outcome is uncertain the letter is dead-lettered with the
 uncertainty recorded, rather than retried into a possible duplicate.
 
-**A reply channel, not an open-ended sending channel.** Every outbound message
-is tied to a stored incoming letter and goes back to that letter's chat, which
-is checked against the allowlist again at the moment of sending. There is no
-first-send command and no argument that names a recipient, so the bridge cannot
-open a conversation with anyone — it can only continue one that already exists,
-with someone already permitted.
+**Reply by default; initiating only by explicit, revocable grant.** Every reply
+is tied to a stored incoming letter and goes back to that letter's chat, checked
+against the allowlist again at the moment of sending. Starting a *new*
+conversation is a separate, narrower path: the bridge can open one only to a
+destination the operator has authorised with a grant it can revoke at any time,
+and even then only within a small daily and hourly budget with a cap on messages
+in flight. Without a grant the bridge still cannot originate contact with anyone;
+with one, it cannot originate contact anywhere the operator has not named, nor
+more often than the budget allows.
 
 What that does *not* claim: an agent still chooses which stored letter to
 answer and what to write in it, so this is not immunity to being persuaded into
@@ -99,7 +102,7 @@ plainly rather than letting this table imply more.
 | --- | --- | --- | --- |
 | Poller | untrusted | fetch, write letter, then ack | ring, notify, or touch a terminal |
 | Notifier | in-session | ring after a letter exists | carry message content in the ring |
-| Send helper | bounded | reply to a stored letter's origin | originate contact; send on allowlist miss; auto-retry |
+| Send helper | bounded | reply to an origin; initiate only on a live grant, within budget | send with no grant; exceed the budget; send on allowlist miss; auto-retry |
 | Watchdog | independent | read mirrored health, report | restart anything; depend on what it monitors |
 
 **Order is the invariant.** Letter to disk → *then* platform ack. A crash between
