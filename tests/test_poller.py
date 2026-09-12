@@ -47,7 +47,8 @@ class PollerBehaviour(unittest.TestCase):
         self.assertIn("from: telegram-bridge", text)
         self.assertIn("to: agent", text)
         self.assertIn("type: info", text)
-        self.assertIn("telegram_chat_id: 111", text)
+        self.assertNotIn("telegram_chat_id:", text)
+        self.assertIn("correspondent:", text)
 
     def test_the_recipient_is_configurable(self):
         loop.poll_once(FakePlatform([update(1, "111", "hi")]), self.inbox,

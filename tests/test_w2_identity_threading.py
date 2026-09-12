@@ -62,13 +62,28 @@ class InboundEnvelopeGrows(Base):
         ka = self.letter(a).meta.get("correspondent")
         self.assertEqual(len(ka), 16)
         self.assertEqual(ka, self.letter(b).meta.get("correspondent"))
-        self.assertNotIn("111", ka)
+        import hashlib
+        self.assertNotEqual(ka, hashlib.sha256(b"telegram:111").hexdigest()[:16])
 
     def test_different_chats_get_different_keys(self):
         [a] = self.poll([update(1, "111", "x", message_id=1)])
         [b] = self.poll([update(2, "222", "y", message_id=2)])
         self.assertNotEqual(self.letter(a).meta["correspondent"],
                             self.letter(b).meta["correspondent"])
+
+    def test_legacy_stored_correspondent_still_threads(self):
+        (self.state / "correspondents.json").write_text(
+            json.dumps({"telegram:111": "legacykey0000001"}), encoding="utf-8")
+        [a] = self.poll([update(1, "111", "one", message_id=1)])
+        [b] = self.poll([update(2, "111", "two", message_id=2)])
+        self.assertEqual(self.letter(a).meta["correspondent"], "legacykey0000001")
+        self.assertEqual(self.letter(b).meta["correspondent"], "legacykey0000001")
+        [c] = self.poll([update(3, "222", "new", message_id=3)])
+        self.assertNotEqual(self.letter(c).meta["correspondent"], "legacykey0000001")
+        threads = json.loads((self.state / "threads.json").read_text())
+        self.assertEqual(threads["legacykey0000001"], a)
+        self.assertEqual(self.letter(b).meta.get("thread"), a)
+        self.assertEqual(threads[self.letter(c).meta["correspondent"]], c)
 
 
 class TheIndexIsExactAndTriple(Base):

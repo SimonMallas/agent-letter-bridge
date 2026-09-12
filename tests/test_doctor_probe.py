@@ -210,7 +210,7 @@ class ABotIdIsNotASecret(unittest.TestCase):
     """
 
     def test_only_the_id_half_is_taken(self):
-        self.assertEqual(checks.bot_id("8796396490:AAEsecretsecret"), "8796396490")
+        self.assertEqual(checks.bot_id("1000000001:AAEsecretsecret"), "1000000001")
 
     def test_a_token_shaped_wrongly_yields_nothing(self):
         for value in ("", "no-colon-here", ":leading", "   "):
@@ -218,7 +218,7 @@ class ABotIdIsNotASecret(unittest.TestCase):
                 self.assertIsNone(checks.bot_id(value))
 
     def test_the_secret_half_never_appears_in_the_result(self):
-        self.assertNotIn("AAEsecret", checks.bot_id("8796396490:AAEsecret") or "")
+        self.assertNotIn("AAEsecret", checks.bot_id("1000000001:AAEsecret") or "")
 
 
 class TheReportItselfComparesBots(unittest.TestCase):

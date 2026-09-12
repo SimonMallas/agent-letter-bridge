@@ -114,6 +114,67 @@ def _request(base, method, params, token, timeout=TIMEOUT):
         return json.loads(response.read().decode("utf-8"))
 
 
+def _request_bytes(base, method, token, body, content_type, timeout=TIMEOUT):
+    url = f"{base}/bot{token}/{method}"
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("Content-Type", content_type)
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _multipart(fields, files):
+    import secrets
+    boundary = secrets.token_hex(16)
+    chunks = []
+    for name, value in fields.items():
+        chunks.append(f"--{boundary}\r\n".encode())
+        chunks.append(
+            f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode())
+        chunks.append(str(value).encode("utf-8") + b"\r\n")
+    for name, (filename, content, ctype) in files.items():
+        chunks.append(f"--{boundary}\r\n".encode())
+        chunks.append(
+            f'Content-Disposition: form-data; name="{name}"; '
+            f'filename="{filename}"\r\n'.encode())
+        chunks.append(f"Content-Type: {ctype}\r\n\r\n".encode())
+        chunks.append(content)
+        chunks.append(b"\r\n")
+    chunks.append(f"--{boundary}--\r\n".encode())
+    return boundary, b"".join(chunks)
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise FetchFailed("redirect refused")
+
+
+def _largest_photo_id(message):
+    """Largest Telegram photo size (by file_size, then pixel area)."""
+    photos = message.get("photo") or []
+    if not isinstance(photos, list) or not photos:
+        return ""
+    def key(item):
+        if not isinstance(item, dict):
+            return (0, 0)
+        area = int(item.get("width") or 0) * int(item.get("height") or 0)
+        return (int(item.get("file_size") or 0), area)
+    best = max(photos, key=key)
+    file_id = best.get("file_id") if isinstance(best, dict) else ""
+    return file_id if isinstance(file_id, str) else ""
+
+
+def _media_kind(message):
+    if message.get("photo"):
+        return "photo"
+    if message.get("voice"):
+        return "voice"
+    if message.get("sticker"):
+        return "sticker"
+    if message.get("document"):
+        return "document"
+    return ""
+
+
 class Telegram:
     """A single-consumer inbound reader and a bounded outbound sender."""
 
@@ -200,7 +261,10 @@ class Telegram:
             updates.append({
                 "update_id": item["update_id"],
                 "chat_id": str(message.get("chat", {}).get("id", "")) if message else "",
-                "text": message.get("text", ""),
+                "text": message.get("text", "") or "",
+                "caption": message.get("caption", "") or "",
+                "photo_file_id": _largest_photo_id(message),
+                "media_kind": _media_kind(message),
                 # W2: the platform's chat-scoped message id, and the id of the
                 # message this one replies to. Both feed the private
                 # exact-triple index; neither is identity.
@@ -261,6 +325,68 @@ class Telegram:
 
     # -- outbound --------------------------------------------------------
 
+    def download_photo(self, file_id):
+        """Bytes from Telegram only. URL is constructed here; never a local path."""
+        from alb.media import inspect as media_inspect
+        try:
+            payload = _request(self._base, "getFile", {"file_id": file_id}, self._token)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429 or exc.code >= 500:
+                raise TransientFailure(f"getFile deferred: HTTP {exc.code}",
+                                       _retry_after(exc)) from None
+            raise FetchFailed("photo download refused") from None
+        except OSError as exc:
+            raise TransientFailure(f"network: {exc}") from None
+        result = (payload or {}).get("result") or {}
+        file_path = result.get("file_path")
+        if (not isinstance(file_path, str) or not file_path
+                or "://" in file_path or file_path.startswith("/")
+                or ".." in file_path.split("/")):
+            raise FetchFailed("photo download refused")
+        url = f"{self._base}/file/bot{self._token}/{urllib.parse.quote(file_path)}"
+        req = urllib.request.Request(url, method="GET")
+        opener = urllib.request.build_opener(_NoRedirect)
+        try:
+            with opener.open(req, timeout=TIMEOUT) as response:
+                chunks = []
+                total = 0
+                while True:
+                    piece = response.read(64 * 1024)
+                    if not piece:
+                        break
+                    total += len(piece)
+                    if total > media_inspect.MAX_BYTES:
+                        raise FetchFailed("photo too large")
+                    chunks.append(piece)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429 or exc.code >= 500:
+                raise TransientFailure(f"file deferred: HTTP {exc.code}",
+                                       _retry_after(exc)) from None
+            raise FetchFailed("photo download refused") from None
+        except OSError as exc:
+            raise TransientFailure(f"network: {exc}") from None
+        data = b"".join(chunks)
+        media_inspect.detect(data)
+        return data
+
+    def send_photo(self, chat_id, data, caption=""):
+        from alb.media import inspect as media_inspect
+        media_type, _w, _h = media_inspect.preflight(data, caption or "")
+        filename = media_inspect.display_name(media_type)
+        fields = {"chat_id": str(chat_id)}
+        if caption:
+            fields["caption"] = caption
+        boundary, body = _multipart(fields, {
+            "photo": (filename, data, media_type),
+        })
+        try:
+            payload = _request_bytes(
+                self._base, "sendPhoto", self._token, body,
+                f"multipart/form-data; boundary={boundary}")
+            return str(((payload or {}).get("result") or {}).get("message_id", ""))
+        except (urllib.error.HTTPError, OSError) as exc:
+            self._outbound_failure(exc)
+
     def send(self, chat_id, text):
         try:
             payload = _request(self._base, "sendMessage",
@@ -269,7 +395,11 @@ class Telegram:
             # outbound delivery events and (W2) the reply-linkage index -
             # never the letter, which was durable before this call returned.
             return str(((payload or {}).get("result") or {}).get("message_id", ""))
-        except urllib.error.HTTPError as exc:
+        except (urllib.error.HTTPError, OSError) as exc:
+            self._outbound_failure(exc)
+
+    def _outbound_failure(self, exc):
+        if isinstance(exc, urllib.error.HTTPError):
             if exc.code >= 500:
                 # The server may have accepted it before failing. Unknown.
                 raise reply.AmbiguousOutcome(f"server error HTTP {exc.code}") from None
@@ -283,7 +413,7 @@ class Telegram:
             # Other 4xx: the platform definitely did not send it, and would
             # not if asked again.
             raise reply.DefiniteRefusal(f"refused with HTTP {exc.code}") from None
-        except OSError as exc:
+        else:
             # The POST may have arrived and only the response been lost. This
             # is the textbook ambiguous case and must never be auto-retried.
             # OSError for the same reason as fetch: a bare timeout is not a

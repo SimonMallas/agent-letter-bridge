@@ -7,41 +7,183 @@ create, before any orphan exists. Delivery outcomes are immutable event FILES
 under the private state root; the letter is never rewritten after creation,
 because a pre-send letter cannot record a post-send fact.
 """
+import contextlib
+import errno
+import fcntl
 import hashlib
 import json
 import os
 import pathlib
+import secrets
+import stat
 import time
 
 from alb.letter import store as letters
 from alb.send.reply import AlreadyClaimed
 
+SALT_BYTES = 32
+
+
+class SaltMalformed(ValueError):
+    """Salt file exists but its contents are not a 32-byte secret."""
+
+
+def _fsync_dir(path):
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _write_all(fd, data):
+    view = memoryview(data)
+    sent = 0
+    idle = 0
+    while sent < len(data):
+        n = os.write(fd, view[sent:])
+        if n == 0:
+            idle += 1
+            if idle > 8:
+                raise OSError("short write")
+            continue
+        idle = 0
+        sent += n
+
+
+def _publish_file(path, data):
+    """Contents-first: temp -> write-all -> fsync -> rename -> dir fsync. Mode 0600."""
+    path = pathlib.Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.parent / f".{path.name}.{os.getpid()}.{secrets.token_hex(4)}.partial"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        _write_all(fd, data)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    os.replace(tmp, path)
+    os.chmod(path, 0o600)
+    _fsync_dir(path.parent)
+
+
+@contextlib.contextmanager
+def _map_lock(state):
+    path = pathlib.Path(state) / "correspondents.lock"
+    pathlib.Path(state).mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def _read_valid_salt(path):
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        raise
+    if stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode):
+        raise OSError("correspondent salt unusable")
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        raw = os.read(fd, st.st_size).strip()
+    finally:
+        os.close(fd)
+    try:
+        salt = bytes.fromhex(raw.decode("ascii"))
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise SaltMalformed("correspondent salt unusable") from exc
+    if len(salt) != SALT_BYTES:
+        raise SaltMalformed("correspondent salt unusable")
+    if st.st_mode & 0o077:
+        os.chmod(path, 0o600)
+    return salt
+
+
+def _mint_salt(path):
+    token = secrets.token_hex(SALT_BYTES)
+    _publish_file(path, token.encode("ascii") + b"\n")
+    return bytes.fromhex(token)
+
+
+def _correspondent_salt(state):
+    """Per-install 256-bit salt. Never written into a letter. Never derived incomplete.
+
+    Missing or proven-malformed content may be minted. I/O, permission, and
+    no-follow failures refuse — they do not rotate an established secret.
+    """
+    path = pathlib.Path(state) / "correspondent-salt"
+    try:
+        return _read_valid_salt(path)
+    except FileNotFoundError:
+        return _mint_salt(path)
+    except SaltMalformed:
+        return _mint_salt(path)
+
+
+def _load_map(path):
+    """Missing is empty. Corrupt/unreadable existing state is refused, never reset."""
+    path = pathlib.Path(path)
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return {}
+    if stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode):
+        raise OSError("correspondents map unusable")
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        raw = os.read(fd, st.st_size)
+    finally:
+        os.close(fd)
+    rec = json.loads(raw.decode("utf-8"))
+    if not isinstance(rec, dict):
+        raise ValueError("correspondents map corrupt")
+    return rec
+
 
 def correspondent_key(state, origin_chat, platform="telegram"):
     """Stable opaque origin key: derived once, stored, store authoritative.
 
-    SHA-256 of "<platform>:<chat id>" truncated to 16 hex. The stored value
-    wins forever after, so the key survives any later change of derivation
-    scheme; cross-install stability comes from the rule, ongoing identity
-    from the store. Aliases, when they exist, are presentation - never this.
+    New keys are sha256(install-salt || "<platform>:<chat id>") truncated to
+    16 hex. The stored value wins forever after, so existing identities
+    survive this derivation change. The salt never appears in a letter.
     """
     state = pathlib.Path(state)
     path = state / "correspondents.json"
-    try:
-        table = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        table = {}
     origin = f"{platform}:{origin_chat}"
-    if origin in table:
-        return table[origin]
-    key = hashlib.sha256(origin.encode()).hexdigest()[:16]
-    table[origin] = key
-    tmp = path.with_suffix(".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        fh.write(json.dumps(table, indent=2))
-    os.replace(tmp, path)
-    return key
+    with _map_lock(state):
+        table = _load_map(path)
+        if origin not in table:
+            salt = _correspondent_salt(state)
+            key = hashlib.sha256(salt + origin.encode()).hexdigest()[:16]
+            table[origin] = key
+            _publish_file(path, json.dumps(table, indent=2).encode("utf-8"))
+        key = table[origin]
+        _fsync_dir(state)
+        return key
+
+
+def origin_chat_for(state, correspondent):
+    """Private reverse: opaque correspondent -> telegram chat. None if unknown/ambiguous."""
+    if not isinstance(correspondent, str) or not correspondent:
+        return None
+    state = pathlib.Path(state)
+    path = state / "correspondents.json"
+    try:
+        with _map_lock(state):
+            table = _load_map(path)
+    except (OSError, ValueError, UnicodeDecodeError):
+        return None
+    matches = [origin for origin, key in table.items() if key == correspondent]
+    if len(matches) != 1:
+        return None
+    platform, sep, chat = matches[0].partition(":")
+    if platform != "telegram" or not sep or not chat:
+        return None
+    return chat
 
 
 def compose(outbox, state, source_id, origin_chat, sender, body,

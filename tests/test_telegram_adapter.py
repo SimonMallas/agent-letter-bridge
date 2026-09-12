@@ -36,6 +36,8 @@ class Fetch(unittest.TestCase):
         ]}):
             got = self.client.fetch(offset=None)
         self.assertEqual(got, [{"update_id": 5, "chat_id": "111", "text": "hi",
+                                "caption": "", "photo_file_id": "",
+                                "media_kind": "",
                                 "message_id": "", "reply_to_message_id": ""}])
 
     def test_a_non_message_update_is_surfaced_so_it_can_be_consumed(self):

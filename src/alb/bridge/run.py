@@ -206,6 +206,42 @@ def prepare_mail_root(mail_root):
 # bridge stuck in a subprocess looks exactly like the death a supervisor
 # exists to detect. A bounded ring can fail; an unbounded one can hang.
 RING_TIMEOUT = 10
+RING_ATTEMPTS = 3
+RING_RETRY_SLEEP = 0.05
+
+
+def _no_live_surface_token(msg):
+    """Reason word after `no_live_surface`. `timeout=` is config, not an outcome."""
+    marker = "no_live_surface "
+    i = msg.find(marker)
+    if i < 0:
+        return None
+    token = msg[i + len(marker):].split(None, 1)[0] if msg[i + len(marker):].strip() else ""
+    if not token or token.startswith("timeout="):
+        return None
+    return token
+
+
+def _transient_ring_failure(output):
+    """Only a real helper hang (TimeoutExpired) is retryable.
+
+    bus.sh prints timeout=<cfg>s on every no_live_surface line. That is the
+    configured cmux bound, not a statement that a timeout occurred.
+    """
+    return False
+
+
+def _ring_failure_reason(exc):
+    """Honest ring-health: configured timeout= is not a timeout outcome."""
+    msg = str(exc)
+    if isinstance(exc, subprocess.TimeoutExpired) or "helper timed out after" in msg:
+        return "ring timed out (outcome unconfirmed)"
+    token = _no_live_surface_token(msg)
+    if token in ("unknown_participant", "surface_not_found", "not_registered"):
+        return "surface not found"
+    if token:
+        return token
+    return f"{type(exc).__name__}: {exc}"
 
 
 def _bus_ring(recipient, kind, letter_id, binary=None):
@@ -219,19 +255,33 @@ def _bus_ring(recipient, kind, letter_id, binary=None):
     Integrated mode may assume the helper exists: it is only reachable by
     pointing at a letterbox, which implies one is installed.
     """
-    result = subprocess.run(
-        [binary or BUS_BINARY, "ring", recipient, kind, letter_id],
-        capture_output=True, text=True, timeout=RING_TIMEOUT)
-
-    # THE EXIT CODE IS NOT THE OUTCOME. The helper exits 0 whether the knock
-    # was submitted, merely pasted into a pane without being submitted, or had
-    # no live surface at all. Trusting the code would record a delivered ring
-    # for a pane that is gone - and this record is the only tell that a
-    # doorbell has stopped working, so it must not lie.
-    output = f"{result.stdout}\n{result.stderr}"
-    if result.returncode != 0 or "doorbell submitted" not in output:
-        raise RingNotDelivered(output.strip().splitlines()[-1] if output.strip()
-                               else f"helper exited {result.returncode}")
+    last = None
+    for attempt in range(RING_ATTEMPTS):
+        try:
+            result = subprocess.run(
+                [binary or BUS_BINARY, "ring", recipient, kind, letter_id],
+                capture_output=True, text=True, timeout=RING_TIMEOUT)
+        except subprocess.TimeoutExpired as exc:
+            last = RingNotDelivered(f"helper timed out after {RING_TIMEOUT}s")
+            if attempt + 1 < RING_ATTEMPTS:
+                time.sleep(RING_RETRY_SLEEP)
+                continue
+            raise last from exc
+        # THE EXIT CODE IS NOT THE OUTCOME. The helper exits 0 whether the knock
+        # was submitted, merely pasted into a pane without being submitted, or had
+        # no live surface at all. Trusting the code would record a delivered ring
+        # for a pane that is gone - and this record is the only tell that a
+        # doorbell has stopped working, so it must not lie.
+        output = f"{result.stdout}\n{result.stderr}"
+        if result.returncode == 0 and "doorbell submitted" in output:
+            return
+        last = RingNotDelivered(output.strip().splitlines()[-1] if output.strip()
+                                else f"helper exited {result.returncode}")
+        if attempt + 1 < RING_ATTEMPTS and _transient_ring_failure(output):
+            time.sleep(RING_RETRY_SLEEP)
+            continue
+        raise last
+    raise last
 
 
 def _record_ring(root, state, reason):
@@ -326,7 +376,7 @@ def run_once(platform, transport, surface, root,
         # mail-with-no-bell is a failure state, not a quieter tier. So the
         # failure is recorded where a human and a monitor can see it, without
         # ever being allowed to affect the letter.
-        _record_ring(root, "failing", f"{type(exc).__name__}: {exc}")
+        _record_ring(root, "failing", _ring_failure_reason(exc))
     else:
         _record_ring(root, "ok", "delivered")
 

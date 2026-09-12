@@ -7,6 +7,45 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-10
+
+Two capabilities that were deliberately absent in the reply-only bridge, each
+added without loosening the guarantee that bounded it.
+
+### Added
+
+**Initiating send, gated by an explicit, revocable grant.** Until now the
+bridge could only answer a letter it already held — there was no way for an
+agent to start a conversation to a phone, by design. It can now, but only to a
+destination the operator has explicitly authorised with a *grant*
+(`alb --grant-create --as <owner> --platform telegram --chat-id <id>`), and a
+grant can be listed (`--grant-list`) and revoked (`--grant-disable`) at any
+time. With no grant, an initiating send fails closed. This narrows the old
+flat "no first-send command exists" guarantee to one that is still a guarantee:
+the bridge cannot originate contact anywhere the operator has not named, and a
+destination can be cut off without touching the code.
+
+**Initiating sends are budgeted, not open-ended.** Even with a grant an agent
+cannot flood a phone. Each destination admits only a small, refundable daily
+and hourly allowance with a cap on messages in flight; a send refused for
+budget is refused before anything leaves the machine. A send is idempotent on a
+caller-supplied intent id (`alb --send --id <intent>`), so a crash or a retry
+settles as exactly one message — or, when the outcome is genuinely unknown, as
+an explicitly ambiguous one that consumes its budget rather than risking a
+silent double-send.
+
+**Images, in and out.** An outbound reply or send may carry a photo from an
+allowlisted directory (`<root>/state/attach-roots.json` is a JSON object
+`{"roots": ["/absolute/dir", ...]}`; default deny), checked for real file type
+and sane dimensions before it leaves. An inbound photo becomes part of the letter as an opaque media
+reference plus its metadata — never a raw filesystem path, chat id, or original
+filename — so the archive gains the fact of the image without leaking where it
+lives. Photos stored before 0.3.0 have no `.ready` marker: after upgrade, stop
+the bridge and run `alb --grandfather-media --root <root>` once per seat.
+An unreadable existing media root is a failed grandfather (exit 1), not a
+successful empty run. The command takes the same root lock as the bridge:
+if a bridge is running it refuses (naming that pid) and writes nothing.
+
 ## [0.2.5] — 2026-09-07
 
 Both of these were found by the first installation done for real, on a seat

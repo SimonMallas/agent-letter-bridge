@@ -22,11 +22,17 @@ RUN IT
 WHEN SOMETHING IS WRONG
   alb --status   should I worry? reads files only, no token, no network
   alb --doctor   what is my environment doing? no token, no platform calls
+  alb --grandfather-media   one-time: mark pre-0.3.0 photos ready
+                 (stop the bridge first; run once per seat after upgrade)
   alb --canary   is the send path alive? sends to your own chat, then you
                  confirm it arrived - nothing here can prove that for you
 
 REPLY TO A STORED LETTER
   alb --reply-to <letter-id> --text "..."
+
+SEND FIRST (operator grant + label; never a raw chat id)
+  alb --grant-create --as owner --platform telegram --chat-id <id>
+  alb --send --to owner --id <intent-id> --text "..." --reason "..."
 
 The bridge exits 0 on a platform conflict: that is a deliberate yield so the
 token's holder keeps running, not a failure. Under restart-on-crash-only
@@ -102,6 +108,8 @@ def main(argv=None):
                              "exit 0 nothing, 2 restart it, 3 investigate")
     parser.add_argument("--doctor", action="store_true",
                         help="local diagnostics; makes no platform call. Reads each bridge's config to compare bot ids, keeping the id and discarding the secret")
+    parser.add_argument("--grandfather-media", action="store_true",
+                        help="one-time: mark pre-0.3.0 media ready; stop the bridge first")
     parser.add_argument("--list", action="store_true",
                         help="the correspondence, both directions; reads only")
     parser.add_argument("--show", metavar="LETTER_ID",
@@ -116,9 +124,38 @@ def main(argv=None):
                         help="destination for --export")
     parser.add_argument("--reply-to", metavar="LETTER_ID",
                         help="reply to a stored letter instead of polling")
-    parser.add_argument("--text", help="reply body, with --reply-to")
+    parser.add_argument("--text", help="body, with --reply-to or --send")
+    parser.add_argument("--send", action="store_true",
+                        help="originate a message to a labelled grant")
+    parser.add_argument("--to", dest="to_label", metavar="LABEL",
+                        help="destination label (never a chat id)")
+    parser.add_argument("--id", dest="intent_id", metavar="INTENT",
+                        help="stable intent id for --send (idempotent)")
+    parser.add_argument("--reason", help="audit reason for --send; does not authorize")
+    parser.add_argument("--grant-create", action="store_true",
+                        help="explicit operator grant; never minted on use")
+    parser.add_argument("--grant-list", action="store_true",
+                        help="list labelled grants; reads only")
+    parser.add_argument("--grant-disable", action="store_true",
+                        help="disable the grant bound to --as")
+    parser.add_argument("--as", dest="as_label", metavar="LABEL",
+                        help="label to bind or disable")
+    parser.add_argument("--platform", default="telegram",
+                        help="grant platform (grant-create)")
+    parser.add_argument("--chat-id", dest="chat_id",
+                        help="exact chat binding (grant-create only)")
+    parser.add_argument("--photo", metavar="PATH",
+                        help="image for --send; path must sit under a root listed "
+                             "in <root>/state/attach-roots.json")
     parser.add_argument("--interval", type=float, default=2.0)
     args = parser.parse_args(argv)
+
+    if args.send and args.reply_to:
+        print("alb: --send and --reply-to cannot be combined", file=sys.stderr)
+        return 2
+    if args.reply_to and args.photo:
+        print("alb: --photo is not valid with --reply-to", file=sys.stderr)
+        return 2
 
     # Setup runs before there is a config to load, which is the whole point:
     # it is what creates one. It never reads a token from anywhere, and never
@@ -269,6 +306,24 @@ def main(argv=None):
         print(checks.summary(listing, os.getpid(), pathlib.Path(args.root), dict(os.environ)))
         return 0
 
+    if args.grandfather_media:
+        from alb.media import store as media_store
+        root = pathlib.Path(args.root)
+        try:
+            with singleton.hold(root):
+                marked, skipped, failed = media_store.grandfather_ready(
+                    root / "state")
+        except singleton.AlreadyRunning:
+            pid = singleton.running_pid(root)
+            who = (f"pid {pid}" if isinstance(pid, int) and pid > 0
+                   else "unknown pid")
+            print(f"alb: refuse grandfather-media: another bridge is running "
+                  f"({who}) on {root}", file=sys.stderr)
+            return 1
+        print(f"alb: media grandfather marked={marked} skipped={skipped} failed={failed}")
+        print("alb: run once per seat after 0.3.0, with the bridge stopped")
+        return 1 if failed else 0
+
     # W4 retrieval: read-only, no token, no config - the same standing as
     # --status. The mail root comes from the flag or defaults to --root.
     if args.list or args.show or args.search or args.thread or args.export:
@@ -340,6 +395,13 @@ def main(argv=None):
     # have to reconstruct at 3am.
     # Where letters actually live, for every subcommand that reads one.
     mail = pathlib.Path(args.mail_root or config.get("ALB_MAIL_ROOT") or root)
+    state = root / "state"
+
+    if args.grant_create or args.grant_list or args.grant_disable:
+        return _grant_admin(args, state)
+
+    if args.send:
+        return _send_initiated(args, config, root, mail, state)
 
     if args.reply_to:
         if not args.text:
@@ -522,6 +584,114 @@ def _recorded_stand_down(root, since, generation):
         return False
 
 
+def _grant_admin(args, state):
+    from alb.grant import store as grants
+    from alb.initiate import destinations, ids
+
+    try:
+        if args.grant_list:
+            labels = destinations.list_labels(state)
+            if not labels:
+                print("alb: no labelled grants")
+                return 0
+            for label, grant_id in sorted(labels.items()):
+                try:
+                    rec = grants.load(state, grant_id)
+                    enabled = rec.get("enabled") is True
+                except grants.PolicyError:
+                    enabled = False
+                print(f"{label} {grant_id} {'enabled' if enabled else 'disabled'}")
+            return 0
+        if args.grant_create:
+            if not args.as_label or not args.chat_id:
+                print("alb: --grant-create needs --as and --chat-id", file=sys.stderr)
+                return 2
+            ids.check_label(args.as_label)
+            rec = grants.create(state, args.platform, args.chat_id)
+            destinations.bind(state, args.as_label, rec["grant_id"])
+            print(f"alb: grant created as {args.as_label} {rec['grant_id']}")
+            return 0
+        if args.grant_disable:
+            if not args.as_label:
+                print("alb: --grant-disable needs --as", file=sys.stderr)
+                return 2
+            grant_id = destinations.resolve(state, args.as_label)
+            grants.disable(state, grant_id)
+            print(f"alb: grant disabled {args.as_label}")
+            return 0
+    except (grants.PolicyError, ids.UsageError, destinations.UnknownLabel) as exc:
+        print(f"alb: {exc}", file=sys.stderr)
+        return 1
+    print("alb: nothing to do", file=sys.stderr)
+    return 2
+
+
+def _send_initiated(args, config, root, mail, state):
+    from alb.initiate import budget, destinations, ids
+    from alb.initiate import send as initiate
+    from alb.grant import store as grants
+    from alb.media.inspect import MediaError
+
+    if not args.to_label or not args.intent_id or not args.reason:
+        print("alb: --send needs --to, --id and --reason", file=sys.stderr)
+        return 2
+    if not args.text and not args.photo:
+        print("alb: --send needs --text or --photo", file=sys.stderr)
+        return 2
+    seat = config.get("ALB_FROM") or config.get("ALB_TO") or "agent"
+    try:
+        grant_id = destinations.resolve(state, args.to_label)
+        rec = grants.load(state, grant_id)
+        if rec.get("platform") != "telegram":
+            print("alb: platform not supported", file=sys.stderr)
+            return 1
+        oid = initiate.send_initiated(
+            api.Telegram(config["ALB_TOKEN"]),
+            state, mail / "outbox", root / "allowlist.json",
+            label=args.to_label, intent_id=args.intent_id,
+            text=args.text or "", reason=args.reason, seat=seat,
+            photo_path=args.photo)
+    except ids.UsageError as exc:
+        print(f"alb: {exc}", file=sys.stderr)
+        return 2
+    except MediaError:
+        print("alb: photo refused", file=sys.stderr)
+        return 2
+    except destinations.UnknownLabel as exc:
+        print(f"alb: {exc}", file=sys.stderr)
+        return 2
+    except budget.CapacityRefused as exc:
+        print(f"alb: {exc}", file=sys.stderr)
+        return 1
+    except reply.AmbiguousOutcome as exc:
+        print(f"alb: AMBIGUOUS - dead-lettered for a human, NOT retried: {exc}",
+              file=sys.stderr)
+        return 3
+    except reply.Throttled as exc:
+        wait = getattr(exc, "retry_after", None)
+        when = f" for {wait}s" if wait else ""
+        print(f"alb: DEFERRED - the platform asked us to wait{when}. "
+              f"The letter is composed and still claimed; nothing was sent "
+              f"and nothing was lost: {exc}\n"
+              f"alb: run the same --send again to finish it.",
+              file=sys.stderr)
+        return 4
+    except initiate.TerminalExists:
+        print("alb: this intent is already closed; pass a new --id",
+              file=sys.stderr)
+        return 1
+    except (grants.PolicyError, initiate.AuthorityRefused,
+            reply.NotPermitted, reply.DefiniteRefusal,
+            reply.AlreadyClaimed) as exc:
+        print(f"alb: refused: {type(exc).__name__}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"alb: refused: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    print(f"alb: sent {oid}")
+    return 0
+
+
 def _reply_or_resume(sender, inbox, state, allowlist_path, letter_id, text,
                      searched=None, outbox=None, agent="agent"):
     """Send the reply - or finish the one a throttle interrupted.
@@ -622,6 +792,13 @@ def _poll_forever(platform, transport, surface, root, args, config,
     flagged = outbound.reconcile_at_startup(root / "state")
     for letter_id in flagged:
         log(root, f"reconciled in-flight outbound {letter_id} -> dead-letter")
+    from alb.media import store as media_store
+    pending = media_store.count_pre_marker(root / "state")
+    if pending is None:
+        log(root, "media root unreadable; cannot count pre-marker assets")
+    elif pending:
+        log(root, f"{pending} pre-marker media asset(s); "
+            f"run alb --grandfather-media --root {root} with the bridge stopped")
     while True:
         # Checked before reaching for the platform, so a stop is honoured
         # without one more round trip - and before anything can fail in a way

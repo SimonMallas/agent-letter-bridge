@@ -35,6 +35,9 @@ BRIDGE = ROOT / "src" / "alb" / "bridge" / "run.py"
 OUTBOUND = ROOT / "src" / "alb" / "outbound" / "store.py"
 WIZARD = ROOT / "src" / "alb" / "setup" / "wizard.py"
 DISCOVER = ROOT / "src" / "alb" / "setup" / "discover.py"
+GRANT = ROOT / "src" / "alb" / "grant" / "store.py"
+INITIATE_SEND = ROOT / "src" / "alb" / "initiate" / "send.py"
+POLLER = ROOT / "src" / "alb" / "poller" / "loop.py"
 
 # invariant -> (file, tests module, old, new)
 EXTRA = {
@@ -50,9 +53,83 @@ EXTRA = {
         POLL, "tests.test_poller",
         "        if gate.allows(allowlist_path, chat_id):",
         "        if False:"),
-    "reply destination read from the letter": (
+    "reply destination resolves from private state, not the letter": (
         SEND, "tests.test_send",
-        "    chat_id = destination(stored.meta)", '    chat_id = "not-the-test-chat"'),
+        '    if "correspondent" in meta:',
+        "    if False:"),
+    "correspondent present but unresolved fails closed, never raw fallback": (
+        SEND, "tests.test_send",
+        "        return outbound.origin_chat_for(state, key)",
+        "        chat = outbound.origin_chat_for(state, key)\n"
+        "        if chat:\n            return chat"),
+    "empty correspondent is present unresolved": (
+        SEND, "tests.test_send",
+        '    if "correspondent" in meta:',
+        '    if meta.get("correspondent"):'),
+    "incomplete salt is not used for derivation": (
+        OUTBOUND, "tests.test_outbound",
+        "    if len(salt) != SALT_BYTES:\n        raise SaltMalformed(\"correspondent salt unusable\")",
+        "    if False:\n        raise SaltMalformed(\"correspondent salt unusable\")"),
+    "corrupt correspondents map is not reset": (
+        OUTBOUND, "tests.test_outbound",
+        "    if not isinstance(rec, dict):\n        raise ValueError(\"correspondents map corrupt\")",
+        "    if not isinstance(rec, dict):\n        rec = {}"),
+    "non-telegram origin does not route telegram": (
+        OUTBOUND, "tests.test_send",
+        '    if platform != "telegram" or not sep or not chat:',
+        "    if not sep or not chat:"),
+    "pasted refusal outranks timeout retry": (
+        BRIDGE, "tests.test_mail_root",
+        "    configured cmux bound, not a statement that a timeout occurred.\n"
+        "    \"\"\"\n    return False",
+        "    configured cmux bound, not a statement that a timeout occurred.\n"
+        "    \"\"\"\n    return \"timeout=\" in output"),
+    "resume destination uses private state": (
+        SEND, "tests.test_send",
+        "    chat_id = destination(source.meta, state)",
+        "    chat_id = destination(source.meta)"),
+    "empty media content is missing": (
+        ROOT / "src" / "alb" / "media" / "store.py", "tests.test_media",
+        "    if st.st_size == 0:\n        raise MediaError(\"asset missing\")",
+        "    if False:\n        raise MediaError(\"asset missing\")"),
+    "ready marker dir is fsynced": (
+        ROOT / "src" / "alb" / "media" / "store.py", "tests.test_media",
+        "    except FileExistsError:\n        pass\n    durable.fsync_dir(dest_dir)",
+        "    except FileExistsError:\n        return"),
+    "media is unavailable until ready after dir fsync": (
+        ROOT / "src" / "alb" / "media" / "store.py", "tests.test_media",
+        "    ready = path.parent / \".ready\"",
+        "    ready = path"),
+    "discard_staging refuses path-shaped update ids": (
+        ROOT / "src" / "alb" / "media" / "store.py", "tests.test_media",
+        "    key = _safe_update_id(update_id)\n    src = media_root(state) / \"staging\" / key",
+        "    key = str(update_id)\n    src = media_root(state) / \"staging\" / key"),
+    "grandfather refuses while a bridge holds the root": (
+        CLI, "tests.test_media",
+        "            with singleton.hold(root):\n"
+        "                marked, skipped, failed = media_store.grandfather_ready(\n"
+        "                    root / \"state\")",
+        "            marked, skipped, failed = media_store.grandfather_ready(\n"
+        "                    root / \"state\")"),
+    "grandfather names the holding pid": (
+        CLI, "tests.test_media",
+        "            pid = singleton.running_pid(root)\n"
+        "            who = (f\"pid {pid}\" if isinstance(pid, int) and pid > 0\n"
+        "                   else \"unknown pid\")",
+        "            pid = None\n"
+        "            who = \"unknown pid\""),
+    "unreadable media root is not empty grandfather success": (
+        ROOT / "src" / "alb" / "media" / "store.py", "tests.test_media",
+        "        letters = list(root.iterdir())\n    except OSError:\n        return marked, skipped, 1",
+        "        letters = list(root.iterdir())\n    except OSError:\n        return marked, skipped, failed"),
+    "unreadable media root is not zero pending": (
+        ROOT / "src" / "alb" / "media" / "store.py", "tests.test_media",
+        "        letters = list(root.iterdir())\n    except OSError:\n        return None",
+        "        letters = list(root.iterdir())\n    except OSError:\n        return 0"),
+    "transient photo download is not fetch-failed": (
+        POLLER, "tests.test_media",
+        "            if isinstance(exc, TransientFailure):\n                raise",
+        "            if type(exc).__name__ == \"TransientFailure\":\n                raise"),
     "allowlist refuses a non-list chats value": (
         ALLOW, "tests.test_allowlist",
         "if not isinstance(chats, list) or not chats:", "if False:"),
@@ -131,8 +208,8 @@ EXTRA = {
         '                pass'),
     "the correspondent store is authoritative over the derivation": (
         OUTBOUND, "tests.test_outbound",
-        "    if origin in table:\n        return table[origin]",
-        "    if False:\n        return table[origin]"),
+        "        if origin not in table:",
+        "        if True:"),
     "the reply path is letter-first, not legacy": (
         SEND, "tests.test_send",
         "    out_id = outbound.compose(",
@@ -226,6 +303,18 @@ EXTRA = {
         BRIDGE, "tests.test_bridge",
         "    except Exception as exc:\n        # Letters are authoritative",
         "    except ZeroDivisionError as exc:\n        # Letters are authoritative"),
+    "a single ring timeout does not latch failing": (
+        BRIDGE, "tests.test_mail_root",
+        "RING_ATTEMPTS = 3",
+        "RING_ATTEMPTS = 1"),
+    "ring timeout is not surface not found": (
+        BRIDGE, "tests.test_mail_root",
+        '        return "ring timed out (outcome unconfirmed)"',
+        '        return "surface not found"'),
+    "unknown participant is surface not found": (
+        BRIDGE, "tests.test_mail_root",
+        '    if token in ("unknown_participant", "surface_not_found", "not_registered"):\n        return "surface not found"',
+        "    if False:\n        return \"surface not found\""),
     "the offset survives a restart": (
         TG, "tests.test_telegram_adapter",
         "            self._save_offset()", "            pass"),
@@ -238,7 +327,7 @@ EXTRA = {
         '"chat_id": str(message["chat"]["id"]),'),
     "ring failure is recorded, not merely swallowed": (
         BRIDGE, "tests.test_bridge",
-        '        _record_ring(root, "failing", f"{type(exc).__name__}: {exc}")',
+        '        _record_ring(root, "failing", _ring_failure_reason(exc))',
         "        pass"),
     "offset persists only after the platform accepts": (
         TG, "tests.test_telegram_adapter",
@@ -377,6 +466,14 @@ EXTRA = {
         SEND, "tests.test_send",
         'DESTINATION_KEYS = ("telegram_chat_id", "chat_id")',
         'DESTINATION_KEYS = ("chat_id", "telegram_chat_id")'),
+    "new letters carry no raw chat id": (
+        POLLER, "tests.test_send",
+        '            extra = {\n                "telegram_update_id": item["update_id"],\n            }',
+        '            extra = {\n                "telegram_chat_id": chat_id,\n                "telegram_update_id": item["update_id"],\n            }'),
+    "old-letter raw-id fallback preserved": (
+        SEND, "tests.test_send",
+        "    for field in DESTINATION_KEYS:\n        value = meta.get(field)\n        if value:\n            return value",
+        "    if False:\n        return None"),
     "persistence does not move back into ack": (
         TG, "tests.test_offset_state_machine",
         "        if self._acked is None or update_id > self._acked:\n            self._acked = update_id",
@@ -401,8 +498,8 @@ EXTRA = {
         "    integrated = True"),
     "the ring outcome is parsed, not assumed from the exit code": (
         BRIDGE, "tests.test_mail_root",
-        '    if result.returncode != 0 or "doorbell submitted" not in output:',
-        "    if result.returncode != 0:"),
+        '        if result.returncode == 0 and "doorbell submitted" in output:\n            return',
+        "        if result.returncode == 0:\n            return"),
     "the BINARY replies to letters where they live": (
         ROOT / "src" / "alb" / "cli.py", "tests.test_mail_root",
         '    mail = pathlib.Path(args.mail_root or config.get("ALB_MAIL_ROOT") or root)',
@@ -453,6 +550,30 @@ EXTRA = {
         OUTBOUND, "tests.test_outbound",
         "    for path in sorted(d.iterdir(), key=_seq):",
         "    for path in sorted(d.iterdir()):"),
+    "correspondent is salted not a chat fingerprint": (
+        OUTBOUND, "tests.test_outbound",
+        "    key = hashlib.sha256(salt + origin.encode()).hexdigest()[:16]",
+        "    key = hashlib.sha256(origin.encode()).hexdigest()[:16]"),
+    "stored correspondent value wins forever": (
+        OUTBOUND, "tests.test_outbound",
+        "        if origin not in table:",
+        "        if True:"),
+    "cached correspondent still requires dir fsync": (
+        OUTBOUND, "tests.test_outbound",
+        "        key = table[origin]\n        _fsync_dir(state)\n        return key",
+        "        key = table[origin]\n        return key"),
+    "publish writes every byte": (
+        OUTBOUND, "tests.test_outbound",
+        "        sent += n",
+        "        sent = len(data)"),
+    "unreadable salt is not rotated": (
+        OUTBOUND, "tests.test_outbound",
+        "    except SaltMalformed:\n        return _mint_salt(path)",
+        "    except OSError:\n        return _mint_salt(path)"),
+    "correspondent salt is owner-only": (
+        OUTBOUND, "tests.test_outbound",
+        "    os.replace(tmp, path)\n    os.chmod(path, 0o600)",
+        "    os.replace(tmp, path)\n    os.chmod(path, 0o644)"),
     "a stray receipt file does not crash the startup pass": (
         OUTBOUND, "tests.test_send",
         "        if not event or _seq(path) < 0:\n            continue\n",
@@ -663,6 +784,120 @@ EXTRA = {
         NOTIFY, "tests.test_notifier",
         '        raise NoTargetSurface("no registered surface; refusing to guess")',
         "        surface = \"GUESS\""),
+    "a missing grant fails closed": (
+        GRANT, "tests.test_grant",
+        '        raise PolicyError("grant missing") from None  # unpublished',
+        "        return {}"),
+    "missing-on-use never mints a grant": (
+        GRANT, "tests.test_grant",
+        "    gid = _safe_id(grant_id)\n    grants_dir = _require_grants_dir(state)",
+        "    gid = _safe_id(grant_id)\n"
+        "    pathlib.Path(state).mkdir(parents=True, exist_ok=True)\n"
+        '    (pathlib.Path(state) / "grants").mkdir(parents=True, exist_ok=True)\n'
+        "    grants_dir = _require_grants_dir(state)"),
+    "disabled grants cannot target": (
+        GRANT, "tests.test_grant",
+        '    if "enabled" not in grant or grant["enabled"] is not True:',
+        "    if False:"),
+    "grant files are owner-only": (
+        GRANT, "tests.test_grant",
+        "        os.chmod(dest, 0o600)",
+        "        os.chmod(dest, 0o644)"),
+    "malformed expiry is a policy error": (
+        GRANT, "tests.test_grant",
+        "        if not math.isfinite(until):\n            raise PolicyError(\"grant invalid\")",
+        "        if False:\n            raise PolicyError(\"grant invalid\")"),
+    "allowlisted is not granted": (
+        GRANT, "tests.test_grant",
+        '    if not found:\n        raise PolicyError("grant missing")',
+        "    if not found:\n        return {\"enabled\": True,"
+        " \"platform\": \"telegram\", \"chat_id\": \"fixture-chat\","
+        " \"grant_id\": \"ab\" * 16, \"created\": 1, \"expiry\": None,"
+        " \"binding_key\": binding_key(\"telegram\", \"fixture-chat\"), **POLICY}"),
+    "enabled must be the boolean True": (
+        GRANT, "tests.test_grant",
+        '    if "enabled" not in grant or grant["enabled"] is not True:',
+        '    if not grant.get("enabled"):'),
+    "grant ids cannot traverse": (
+        GRANT, "tests.test_grant",
+        "    if not isinstance(grant_id, str) or not _GRANT_ID_RE.fullmatch(grant_id):",
+        "    if not isinstance(grant_id, str) or not grant_id:"),
+    "stale temp aliases are not followed": (
+        GRANT, "tests.test_grant",
+        "        _unlink_stale(tmp)",
+        "        pass"),
+    "partial files are exclusive": (
+        GRANT, "tests.test_grant",
+        "    claim_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW",
+        "    claim_flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW"),
+    "temp stage is exclusive": (
+        GRANT, "tests.test_grant",
+        "        fd = os.open(tmp, tmp_flags, 0o600)",
+        "        fd = os.open(tmp, (tmp_flags & ~os.O_EXCL) | os.O_TRUNC, 0o600)"),
+    "leftover ready is not reused": (
+        GRANT, "tests.test_grant",
+        '    raise PolicyError("grant create refused")  # leftover marker',
+        "    return"),
+    "marker lookup EIO is not absence": (
+        GRANT, "tests.test_grant",
+        "        if exc.errno == errno.ENOENT:\n            return True",
+        "        if True:\n            return True"),
+    "unreadable marker refuses (reader)": (
+        GRANT, "tests.test_grant",
+        "            if _confirmed_absent(ready):\n                continue",
+        "            if True:\n                continue"),
+    "cleanup only unlinks owned temp": (
+        GRANT, "tests.test_grant",
+        "        _cleanup_failed(tmp if tmp_owned else None, dest if exclusive else None,\n"
+        "                        dest_claimed, ready if exclusive else None, ready_claimed)",
+        "        _cleanup_failed(tmp, dest if exclusive else None,\n"
+        "                        dest_claimed, ready if exclusive else None, ready_claimed)"),
+    "partial stage names are unique": (
+        GRANT, "tests.test_grant",
+        '    tmp = grants_dir / f".{gid}.{os.getpid()}.{nonce}.partial"',
+        '    tmp = grants_dir / f".{gid}.json.partial"'),
+    "failed exclusive publish is unusable": (
+        GRANT, "tests.test_grant",
+        "    if dest is not None and dest_claimed:",
+        "    if False:"),
+    "unfinished publication is not authority": (
+        GRANT, "tests.test_grant",
+        "        rst = os.lstat(ready)  # completion marker, not the payload",
+        '        rst = os.lstat(grants_dir / f"{gid}.json")  # completion marker, not the payload'),
+    "route_ref is not a chat fingerprint": (
+        INITIATE_SEND, "tests.test_initiate",
+        '                route_ref=ids.route_ref(grant["grant_id"], grant["binding_key"]),',
+        '                route_ref=grant["binding_key"],'),
+    "terminal receipt repairs live reservation": (
+        INITIATE_SEND, "tests.test_initiate",
+        "        _repair_live_reservation(state, rec, existing)",
+        "        pass"),
+    "sending without terminal is ambiguous": (
+        INITIATE_SEND, "tests.test_initiate",
+        '            if _unresolved_sending(state, oid):\n                _settle(state, existing, "ambiguous",',
+        '            if False:\n                _settle(state, existing, "ambiguous",'),
+    "staged photo hash is verified": (
+        INITIATE_SEND, "tests.test_media",
+        "        if photo is None or hashlib.sha256(photo).hexdigest() != photo_hash:",
+        "        if False:"),
+    "latest sending is unresolved": (
+        INITIATE_SEND, "tests.test_initiate",
+        '    return events[-1] == "sending"',
+        '    return "sending" in events and "throttled" not in events'),
+    "resume requires a matching claim": (
+        INITIATE_SEND, "tests.test_initiate",
+        '                _require_claim(outbox, existing, grant, text=text, reason=reason,\n                               seat=seat, intent_id=intent_id,\n                               photo_hash=photo_hash)',
+        '                pass'),
+    "dedup recovers the stored letter asset": (
+        POLLER, "tests.test_media",
+        "                    if advertised:\n"
+        "                        try:\n"
+        "                            media_store.promote(state, item[\"update_id\"],\n"
+        "                                                found.stem, advertised)",
+        "                    if False:\n"
+        "                        try:\n"
+        "                            media_store.promote(state, item[\"update_id\"],\n"
+        "                                                found.stem, advertised)"),
 }
 
 MUTATIONS = {
@@ -805,7 +1040,7 @@ def _run(name, target, tests, old, new, failures, work):
 def _baseline(work, failures):
     """Every selected test module must be GREEN before anything is mutated.
 
-    Codex's second false-positive path: an already-failing or flaky test in a
+    A second false-positive path: an already-failing or flaky test in a
     module can be reported as the mutant's killer, so a pin passes on a
     failure that was there before we broke anything. A kill only means
     something if the module was clean first.
@@ -832,7 +1067,7 @@ def _baseline(work, failures):
 def _verdict(name, mutated_source, result, failures):
     """Did THIS mutant die, and at whose hands?
 
-    Four rules from codex's contract review. An invalid mutant is a GATE
+    Four rules from the contract review. An invalid mutant is a GATE
     ERROR, never a kill: if it does not compile, no test judged it - the
     module never imports, unittest runs nothing, and a loader failure wears a
     kill's clothes. That is how a pin here stayed green for weeks. Zero

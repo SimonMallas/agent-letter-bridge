@@ -17,6 +17,7 @@ from alb.allowlist import gate
 from alb.letter import store
 from alb import msgindex
 from alb.outbound import store as outbound_store
+from alb.media import store as media_store
 
 
 class PlatformConflict(Exception):
@@ -152,6 +153,42 @@ class Cycle(list):
     duplicate = 0
 
 
+def _join_marker(text, marker):
+    text = text or ""
+    return f"{text}\n{marker}".strip() if text else marker
+
+
+def _inbound_text_and_media(platform, state, item):
+    """Caption/text plus opaque media extra. Failed photo download still lands."""
+    caption = item.get("caption") or ""
+    text = item.get("text") or ""
+    body = text or caption
+    extra = {}
+    kind = item.get("media_kind") or ""
+    file_id = item.get("photo_file_id") or ""
+    downloader = getattr(platform, "download_photo", None)
+    if kind == "photo" and file_id and callable(downloader):
+        try:
+            data = downloader(file_id)
+            asset = media_store.stage_inbound(state, item["update_id"], data)
+        except Exception as exc:  # noqa: BLE001
+            from alb.adapters.telegram.api import TransientFailure
+            if isinstance(exc, TransientFailure):
+                raise
+            extra["media_status"] = "fetch-failed"
+            extra["media_kind"] = "image"
+            return _join_marker(body, "[photo unavailable]"), extra
+        extra["media_asset_id"] = asset["asset_id"]
+        extra["media_kind"] = "image"
+        extra["media_type"] = asset["media_type"]
+        extra["media_bytes"] = str(asset["bytes"])
+        extra["media_name"] = asset["name"]
+        return body, extra
+    if kind in ("photo", "voice", "sticker", "document"):
+        return _join_marker(body, f"[{kind} received; content not carried]"), extra
+    return body, extra
+
+
 def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
               processed=None, sender="telegram-bridge", recipient="agent",
               state=None):
@@ -184,12 +221,12 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
         # message would wedge the bridge and no permitted mail behind it would
         # ever arrive. Silence must not mean stuck.
         if gate.allows(allowlist_path, chat_id):
-            text = item.get("text", "")
+            text, extra_media = _inbound_text_and_media(platform, state, item)
             message_id = str(item.get("message_id", "") or "")
             extra = {
-                "telegram_chat_id": chat_id,
                 "telegram_update_id": item["update_id"],
             }
+            extra.update(extra_media)
             if message_id:
                 extra["telegram_message_id"] = message_id
             # Gate 0: the external principal is provenance, never a routable
@@ -224,6 +261,12 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
             if letter_id is not None:
                 result.append(letter_id)
                 result.published += 1
+                if extra.get("media_asset_id"):
+                    try:
+                        media_store.promote(state, item["update_id"], letter_id,
+                                            extra["media_asset_id"])
+                    except (media_store.MediaError, OSError):
+                        pass
                 if message_id:
                     msgindex.record(state, "telegram", chat_id, message_id,
                                     letter_id)
@@ -244,6 +287,22 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
                 # allowlist, and an operator sent to the allowlist to explain a
                 # number the allowlist did not cause will widen it for nothing.
                 result.duplicate += 1
+                found = store.find_by_update(str(item["update_id"]), searched)
+                if found is not None:
+                    try:
+                        stored = store.resolve(found.parent, found.stem)
+                    except (store.MalformedLetter, store.NoSuchLetter,
+                            store.UnsafeIdentifier, OSError):
+                        stored = None
+                    advertised = (stored.meta.get("media_asset_id")
+                                  if stored is not None else "")
+                    if advertised:
+                        try:
+                            media_store.promote(state, item["update_id"],
+                                                found.stem, advertised)
+                        except (media_store.MediaError, OSError):
+                            pass
+                    media_store.discard_staging(state, item["update_id"])
         else:
             result.denied += 1
 

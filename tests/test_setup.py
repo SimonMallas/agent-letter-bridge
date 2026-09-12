@@ -327,7 +327,7 @@ class TheMailboxQuestionIsSmallFirst(Base):
             if not path.is_file():
                 continue
             text = path.read_text(encoding="utf-8")
-            for leak in ("shared-" "brain", "grok-build", "simon" "ai"):
+            for leak in ("shared-" "brain", "team-" "seat", "simon" "ai"):
                 with self.subTest(file=path.name, leak=leak):
                     self.assertNotIn(leak, text)
 
@@ -336,7 +336,7 @@ class TheMailboxQuestionIsSmallFirst(Base):
         THIS machine is the operator's own business, but our internal names
         have no reason to appear in it."""
         console, _ = self.run_init(answers=["y", "", "print", ""])
-        for leak in ("shared-" "brain", "grok-build"):
+        for leak in ("shared-" "brain", "team-" "seat"):
             self.assertNotIn(leak, console.transcript)
 
 

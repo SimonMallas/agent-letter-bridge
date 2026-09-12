@@ -6,12 +6,15 @@ deterministic from the source id, and its O_EXCL create in outbox/ is the
 claim. Delivery outcomes are immutable event FILES; the letter is never
 rewritten after creation.
 """
+import errno
 import json
 import os
 import pathlib
+import stat
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -106,6 +109,133 @@ class TheLetterIsTheClaim(Base):
             origin_chat="111", sender="codex", body="again")
         second = json.loads((self.root / "state" / "correspondents.json").read_text())
         self.assertEqual(first, second)
+
+    def test_new_correspondent_is_not_a_chat_fingerprint(self):
+        import hashlib
+        key = outbound.correspondent_key(self.root / "state", "999001002")
+        unsalted = hashlib.sha256(b"telegram:999001002").hexdigest()[:16]
+        self.assertNotEqual(key, unsalted)
+        for n in range(1_000_000):
+            if hashlib.sha256(f"telegram:{n}".encode()).hexdigest()[:16] == key:
+                self.fail("correspondent matched an unsalted telegram chat fingerprint")
+        blob = (self.root / "state" / "correspondent-salt").read_text()
+        self.assertNotIn(key, blob)
+
+    def test_same_chat_and_salt_are_stable(self):
+        a = outbound.correspondent_key(self.root / "state", "333")
+        b = outbound.correspondent_key(self.root / "state", "333")
+        self.assertEqual(a, b)
+        other_state = self.root / "other-state"
+        other_state.mkdir()
+        c = outbound.correspondent_key(other_state, "333")
+        self.assertNotEqual(a, c)
+
+    def test_salt_file_is_private_and_minted_once(self):
+        outbound.correspondent_key(self.root / "state", "111")
+        salt = self.root / "state" / "correspondent-salt"
+        self.assertEqual(stat.S_IMODE(salt.stat().st_mode), 0o600)
+        first = salt.read_bytes()
+        outbound.correspondent_key(self.root / "state", "222")
+        self.assertEqual(salt.read_bytes(), first)
+        letter = (self.mail / "outbox" / f"{self.compose()}.md").read_text()
+        token = first.strip().decode("ascii")
+        self.assertNotIn(token, letter)
+
+    def test_incomplete_salt_is_not_an_unsalted_fingerprint(self):
+        import hashlib
+        salt = self.root / "state" / "correspondent-salt"
+        salt.write_bytes(b"")
+        os.chmod(salt, 0o600)
+        key = outbound.correspondent_key(self.root / "state", "111")
+        unsalted = hashlib.sha256(b"telegram:111").hexdigest()[:16]
+        self.assertNotEqual(key, unsalted)
+        self.assertEqual(len(bytes.fromhex(salt.read_text().strip())), 32)
+
+    def test_short_salt_is_refused_then_replaced(self):
+        salt = self.root / "state" / "correspondent-salt"
+        salt.write_text("dead")
+        os.chmod(salt, 0o600)
+        outbound.correspondent_key(self.root / "state", "111")
+        self.assertEqual(len(bytes.fromhex(salt.read_text().strip())), 32)
+
+    def test_world_readable_salt_is_tightened(self):
+        outbound.correspondent_key(self.root / "state", "111")
+        salt = self.root / "state" / "correspondent-salt"
+        os.chmod(salt, 0o644)
+        outbound.correspondent_key(self.root / "state", "222")
+        self.assertEqual(stat.S_IMODE(salt.stat().st_mode), 0o600)
+
+    def test_corrupt_map_is_preserved_not_reset(self):
+        path = self.root / "state" / "correspondents.json"
+        path.write_text("[]")
+        os.chmod(path, 0o600)
+        with self.assertRaises(ValueError):
+            outbound.correspondent_key(self.root / "state", "111")
+        self.assertEqual(path.read_text(), "[]")
+
+    def test_serialized_writers_keep_both_routes(self):
+        import threading
+        errors = []
+
+        def write(chat):
+            try:
+                outbound.correspondent_key(self.root / "state", chat)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        a = threading.Thread(target=write, args=("aaa",))
+        b = threading.Thread(target=write, args=("bbb",))
+        a.start(); b.start()
+        a.join(); b.join()
+        self.assertEqual(errors, [])
+        table = json.loads((self.root / "state" / "correspondents.json").read_text())
+        self.assertIn("telegram:aaa", table)
+        self.assertIn("telegram:bbb", table)
+        self.assertEqual(outbound.origin_chat_for(self.root / "state", table["telegram:aaa"]), "aaa")
+        self.assertEqual(outbound.origin_chat_for(self.root / "state", table["telegram:bbb"]), "bbb")
+
+    def test_cached_map_hit_still_requires_dir_fsync(self):
+        outbound.correspondent_key(self.root / "state", "111")
+        real = outbound._fsync_dir
+
+        def boom(path):
+            if pathlib.Path(path) == self.root / "state":
+                raise OSError(errno.EIO, "injected dir fsync")
+            return real(path)
+
+        with mock.patch.object(outbound, "_fsync_dir", side_effect=boom):
+            with self.assertRaises(OSError):
+                outbound.correspondent_key(self.root / "state", "111")
+
+    def test_short_write_is_completed_before_publish(self):
+        real = os.write
+        chunks = []
+
+        def short(fd, data):
+            payload = bytes(data) if not isinstance(data, bytes) else data
+            if len(payload) > 8:
+                chunks.append(len(payload))
+                return real(fd, payload[:8])
+            return real(fd, payload)
+
+        with mock.patch.object(os, "write", side_effect=short):
+            key = outbound.correspondent_key(self.root / "state", "111")
+        table = json.loads((self.root / "state" / "correspondents.json").read_text())
+        self.assertEqual(table["telegram:111"], key)
+        self.assertTrue(chunks)
+
+    def test_unreadable_valid_salt_is_not_rotated(self):
+        outbound.correspondent_key(self.root / "state", "111")
+        salt = self.root / "state" / "correspondent-salt"
+        before = salt.read_bytes()
+
+        def eio(*_a, **_k):
+            raise OSError(errno.EIO, "injected salt read")
+
+        with mock.patch.object(outbound, "_read_valid_salt", side_effect=eio):
+            with self.assertRaises(OSError):
+                outbound.correspondent_key(self.root / "state", "222")
+        self.assertEqual(salt.read_bytes(), before)
 
 
 class EventsAreImmutableFiles(Base):

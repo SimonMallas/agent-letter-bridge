@@ -109,8 +109,9 @@ class TheBoundActuallyBites(unittest.TestCase):
                 "print('doorbell submitted')\n",
                 encoding="utf-8")
             sleeper.chmod(0o700)
-            with mock.patch.object(run, "RING_TIMEOUT", 0.1):
-                with self.assertRaises(subprocess.TimeoutExpired):
+            with mock.patch.object(run, "RING_TIMEOUT", 0.1), \
+                 mock.patch.object(run, "RING_ATTEMPTS", 1):
+                with self.assertRaises(run.RingNotDelivered):
                     run._bus_ring("codex", "info", "an-id", binary=str(sleeper))
 
     def test_no_second_cmux_step_follows_a_timed_out_first(self):
