@@ -61,7 +61,7 @@ in flight. Without a grant the bridge still cannot originate contact with anyone
 with one, it cannot originate contact anywhere the operator has not named, nor
 more often than the budget allows.
 
-If the agent already has a messenger of its own (a gateway bot, a chat plugin), the bridge runs beside it on its own bot; the two never share a token at the same time — see the install guide.
+If the agent already has a messenger of its own (a gateway bot, a chat plugin — for example Hermes Agent's gateway), the bridge runs beside it on its own bot; the two never share a token at the same time — see the install guide.
 
 What that does *not* claim: an agent still chooses which stored letter to
 answer and what to write in it, so this is not immunity to being persuaded into

@@ -154,6 +154,16 @@ delivery route: the bridge does not synchronize the messenger's conversation wit
 working pane, and nothing routes the pane's letters back into the messenger. Two routes,
 each landing in a different place, unless you deliberately wire them together.
 
+**Worked example: Hermes Agent.** Hermes Agent runs a headless gateway process
+that holds its own Telegram, Discord, or SMS channels, so a message to the
+gateway never reaches the terminal session where the agent is actually working.
+Agent Letter Bridge solves that headless problem: the bridge runs on its own
+bot beside the gateway, writes the message as a letter into the working
+session's inbox, and rings that pane, so the reply comes from the same live
+session. The bridge bypasses the headless gateway; the letter lands in the
+same live session. The rules below still apply: own bot, never share a token,
+name the bots apart, reply with `alb --reply-to`.
+
 So, for an agent like this:
 
 1. Create a **new** bot for the bridge while the built-in messenger stays running.
