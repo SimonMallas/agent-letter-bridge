@@ -106,7 +106,7 @@ class MailRootIsLettersOnly(unittest.TestCase):
         self.assertEqual(kind, "info")
         # And the id of the letter that was actually published. Asserting only
         # the recipient and type would pass while ringing about the wrong
-        # letter, which reads as a delivered knock and resolves to nothing.
+        # letter, which reads as a delivered ring and resolves to nothing.
         published = [p.stem for p in (self.mail / "inbox").glob("*.md")]
         self.assertIn(letter_id, published)
 
@@ -215,7 +215,7 @@ class ReplyThroughTheBinary(unittest.TestCase):
 
 
 class TheHealthFileMustNotLie(unittest.TestCase):
-    """The helper exits 0 whether the knock was submitted, merely pasted, or
+    """The helper exits 0 whether the ring was submitted, merely pasted, or
     had no live surface at all. Trusting the exit code means reporting a
     delivered ring for a pane that is gone - and the ring health file is the
     ONLY tell that a doorbell has stopped working."""
@@ -246,7 +246,7 @@ class TheHealthFileMustNotLie(unittest.TestCase):
         record = json.loads((self.root / "state" / "ring-health.json").read_text())
         return record, runner
 
-    def test_a_submitted_knock_is_recorded_as_delivered(self):
+    def test_a_submitted_ring_is_recorded_as_delivered(self):
         record, _ = self._cycle_with_helper_saying(
             "bus: doorbell submitted to research-bot on SOME-UUID")
         self.assertEqual(record["state"], "ok")
@@ -341,7 +341,7 @@ class AMailboxIsNotInvented(unittest.TestCase):
     mkdir(parents=True) meant a typo'd --mail-root silently created a fresh,
     empty mailbox tree. Letters then land in a directory no agent sweeps while
     the doorbell tells the real agent to check an inbox that stays empty -
-    "knock lands, agent finds nothing", built out of one wrong character, with
+    "ring lands, agent finds nothing", built out of one wrong character, with
     no error anywhere.
 
     A mailbox is, by definition, a directory that already belongs to some

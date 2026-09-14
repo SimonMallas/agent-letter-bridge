@@ -39,6 +39,11 @@ import json
 import os
 import pathlib
 import shutil
+import stat
+
+
+class SetupError(Exception):
+    """Init refused. Message is safe to print: never contains a token."""
 
 DIR_MODE = 0o700
 FILE_MODE = 0o600
@@ -79,9 +84,57 @@ RINGS = ("configured", "helper")
 _UNSET = object()
 
 
+def _consume_token_file(path):
+    """Read a 0600 token file and delete it. Never returns the path into logs."""
+    path = pathlib.Path(path)
+    try:
+        st = os.lstat(path)
+    except OSError:
+        raise SetupError("token file unreadable") from None
+    if stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode):
+        raise SetupError("token file refused")
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    try:
+        fd = os.open(path, flags)
+    except OSError:
+        raise SetupError("token file unreadable") from None
+    try:
+        try:
+            st2 = os.fstat(fd)
+        except OSError:
+            raise SetupError("token file unreadable") from None
+        if not stat.S_ISREG(st2.st_mode):
+            raise SetupError("token file refused")
+        if st2.st_mode & 0o077:
+            raise SetupError("token file must be mode 600")
+        if (st2.st_dev, st2.st_ino) != (st.st_dev, st.st_ino):
+            raise SetupError("token file refused")
+        try:
+            raw = os.read(fd, st2.st_size)
+        except OSError:
+            raise SetupError("token file unreadable") from None
+    finally:
+        os.close(fd)
+    try:
+        token = raw.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        raise SetupError("token file unreadable") from None
+    if not token:
+        raise SetupError("token file empty")
+    if any(ch.isspace() for ch in token):
+        raise SetupError("token file refused")
+    try:
+        os.unlink(path)
+    except OSError:
+        raise SetupError("token file could not be consumed") from None
+    return token
+
+
 def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
          cmux_born=None, bridge_running=None, start_pane=None,
-         resident_command=_UNSET):
+         resident_command=_UNSET, token_file=None):
     """Create the boilerplate under `root`, asking for what cannot be derived.
 
     `console` supplies say / ask / ask_secret, so the questions are testable
@@ -89,7 +142,8 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
 
     Note the absence of a `token` parameter: it is asked for, never passed.
     A signature that accepted one would grow a --token flag, and a flag is
-    shell history.
+    shell history. `--token-file` is the agent-driven path: a 0600 file is
+    read and deleted; the token string never appears in argv.
     """
     root = pathlib.Path(root).expanduser()
     summary = {"mode": "standalone", "created": [], "kept": [], "ring": "not configured"}
@@ -179,7 +233,11 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     console.say("not shown again. If this bot existed before, revoke and re-issue")
     console.say("the token first - one consumer per token is enforced by the")
     console.say("platform, and an old token cannot be proven unused.")
-    token = console.ask_secret("  token (not echoed): ").strip()
+    if token_file:
+        token = _consume_token_file(token_file)
+        console.say("  token read from file and the file was removed.")
+    else:
+        token = console.ask_secret("  token (not echoed): ").strip()
     if not token:
         # Say it NOW, not at first run. The file is still written - the rest of
         # the boilerplate is real either way - but the operator leaves knowing

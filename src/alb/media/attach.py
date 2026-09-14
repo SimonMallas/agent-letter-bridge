@@ -1,4 +1,9 @@
-"""Allowlisted local files for outbound photos. Default deny. Open-once, no-follow."""
+"""Allowlisted local files for outbound photos. Default deny. Open-once, no-follow.
+
+attach-roots.json is the trust boundary, not the path check: a hard link
+whose directory entry sits inside a listed root is sendable even if the
+inode is also linked outside. Listing "/" allows everything.
+"""
 import json
 import os
 import pathlib

@@ -11,13 +11,16 @@ the value of this command is entirely in what it will not do:
   - it never overwrites something that already exists
   - it never picks a pane, or a mailbox, on the operator's behalf
 """
+import errno
 import json
 import os
 import pathlib
 import stat
 import sys
 import tempfile
+import time
 import unittest
+import unittest.mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -88,6 +91,137 @@ class Base(unittest.TestCase):
         console = ScriptedConsole(answers, list(secrets))
         result = wizard.init(self.root, console, **kw)
         return console, result
+
+
+class TokenFile(Base):
+    """`alb --init --token-file`: agent-driven handoff. The file is consumed."""
+
+    def _token_file(self, text="123456:FROMFILE", mode=0o600):
+        path = pathlib.Path(self.tmp.name) / "token"
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.chmod(path, mode)
+        return path
+
+    def test_file_is_consumed_and_removed_and_token_is_not_echoed(self):
+        path = self._token_file()
+        console, result = self.run_init(
+            answers=["n", "print", ""], secrets=[], token_file=str(path))
+        self.assertFalse(path.exists())
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertIn("ALB_TOKEN=123456:FROMFILE", env)
+        self.assertNotIn("123456:FROMFILE", console.transcript)
+        self.assertFalse(any("123456:FROMFILE" in q for q in console.asked))
+
+    def test_world_readable_token_file_is_refused_and_kept(self):
+        path = self._token_file(mode=0o644)
+        with self.assertRaises(wizard.SetupError):
+            self.run_init(answers=["n", "print", ""], secrets=[],
+                          token_file=str(path))
+        self.assertTrue(path.exists())
+        self.assertFalse((self.root / "bridge.env").exists())
+
+    def test_empty_token_file_is_refused_and_kept(self):
+        path = self._token_file(text="")
+        with self.assertRaises(wizard.SetupError) as caught:
+            self.run_init(answers=["n", "print", ""], secrets=[],
+                          token_file=str(path))
+        self.assertIn("empty", str(caught.exception).lower())
+        self.assertTrue(path.exists())
+        self.assertFalse((self.root / "bridge.env").exists())
+
+    def test_whitespace_only_token_file_is_refused_and_kept(self):
+        path = self._token_file(text="  \n\t  \n")
+        with self.assertRaises(wizard.SetupError) as caught:
+            self.run_init(answers=["n", "print", ""], secrets=[],
+                          token_file=str(path))
+        self.assertIn("empty", str(caught.exception).lower())
+        self.assertTrue(path.exists())
+        self.assertFalse((self.root / "bridge.env").exists())
+
+    def test_token_with_internal_whitespace_is_refused_and_kept(self):
+        path = self._token_file(text="123456:FROM FILE\nsecond-line\n")
+        with self.assertRaises(wizard.SetupError) as caught:
+            self.run_init(answers=["n", "print", ""], secrets=[],
+                          token_file=str(path))
+        self.assertNotIn("empty", str(caught.exception).lower())
+        self.assertTrue(path.exists())
+        self.assertFalse((self.root / "bridge.env").exists())
+        self.assertNotIn("FROM FILE", str(caught.exception))
+
+    def test_directory_swap_between_lstat_and_open_is_refused(self):
+        decoy = self._token_file()
+        decoy_st = os.lstat(decoy)
+        target = pathlib.Path(self.tmp.name) / "now-a-dir"
+        target.mkdir()
+        os.chmod(target, 0o700)
+        real_lstat = wizard.os.lstat
+
+        def swapped(p, *a, **kw):
+            if pathlib.Path(p) == target:
+                return decoy_st
+            return real_lstat(p, *a, **kw)
+
+        with unittest.mock.patch.object(wizard.os, "lstat", swapped):
+            with self.assertRaises(wizard.SetupError) as caught:
+                wizard._consume_token_file(target)
+        msg = str(caught.exception)
+        self.assertIn("refused", msg.lower())
+        self.assertNotIn(str(target), msg)
+        self.assertTrue(target.is_dir())
+
+    def test_eio_on_read_is_setup_error_and_keeps_the_file(self):
+        path = self._token_file()
+
+        def boom(fd, n):
+            raise OSError(errno.EIO, "injected")
+
+        with unittest.mock.patch.object(wizard.os, "read", boom):
+            with self.assertRaises(wizard.SetupError) as caught:
+                wizard._consume_token_file(path)
+        msg = str(caught.exception)
+        self.assertIn("unreadable", msg.lower())
+        self.assertNotIn(str(path), msg)
+        self.assertTrue(path.exists())
+
+    def test_fifo_is_refused_promptly(self):
+        path = pathlib.Path(self.tmp.name) / "pipe"
+        os.mkfifo(path)
+        os.chmod(path, 0o600)
+        decoy = self._token_file()
+        decoy_st = os.lstat(decoy)
+        real_lstat = wizard.os.lstat
+
+        def looks_regular(p, *a, **kw):
+            if pathlib.Path(p) == path:
+                return decoy_st
+            return real_lstat(p, *a, **kw)
+
+        started = time.monotonic()
+        with unittest.mock.patch.object(wizard.os, "lstat", looks_regular):
+            with self.assertRaises(wizard.SetupError) as caught:
+                wizard._consume_token_file(path)
+        self.assertLess(time.monotonic() - started, 1.0)
+        self.assertIn("refused", str(caught.exception).lower())
+        self.assertTrue(path.exists())
+
+    def test_inode_mismatch_is_refused_and_kept(self):
+        path = self._token_file()
+        real_fstat = wizard.os.fstat
+
+        def mismatch(fd):
+            st = real_fstat(fd)
+            vals = list(st)
+            vals[stat.ST_INO] = st.st_ino + 1
+            return os.stat_result(vals)
+
+        with unittest.mock.patch.object(wizard.os, "fstat", mismatch):
+            with self.assertRaises(wizard.SetupError) as caught:
+                wizard._consume_token_file(path)
+        self.assertIn("refused", str(caught.exception).lower())
+        self.assertTrue(path.exists())
+        self.assertFalse((self.root / "bridge.env").exists())
 
 
 class ItCreatesTheBoilerplate(Base):
@@ -168,7 +302,7 @@ class ItRefusesToGuess(Base):
 
     def test_it_never_picks_a_pane(self):
         """A listing cannot tell you which pane holds the agent the operator
-        means, and a knock typed into the wrong pane lands in someone else's
+        means, and a ring typed into the wrong pane lands in someone else's
         session."""
         console, result = self.run_init(
             answers=["n", "print", ""],

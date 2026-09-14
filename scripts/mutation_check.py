@@ -36,6 +36,7 @@ OUTBOUND = ROOT / "src" / "alb" / "outbound" / "store.py"
 WIZARD = ROOT / "src" / "alb" / "setup" / "wizard.py"
 DISCOVER = ROOT / "src" / "alb" / "setup" / "discover.py"
 GRANT = ROOT / "src" / "alb" / "grant" / "store.py"
+ATTACH = ROOT / "src" / "alb" / "media" / "attach.py"
 INITIATE_SEND = ROOT / "src" / "alb" / "initiate" / "send.py"
 POLLER = ROOT / "src" / "alb" / "poller" / "loop.py"
 
@@ -492,7 +493,7 @@ EXTRA = {
         BRIDGE, "tests.test_mail_root",
         '            _bus_ring(recipient, "info", published[-1], binary=bus_binary)',
         '            ring.notify(transport, surface, mail / "inbox", published[-1])'),
-    "standalone keeps its own knock and store": (
+    "standalone keeps its own ring and store": (
         BRIDGE, "tests.test_mail_root",
         "    integrated = mail_root is not None and pathlib.Path(mail_root) != root",
         "    integrated = True"),
@@ -898,6 +899,55 @@ EXTRA = {
         "                        try:\n"
         "                            media_store.promote(state, item[\"update_id\"],\n"
         "                                                found.stem, advertised)"),
+    "msgindex writers take an exclusive flock": (
+        MSGINDEX, "tests.test_msgindex",
+        "        fcntl.flock(fd, fcntl.LOCK_EX)",
+        "        pass"),
+    "msgindex write uses a unique temp": (
+        MSGINDEX, "tests.test_msgindex",
+        '    tmp = path.parent / f".{path.name}.{os.getpid()}.{secrets.token_hex(4)}.partial"',
+        '    tmp = pathlib.Path(f"{path}.tmp")'),
+    "grant validate checks binding identity": (
+        GRANT, "tests.test_grant",
+        "    if grant.get(\"binding_key\") != binding_key(platform, chat_id):\n"
+        "        raise PolicyError(\"grant invalid\")",
+        "    if False:\n        raise PolicyError(\"grant invalid\")"),
+    "token file must be mode 600": (
+        WIZARD, "tests.test_setup",
+        "        if st2.st_mode & 0o077:\n            raise SetupError(\"token file must be mode 600\")",
+        "        if False:\n            raise SetupError(\"token file must be mode 600\")"),
+    "check shows ring-health age": (
+        CLI, "tests.test_check_command",
+        "        print(f\"ring: {ring}\")",
+        "        pass"),
+    "reply photo preflights before claim": (
+        SEND, "tests.test_media",
+        "        photo_bytes = attach.read_allowed(state, photo_path)",
+        "        photo_bytes = pathlib.Path(photo_path).read_bytes()"),
+    "empty token file is kept": (
+        WIZARD, "tests.test_setup",
+        "    if not token:\n        raise SetupError(\"token file empty\")",
+        "    if False:\n        raise SetupError(\"token file empty\")"),
+    "token file may not contain whitespace": (
+        WIZARD, "tests.test_setup",
+        "    if any(ch.isspace() for ch in token):\n        raise SetupError(\"token file refused\")",
+        "    if False:\n        raise SetupError(\"token file refused\")"),
+    "grant overrides are not clamped to POLICY": (
+        GRANT, "tests.test_grant",
+        "        out[key] = value",
+        "        out[key] = min(value, POLICY[key]) if isinstance(value, int) else value"),
+    "hard link inside an attach root is sendable": (
+        ATTACH, "tests.test_media",
+        "    if stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode):\n"
+        "        raise store.MediaError(\"photo path refused\")",
+        "    if stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode) or st.st_nlink > 1:\n"
+        "        raise store.MediaError(\"photo path refused\")"),
+    "fstat identity checked": (
+        WIZARD, "tests.test_setup",
+        "        if (st2.st_dev, st2.st_ino) != (st.st_dev, st.st_ino):\n"
+        "            raise SetupError(\"token file refused\")",
+        "        if False:\n"
+        "            raise SetupError(\"token file refused\")"),
 }
 
 MUTATIONS = {

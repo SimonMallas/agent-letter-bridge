@@ -143,7 +143,7 @@ def _cross(sender, state, allowlist_path, grant, rec, *, text, reason, seat,
         raise reply.AmbiguousOutcome("sending with no terminal receipt")
     if rec.get("status") not in ("reserved", "held"):
         raise TerminalExists("reservation is not sendable")
-    rec = budget.readmit_existing(state, rec, now=now)
+    rec = budget.readmit_existing(state, rec, now=now, grant=grant)
     try:
         grant = grants.load(state, rec["grant_id"])
         live, _digest_now = _authority(
@@ -201,8 +201,6 @@ def send_initiated(sender, state, outbox, allowlist_path, *, label, intent_id,
         raise ids.UsageError("text required")
     if not text and photo_path is None and photo_bytes is None:
         raise ids.UsageError("text required")
-    if len(text.encode("utf-8")) > grants.POLICY["max_body"]:
-        raise ids.UsageError("body too large")
     if not isinstance(seat, str) or not seat:
         raise ids.UsageError("seat required")
 
@@ -218,6 +216,8 @@ def send_initiated(sender, state, outbox, allowlist_path, *, label, intent_id,
     grant = grants.load(state, grant_id)
     if grant.get("platform") != "telegram":
         raise ids.UsageError("platform not supported")
+    if len(text.encode("utf-8")) > grants.effective(grant, "max_body"):
+        raise ids.UsageError("body too large")
     digest = _digest(grant, seat=seat, intent_id=intent_id, text=text,
                      reason=reason, photo_hash=photo_hash)
     oid = ids.outbound_id(grant["grant_id"], seat, intent_id)
@@ -252,7 +252,7 @@ def send_initiated(sender, state, outbox, allowlist_path, *, label, intent_id,
         rec = budget.admit_new(
             state, grant["binding_key"], outbound_id=oid,
             grant_id=grant["grant_id"], intent_id=intent_id, seat=seat,
-            payload_digest=digest, now=now)
+            payload_digest=digest, now=now, grant=grant)
         media = None
         try:
             if data is not None:

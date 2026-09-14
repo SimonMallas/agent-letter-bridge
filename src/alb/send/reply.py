@@ -192,12 +192,15 @@ def _dead_letter(state, reply_id, letter_id, detail):
 
 
 def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
-               searched=None, outbox=None, agent="agent"):
+               searched=None, outbox=None, agent="agent", photo_path=None):
     """Reply to the chat named by a stored inbound letter. Nothing else.
 
     `searched` must cover everywhere letters travel. An inbox is swept, and
     searching only the inbox means a reply to a filed letter fails as though it
     never existed - which an operator reads as the send path being broken.
+
+    `photo_path` uses the same allowlisted-file + preflight rules as
+    initiating `--send --photo`. Still one reply per inbound letter.
     """
     # The destination is read from disk - never remembered, configured or inferred.
     stored = None
@@ -215,6 +218,15 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
     if not gate.allows(allowlist_path, chat_id):
         raise NotPermitted(f"destination not permitted at send time")
 
+    text = text or ""
+    photo_bytes = None
+    if photo_path:
+        from alb.media import attach, inspect
+        photo_bytes = attach.read_allowed(state, photo_path)
+        inspect.preflight(photo_bytes, text)
+    if not text and photo_bytes is None:
+        raise DefiniteRefusal("reply needs text or a photo")
+
     # v0.2 W1: the outbound LETTER is written first and its O_EXCL create IS
     # the claim - one logical reply per source letter, established in the same
     # syscall that makes the reply durable. The legacy body-hash claim held a
@@ -227,15 +239,23 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
         # Callers that predate slice 2 (and the tests that pin them) keep the
         # legacy claim path until the wiring lands everywhere; new callers
         # pass outbox and get the letter-first path.
+        if photo_bytes is not None:
+            raise DefiniteRefusal("photo replies need an outbox")
         return _send_legacy(sender, state, letter_id, chat_id, text)
 
     out_id = outbound.compose(pathlib.Path(outbox), pathlib.Path(state),
                               source_id=letter_id, origin_chat=chat_id,
                               sender=agent, body=text,
                               thread=stored.meta.get("thread", ""))
+    if photo_bytes is not None:
+        from alb.media import store as media_store
+        media_store.stage_outbound(state, out_id, photo_bytes)
     outbound.record_event(state, out_id, "sending")
     try:
-        platform_id = sender.send(chat_id, text)
+        if photo_bytes is not None:
+            platform_id = sender.send_photo(chat_id, photo_bytes, caption=text)
+        else:
+            platform_id = sender.send(chat_id, text)
     except AmbiguousOutcome as exc:
         outbound.record_event(state, out_id, "ambiguous", detail=str(exc))
         _dead_letter(state, out_id, letter_id, str(exc))
@@ -354,8 +374,13 @@ def _resume_locked(sender, inbox, state, allowlist_path, out_id, outbox,
     if not gate.allows(allowlist_path, chat_id):
         raise NotPermitted("destination not permitted at resume time")
     outbound.record_event(state, out_id, "sending")
+    from alb.media import store as media_store
+    staged = media_store.load_outbound(state, out_id)
     try:
-        platform_id = sender.send(chat_id, letter.body)
+        if staged is not None:
+            platform_id = sender.send_photo(chat_id, staged, caption=letter.body)
+        else:
+            platform_id = sender.send(chat_id, letter.body)
     except AmbiguousOutcome as exc:
         outbound.record_event(state, out_id, "ambiguous", detail=str(exc))
         # The SOURCE id, not the outbound id twice: an operator chasing a

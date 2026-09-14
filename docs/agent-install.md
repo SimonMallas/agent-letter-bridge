@@ -27,7 +27,7 @@ delivers nothing.
 | You may | You may **not** |
 | --- | --- |
 | run `alb --init` and let it create the files | create or edit `allowlist.json` from a value you inferred |
-| write `bridge.env` from values the human gave you | put a token in a transcript, log, commit, or message |
+| name a mode-600 token file for `--init --token-file` | put a token in a transcript, log, commit, argv, or message |
 | run `--doctor`, `--status`, `--once` | run `--canary` or `--reply-to` without being asked — both send |
 | read letters in the inbox | commit anything under the state directory |
 | report what failed and why | conclude "installed" without the Step 8 checkpoints passing |
@@ -37,8 +37,8 @@ between a stranger and this machine's agents. Write exactly the id the human
 gives you, and if you do not have one, stop and ask. An allowlist you inferred
 from a chat log, a git history, or another config file is not an allowlist.
 
-**Never echo the token.** It is a live credential. Write it to the file and do
-not print it, quote it back for confirmation, or include it in a summary.
+**Never echo the token.** It is a live credential. Do not print it, quote it
+back for confirmation, or include it in a summary.
 
 ---
 
@@ -97,8 +97,14 @@ establish them now rather than discovering them at Step 7:
 ## Step 2 — Install
 
 ```sh
-pipx install .          # from the repository directory
+pipx install agent-letter-bridge
 alb --help
+```
+
+From a repository checkout (developer path, not the new-user line):
+
+```sh
+pipx install .          # from the repository directory
 ```
 
 If `alb` is not found, run `pipx ensurepath` and report that the human needs a
@@ -169,10 +175,11 @@ So, for an agent like this:
 ## Step 3 — ASK: the bot token
 
 > "I need a bot token. In Telegram, message @BotFather, send `/newbot`, and
-> paste me the token it gives you. **If this bot already existed for anything
-> else, please revoke and re-issue the token first** — the platform allows one
-> consumer per token, and I cannot prove an old one isn't still being polled.
-> Then send the bot any message, so there is one for setup to find."
+> write the token it gives you into a mode-600 file I will name — do not paste
+> it into this chat. **If this bot already existed for anything else, please
+> revoke and re-issue the token first** — the platform allows one consumer per
+> token, and I cannot prove an old one isn't still being polled. Then send the
+> bot any message, so there is one for setup to find."
 
 "Revoke and re-issue" is the safe default *because* the previous consumer is
 usually unknown and unprovable. But if you **know** the current consumer —
@@ -194,12 +201,25 @@ You cannot do this step. BotFather is an interactive chat the human is in.
 **Do not repeat the token back.** Not in a summary, not to confirm it, not in a
 log. It is a live credential.
 
-**And when the human says "got the token — where do you want it?", the answer
-is `alb --init`'s hidden prompt and nowhere else.** Do not tell them to write
-`bridge.env` by hand, and do not invent a key name — the key is `ALB_TOKEN`,
-and a hand-written file with anything else is refused by the loader. This
-mistake has been made by an agent reading this exact document; the file-writing
-belongs to init, which sets the mode at creation.
+**Recommended agent path: `--init --token-file`.** Name a path the human
+writes (mode 600, owner-only, one line, the token only). Then:
+
+```sh
+alb --init --root ~/.alb --token-file <that-path>
+```
+
+The wizard reads the file and deletes it. Empty, whitespace-only, or
+multi-line files are refused and **kept** — do not invent a second file or
+echo the contents. Never pass the token as an argument (`--token` does not
+exist). Do not tell them to write `bridge.env` by hand, and do not invent a
+key name — the key is `ALB_TOKEN`, and a hand-written file with anything else
+is refused by the loader. File-writing for the config belongs to init, which
+sets the mode at creation.
+
+**If you fall back to the hidden prompt** (human typing at the wizard, not
+the token-file path): before telling them to paste anything into a pane,
+read the pane and confirm it is at the hidden token prompt. A paste into
+the wrong prompt or the wrong pane is how a token lands in a transcript.
 
 ---
 
@@ -227,6 +247,14 @@ safe on a bot nothing else is polling.
 ---
 
 ## Step 5 — Run `alb init`
+
+Recommended (agent-driven token handoff):
+
+```sh
+alb --init --root ~/.alb --token-file <mode-600-file>
+```
+
+Interactive fallback (human types the token at the hidden prompt):
 
 ```sh
 alb --init --root ~/.alb
@@ -454,6 +482,11 @@ things:
 - `alb --stop --root <root>` asks the holder to stand down. **If it returns
   non-zero or times out, do not start a replacement** — an unconfirmed stop is
   not a stop, and two pollers on one token is the failure it exists to avoid.
+
+**Sweep rule (integrated).** The ring is coalesced — one ring per batch
+naming the newest letter. On a ring, sweep and handle every unfiled
+`telegram-bridge` letter, oldest first. An earlier letter can sit while a
+later one rings; answering only the named letter leaves the rest unread.
 
 The rest of [`agent-setup.md`](agent-setup.md) is about a doorbell convention it
 already has. These three are not.

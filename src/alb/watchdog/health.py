@@ -156,3 +156,35 @@ def verdict(path):
                    f"last seen {age}s ago while {state}, past the {allowance}s "
                    f"policy allowance. That is grounds to restart, not proof "
                    f"it is dead")
+
+
+def _age_label(seconds):
+    seconds = max(0, int(seconds))
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    if seconds < 86400:
+        return f"{seconds // 3600}h"
+    return f"{seconds // 86400}d"
+
+
+def ring_report(path):
+    """Last doorbell-ring outcome, with age. Passive: never rings.
+
+    Missing file is not a failure - it means no ring has been attempted yet.
+    """
+    path = pathlib.Path(path)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        state = data["state"]
+        reason = data.get("reason", "")
+        at = float(data["at"])
+        if not math.isfinite(at):
+            raise ValueError("non-finite ring timestamp")
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return "unknown - no ring has been attempted yet"
+    age = _age_label(now() - at)
+    if reason:
+        return f"{state} - {reason} ({age} ago)"
+    return f"{state} ({age} ago)"

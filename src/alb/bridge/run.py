@@ -160,7 +160,7 @@ def write_private(path, text):
 
 
 class RingNotDelivered(Exception):
-    """The helper ran without submitting a knock.
+    """The helper ran without submitting a ring.
 
     Not fatal - letters are authoritative - but it must be recorded as a
     failure rather than swallowed into a success.
@@ -183,7 +183,7 @@ def prepare_mail_root(mail_root):
     directory that belongs to some agent; one that does not exist is nobody's,
     so a missing path here is a typo, not a request to create it. Inventing it
     would put every letter into a tree no agent sweeps while the doorbell sends
-    the real agent to an inbox that stays empty - "knock lands, agent finds
+    the real agent to an inbox that stays empty - "ring lands, agent finds
     nothing", built out of one wrong character, with no error anywhere.
     """
     mail_root = pathlib.Path(mail_root)
@@ -267,7 +267,7 @@ def _bus_ring(recipient, kind, letter_id, binary=None):
                 time.sleep(RING_RETRY_SLEEP)
                 continue
             raise last from exc
-        # THE EXIT CODE IS NOT THE OUTCOME. The helper exits 0 whether the knock
+        # THE EXIT CODE IS NOT THE OUTCOME. The helper exits 0 whether the ring
         # was submitted, merely pasted into a pane without being submitted, or had
         # no live surface at all. Trusting the code would record a delivered ring
         # for a pane that is gone - and this record is the only tell that a

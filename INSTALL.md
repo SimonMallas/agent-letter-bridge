@@ -78,7 +78,13 @@ this afterwards is how a bridge ends up delivering mail in silence.
 
 ## Step 2 — Install the tool
 
-From the repository directory:
+New users:
+
+```sh
+pipx install agent-letter-bridge
+```
+
+From a repository checkout (developer path):
 
 ```sh
 pipx install .          # or: uv tool install .
@@ -148,7 +154,9 @@ helper's path, but only if that helper is not already on `PATH`.
 
 **2. Your bot token.** Not echoed as you type, not shown again, and never
 accepted as a command-line argument — a flag would put your token in shell
-history.
+history. An agent installing for you should use
+`alb --init --token-file <mode-600-file>` instead: you write the token into
+that file; the wizard reads it and deletes it.
 
 **3. How to get your chat id — `read` or `print`.** Both are real options:
 

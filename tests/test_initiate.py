@@ -454,13 +454,19 @@ class ReplyUntouched(Base):
         self.assertEqual(sender.calls, [])
         self.assertEqual(rc, 1)
 
-    def test_cli_refuses_photo_with_reply_to(self):
+    def test_cli_does_not_pair_refuse_photo_with_reply_to(self):
+        """0.3.1: --reply-to --photo is allowed. The pair gate must not fire."""
+        import io
         from alb import cli
-        rc = cli.main([
-            "--root", str(self.root), "--config", str(self.root / "missing.env"),
-            "--reply-to", "x", "--text", "y", "--photo", "/tmp/x.png",
-        ])
-        self.assertEqual(rc, 2)
+        buf = io.StringIO()
+        with mock.patch("sys.stderr", buf):
+            rc = cli.main([
+                "--root", str(self.root),
+                "--config", str(self.root / "missing.env"),
+                "--reply-to", "x", "--text", "y", "--photo", "/tmp/x.png",
+            ])
+        self.assertNotEqual(rc, 0)
+        self.assertNotIn("--photo is not valid with --reply-to", buf.getvalue())
 
 
 if __name__ == "__main__":

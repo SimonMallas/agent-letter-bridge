@@ -26,7 +26,7 @@ class NoTargetSurface(Exception):
     """Identity uncertainty fails closed: no surface, no ring.
 
     Never guess at which pane looks right - that is how the wrong surface gets
-    a knock, and it is the failure the identity work exists to prevent.
+    a ring, and it is the failure the identity work exists to prevent.
     """
 
 

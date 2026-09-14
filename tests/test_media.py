@@ -154,6 +154,18 @@ class Outbound(unittest.TestCase):
         with self.assertRaises(inspect.MediaError):
             attach.read_allowed(self.state, str(outside))
 
+    def test_hard_link_inside_root_to_outside_is_accepted_by_design(self):
+        """attach-roots.json is the trust boundary, not the inode. A hard
+        link whose directory entry sits inside an allowlisted root is
+        sendable even if the same inode is also linked outside. Do not
+        'fix' this by refusing nlink>1."""
+        outside = self.root / "secret.png"
+        outside.write_bytes(PNG_1x1)
+        inside = self.allowed / "alias.png"
+        os.link(outside, inside)
+        data = attach.read_allowed(self.state, str(inside))
+        self.assertEqual(data[:8], PNG_1x1[:8])
+
     def test_symlink_is_refused(self):
         link = self.allowed / "link.png"
         link.symlink_to(self.png)
@@ -623,6 +635,87 @@ class InboundPromote(unittest.TestCase):
         self.assertIsNone(singleton.running_pid(self.root))
         with singleton.hold(self.root):
             pass
+
+
+class ReplyPhoto(unittest.TestCase):
+    """--reply-to --photo: same allowlist + preflight as --send --photo."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        self.state = self.root / "state"
+        self.state.mkdir()
+        self.inbox = self.root / "inbox"
+        self.inbox.mkdir()
+        self.outbox = self.root / "outbox"
+        self.allow = self.root / "allowlist.json"
+        self.allow.write_text(json.dumps({"chats": ["111"]}), encoding="utf-8")
+        self.allowed = self.root / "allowed"
+        self.allowed.mkdir()
+        (self.state / "attach-roots.json").write_text(
+            json.dumps({"roots": [str(self.allowed)]}), encoding="utf-8")
+        self.png = self.allowed / "pic.png"
+        self.png.write_bytes(PNG_1x1)
+        self.letter_id = letters.publish(
+            self.inbox, "see this", {"telegram_chat_id": "111"})
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_allowlisted_photo_goes_out_as_send_photo(self):
+        class Sender:
+            def __init__(self):
+                self.calls = []
+
+            def send(self, chat_id, text):
+                raise AssertionError("sendMessage used for a photo reply")
+
+            def send_photo(self, chat_id, data, caption=""):
+                self.calls.append((chat_id, data[:8], caption))
+                return "77"
+
+        sender = Sender()
+        rid = reply.send_reply(
+            sender, self.inbox, self.state, self.allow, self.letter_id,
+            "caption", outbox=self.outbox, photo_path=str(self.png))
+        self.assertEqual(sender.calls, [("111", PNG_1x1[:8], "caption")])
+        self.assertTrue((self.outbox / f"{rid}.md").is_file())
+        blob = (self.outbox / f"{rid}.md").read_text(encoding="utf-8")
+        self.assertNotIn(str(self.png), blob)
+        self.assertEqual(media_store.load_outbound(self.state, rid)[:8], PNG_1x1[:8])
+
+    def test_non_allowlisted_file_is_refused_before_claim(self):
+        outside = self.root / "secret.png"
+        outside.write_bytes(PNG_1x1)
+
+        class Sender:
+            def send(self, chat_id, text):
+                raise AssertionError("must not send")
+
+            def send_photo(self, chat_id, data, caption=""):
+                raise AssertionError("must not send photo")
+
+        with self.assertRaises(inspect.MediaError):
+            reply.send_reply(
+                Sender(), self.inbox, self.state, self.allow, self.letter_id,
+                "x", outbox=self.outbox, photo_path=str(outside))
+        self.assertEqual(list(self.outbox.glob("*.md")), [])
+
+    def test_second_reply_still_already_claimed(self):
+        class Sender:
+            def send_photo(self, chat_id, data, caption=""):
+                return "1"
+
+            def send(self, chat_id, text):
+                return "2"
+
+        reply.send_reply(
+            Sender(), self.inbox, self.state, self.allow, self.letter_id,
+            "one", outbox=self.outbox, photo_path=str(self.png))
+        with self.assertRaises(reply.AlreadyClaimed):
+            reply.send_reply(
+                Sender(), self.inbox, self.state, self.allow, self.letter_id,
+                "two", outbox=self.outbox)
 
 
 if __name__ == "__main__":

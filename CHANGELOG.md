@@ -7,6 +7,47 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-09-14
+
+Small live traps on the phone path.
+
+### Added
+
+**`--reply-to --photo`.** A reply may carry an image under the same
+allowlisted-file and preflight rules as `--send --photo`. Still one reply
+per inbound letter. Non-allowlisted paths are refused before the claim.
+A hard link whose directory entry sits inside an attach root is sendable
+even if the inode is also linked outside; `attach-roots.json` is the
+trust boundary, not the path check. Listing `/` allows everything.
+
+**`--init --token-file <path>`.** Agent-driven token handoff: a mode-600
+file is read and deleted. Empty or whitespace-only files, and tokens that
+contain whitespace, are refused and the file is kept. The token never
+appears in argv or in the wizard transcript. The rest of the wizard is
+unchanged.
+
+**Ring-health on `--check` / `--status`.** Last doorbell-ring outcome and
+its age are shown from `ring-health.json` next to `health.json`, so a ring
+that has been dead for days is visible without an inbound.
+
+### Changed
+
+**msgindex writes are locked.** `message-index.json` is updated under an
+exclusive flock, through a unique temp name, so two writers cannot drop an
+entry.
+
+**Grants no longer pin POLICY by equality.** A grant carries binding
+identity and optional `overrides`. Validation checks that the binding
+matches; limits follow current POLICY unless overridden. Changing a POLICY
+limit does not invalidate existing grants. Overrides are operator-set in
+the 0700 grants directory / 0600 grant files and may exceed POLICY; that
+directory is the trust boundary. There is no CLI for overrides.
+
+**Vocabulary.** Docs and comments in this repo say the doorbell rings.
+
+**Install line for new users is `pipx install agent-letter-bridge`.**
+Checkout `pipx install .` remains the developer path.
+
 ## [0.3.0] — 2026-09-10
 
 Two capabilities that were deliberately absent in the reply-only bridge, each

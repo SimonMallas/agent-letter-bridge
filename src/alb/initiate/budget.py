@@ -88,14 +88,18 @@ def counts(state, binding_key, *, day_key, hour_key, exclude=None):
 
 
 def admit_new(state, binding_key, *, outbound_id, grant_id, intent_id, seat,
-              payload_digest, now=None):
-    policy = grants.POLICY
+              payload_digest, now=None, grant=None):
+    grant = grant if grant is not None else grants.load(state, grant_id)
+    per_day = grants.effective(grant, "per_day")
+    per_hour = grants.effective(grant, "per_hour")
+    max_queued = grants.effective(grant, "max_queued")
+    tz_name = grants.effective(grant, "timezone")
     with durable.flock(_lock_path(state, binding_key), blocking=True):
-        day_key, hour_key = ids.window_keys(now)
+        day_key, hour_key = ids.window_keys(now, tz_name=tz_name)
         used_day, used_hour, active_q = counts(
             state, binding_key, day_key=day_key, hour_key=hour_key)
-        if (used_day >= policy["per_day"] or used_hour >= policy["per_hour"]
-                or active_q >= policy["max_queued"]):
+        if (used_day >= per_day or used_hour >= per_hour
+                or active_q >= max_queued):
             raise CapacityRefused("capacity refused")
         rec = {
             "outbound_id": outbound_id,
@@ -111,18 +115,21 @@ def admit_new(state, binding_key, *, outbound_id, grant_id, intent_id, seat,
         return reservation.create(state, rec)
 
 
-def readmit_existing(state, rec, *, now=None):
+def readmit_existing(state, rec, *, now=None, grant=None):
     """Crossing predicate: an existing reservation is not a new admission."""
-    policy = grants.POLICY
     binding_key = rec["binding_key"]
+    grant = grant if grant is not None else grants.load(state, rec["grant_id"])
+    per_day = grants.effective(grant, "per_day")
+    per_hour = grants.effective(grant, "per_hour")
+    tz_name = grants.effective(grant, "timezone")
     with durable.flock(_lock_path(state, binding_key), blocking=True):
-        day_key, hour_key = ids.window_keys(now)
+        day_key, hour_key = ids.window_keys(now, tz_name=tz_name)
         used_day, used_hour, _active = counts(
             state, binding_key, day_key=day_key, hour_key=hour_key,
             exclude=rec["outbound_id"])
         if rec.get("day_key") == day_key and rec.get("hour_key") == hour_key:
             return rec
-        if used_day + 1 > policy["per_day"] or used_hour + 1 > policy["per_hour"]:
+        if used_day + 1 > per_day or used_hour + 1 > per_hour:
             raise CapacityRefused("capacity refused")
         rec = dict(rec)
         rec["day_key"] = day_key

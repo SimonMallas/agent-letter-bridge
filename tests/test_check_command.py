@@ -77,6 +77,26 @@ class TheCommandAnAgentRunsOnWaking(unittest.TestCase):
         self.assertEqual(got.returncode, 3)
         self.assertIn("investigate", got.stdout.lower())
 
+    def test_stale_ring_health_is_visible_without_an_inbound(self):
+        """Ring outcome lives next to health.json. An agent checking a quiet
+        bridge must still see that the last ring failed three days ago."""
+        self.write(age=3)
+        (self.root / "state" / "ring-health.json").write_text(
+            json.dumps({
+                "state": "failed",
+                "reason": "no_live_surface",
+                "at": time.time() - 3 * 86400,
+            }), encoding="utf-8")
+        got = self.check()
+        self.assertEqual(got.returncode, 0, got.stdout + got.stderr)
+        self.assertIn("no_live_surface", got.stdout)
+        self.assertRegex(got.stdout, r"3d|72h|[2-4]d")
+        status = subprocess.run(
+            [*ALB, "--status", "--root", str(self.root)],
+            capture_output=True, text=True)
+        self.assertIn("no_live_surface", status.stdout)
+        self.assertRegex(status.stdout, r"3d|72h|[2-4]d")
+
 
 class TheAdviceNamesOnlyThingsThatExist(unittest.TestCase):
     """Kimi's block. The restart verdict told an agent to run `alb --stop`,

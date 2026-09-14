@@ -13,6 +13,8 @@ SET IT UP
                               program can derive. Never invents an allowlist
                               entry, never overwrites a file, and never reaches
                               the platform unless you ask it to.
+  alb --init --token-file PATH  same, but reads a mode-600 token file and
+                              deletes it (agent-driven handoff; no argv token).
 
 RUN IT
   alb --config bridge.env --root ~/.alb        both flags are required
@@ -29,6 +31,7 @@ WHEN SOMETHING IS WRONG
 
 REPLY TO A STORED LETTER
   alb --reply-to <letter-id> --text "..."
+  alb --reply-to <letter-id> --photo <path> [--text "..."]
 
 SEND FIRST (operator grant + label; never a raw chat id)
   alb --grant-create --as owner --platform telegram --chat-id <id>
@@ -95,6 +98,8 @@ def main(argv=None):
     parser.add_argument("--init", action="store_true",
                         help="create the state directory, a mode-600 config and a "
                              "deny-all allowlist, asking for what cannot be derived")
+    parser.add_argument("--token-file", metavar="PATH",
+                        help="with --init: read a mode-600 token file, then delete it")
     parser.add_argument("--once", action="store_true", help="one cycle, then exit")
     parser.add_argument("--canary", action="store_true",
                         help="prove the send path is alive; sends to your own chat")
@@ -145,16 +150,16 @@ def main(argv=None):
     parser.add_argument("--chat-id", dest="chat_id",
                         help="exact chat binding (grant-create only)")
     parser.add_argument("--photo", metavar="PATH",
-                        help="image for --send; path must sit under a root listed "
-                             "in <root>/state/attach-roots.json")
+                        help="image for --send or --reply-to; path must sit under "
+                             "a root listed in <root>/state/attach-roots.json")
     parser.add_argument("--interval", type=float, default=2.0)
     args = parser.parse_args(argv)
 
     if args.send and args.reply_to:
         print("alb: --send and --reply-to cannot be combined", file=sys.stderr)
         return 2
-    if args.reply_to and args.photo:
-        print("alb: --photo is not valid with --reply-to", file=sys.stderr)
+    if args.token_file and not args.init:
+        print("alb: --token-file is only valid with --init", file=sys.stderr)
         return 2
 
     # Setup runs before there is a config to load, which is the whole point:
@@ -248,6 +253,9 @@ def main(argv=None):
 
         v = health.verdict(pathlib.Path(args.root) / "state" / "health.json")
         print(f"{v.state}: {v.reason}")
+        ring = health.ring_report(
+            pathlib.Path(args.root) / "state" / "ring-health.json")
+        print(f"ring: {ring}")
         if v.action == "restart":
             # Names only what exists today. The first version of this line
             # recommended an alb flag that had not been built, so obeying the
@@ -286,13 +294,7 @@ def main(argv=None):
         else:
             print("canary : never run - the send path is unproven")
 
-        ring_path = state / "ring-health.json"
-        if ring_path.is_file():
-            import json as _json
-            ring = _json.loads(ring_path.read_text(encoding="utf-8"))
-            print(f"ring   : {ring['state']} - {ring['reason']}")
-        else:
-            print("ring   : unknown - no ring has been attempted yet")
+        print(f"ring   : {health.ring_report(state / 'ring-health.json')}")
         # A bridge that cannot deliver is not ok, however fresh its heartbeat.
         return 0 if (bridge.state == "ok" and delivery["can_deliver"]) else 1
 
@@ -404,13 +406,13 @@ def main(argv=None):
         return _send_initiated(args, config, root, mail, state)
 
     if args.reply_to:
-        if not args.text:
-            print("alb: --reply-to needs --text", file=sys.stderr)
+        if not args.text and not args.photo:
+            print("alb: --reply-to needs --text or --photo", file=sys.stderr)
             return 2
         try:
             rid = _reply_or_resume(
                 api.Telegram(config["ALB_TOKEN"]), root / "inbox", root / "state",
-                root / "allowlist.json", args.reply_to, args.text,
+                root / "allowlist.json", args.reply_to, args.text or "",
                 # The SAME mailbox the poller writes to, including processed,
                 # because a letter is filed there before anyone replies. In
                 # integrated mode the letter is not under --root at all, and
@@ -421,7 +423,8 @@ def main(argv=None):
                 # mail root's outbox before the platform hears anything, and
                 # its creation is the claim.
                 outbox=mail / "outbox",
-                agent=config.get("ALB_TO", "agent"))
+                agent=config.get("ALB_TO", "agent"),
+                photo_path=args.photo)
         except reply.AmbiguousOutcome as exc:
             print(f"alb: AMBIGUOUS - dead-lettered for a human, NOT retried: {exc}",
                   file=sys.stderr)
@@ -504,7 +507,11 @@ def _init(args):
             args.root, Console(),
             chat_id_reader=discover.read_chat_ids,
             panes=discover.list_all_panes(),
+            token_file=args.token_file,
         )
+    except wizard.SetupError as exc:
+        print(f"alb: {exc}", file=sys.stderr)
+        return 2
     except KeyboardInterrupt:
         # Ctrl-C during setup must not leave a token half-written.
         print("\nalb: setup cancelled", file=sys.stderr)
@@ -693,7 +700,7 @@ def _send_initiated(args, config, root, mail, state):
 
 
 def _reply_or_resume(sender, inbox, state, allowlist_path, letter_id, text,
-                     searched=None, outbox=None, agent="agent"):
+                     searched=None, outbox=None, agent="agent", photo_path=None):
     """Send the reply - or finish the one a throttle interrupted.
 
     The operator's way back from a deferred send is the gesture they already
@@ -711,7 +718,8 @@ def _reply_or_resume(sender, inbox, state, allowlist_path, letter_id, text,
     try:
         return reply.send_reply(
             sender, inbox, state, allowlist_path, letter_id, text,
-            searched=searched, outbox=outbox, agent=agent)
+            searched=searched, outbox=outbox, agent=agent,
+            photo_path=photo_path)
     except outbound.AlreadyClaimed:
         out_id = f"reply-{letter_id}"
         if outbound.reconcile(state).get(out_id) != "throttled":

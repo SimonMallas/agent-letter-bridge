@@ -53,11 +53,11 @@ class ExplicitCreate(Base):
         self.assertEqual(rec["chat_id"], CHAT)
         self.assertTrue(rec["enabled"])
         self.assertEqual(rec["binding_key"], grants.binding_key(PLATFORM, CHAT))
-        self.assertEqual(rec["per_day"], 3)
-        self.assertEqual(rec["per_hour"], 2)
-        self.assertEqual(rec["timezone"], "Europe/London")
-        self.assertEqual(rec["max_queued"], 5)
-        self.assertEqual(rec["max_body"], 4000)
+        # Limits live on POLICY, not copied onto the grant. Absent override
+        # means follow current POLICY.
+        self.assertNotIn("per_day", rec)
+        self.assertEqual(grants.effective(rec, "per_day"), grants.POLICY["per_day"])
+        self.assertEqual(grants.effective(rec, "max_body"), grants.POLICY["max_body"])
 
     def test_missing_on_use_does_not_create(self):
         with self.assertRaises(grants.PolicyError):
@@ -98,9 +98,32 @@ class FailClosed(Base):
         with self.assertRaises(grants.PolicyError):
             grants.validate(rec, now=time.time())
 
-    def test_inconsistent_policy_fails_validate(self):
+    def test_limit_change_does_not_invalidate_grants(self):
         rec = self.create()
-        rec["per_day"] = 99
+        rec["per_day"] = 99  # leftover baked field from 0.3.0 copies
+        grants.validate(rec)
+        with mock.patch.dict(grants.POLICY, {"per_day": 99}):
+            grants.validate(rec)
+            self.assertEqual(grants.effective(rec, "per_day"), 99)
+
+    def test_override_is_honoured(self):
+        rec = grants.create(self.state, PLATFORM, CHAT,
+                            overrides={"per_day": 10})
+        grants.validate(rec)
+        self.assertEqual(grants.effective(rec, "per_day"), 10)
+        self.assertEqual(grants.effective(rec, "per_hour"), grants.POLICY["per_hour"])
+
+    def test_override_may_exceed_policy(self):
+        """overrides live in the 0600 grants dir; that dir is the trust
+        boundary. They are type-checked, not clamped to POLICY."""
+        rec = grants.create(self.state, PLATFORM, CHAT,
+                            overrides={"per_day": 999999})
+        grants.validate(rec)
+        self.assertEqual(grants.effective(rec, "per_day"), 999999)
+
+    def test_incompatible_binding_is_rejected(self):
+        rec = self.create()
+        rec["chat_id"] = "other-fixture-chat"
         with self.assertRaises(grants.PolicyError):
             grants.validate(rec)
 

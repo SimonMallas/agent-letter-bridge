@@ -48,7 +48,7 @@ def binding_key(platform, chat_id):
     return hashlib.sha256(f"{platform}:{chat_id}".encode()).hexdigest()[:16]
 
 
-def create(state, platform, chat_id, *, expiry=None, now=None):
+def create(state, platform, chat_id, *, expiry=None, now=None, overrides=None):
     """Explicit operator init. Never called as a missing-on-use fallback."""
     if not isinstance(platform, str) or not platform:
         raise PolicyError("grant create refused")
@@ -64,8 +64,9 @@ def create(state, platform, chat_id, *, expiry=None, now=None):
         "created": int(now if now is not None else time.time()),
         "expiry": expiry,
         "binding_key": binding_key(platform, chat_id),
-        **POLICY,
     }
+    if overrides:
+        rec["overrides"] = _checked_overrides(overrides)
     _publish(grants_dir, grant_id, rec, exclusive=True)
     return rec
 
@@ -77,8 +78,37 @@ def load(state, grant_id):
     return _read_published(grants_dir, gid)
 
 
+def _checked_overrides(overrides):
+    if not isinstance(overrides, dict):
+        raise PolicyError("grant invalid")
+    out = {}
+    for key, value in overrides.items():
+        if key not in POLICY:
+            raise PolicyError("grant invalid")
+        expected = POLICY[key]
+        if type(value) is not type(expected):
+            raise PolicyError("grant invalid")
+        out[key] = value
+    return out
+
+
+def effective(grant, key):
+    """Current POLICY, unless this grant named an override for `key`."""
+    if key not in POLICY:
+        raise PolicyError("grant invalid")
+    overrides = grant.get("overrides") if isinstance(grant, dict) else None
+    if isinstance(overrides, dict) and key in overrides:
+        return overrides[key]
+    return POLICY[key]
+
+
 def validate(grant, *, now=None):
-    """Schema, policy pins, enabled, expiry. Fail-closed. Strict types."""
+    """Schema, binding identity, enabled, expiry. Never POLICY equality.
+
+    Limits follow current POLICY unless the grant carries `overrides`.
+    Baked-in copies of old POLICY fields are ignored, so a limit change
+    does not invalidate existing grants.
+    """
     if not isinstance(grant, dict):
         raise PolicyError("grant invalid")
     gid = grant.get("grant_id")
@@ -94,9 +124,8 @@ def validate(grant, *, now=None):
         raise PolicyError("grant invalid")
     if grant.get("binding_key") != binding_key(platform, chat_id):
         raise PolicyError("grant invalid")
-    for key, expected in POLICY.items():
-        if grant.get(key) != expected:
-            raise PolicyError("grant invalid")
+    if "overrides" in grant:
+        _checked_overrides(grant.get("overrides"))
     if "enabled" not in grant or grant["enabled"] is not True:
         raise PolicyError("grant disabled" if grant.get("enabled") is False
                           else "grant invalid")
