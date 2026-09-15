@@ -328,6 +328,26 @@ def run_once(platform, transport, surface, root,
         recipient=recipient,
     )
 
+    # Newly durable mail gets its one bounded notify now, before confirm.
+    # Confirm can still fail the network after the letter is on disk; waiting
+    # for it left that letter silent forever (dedupe makes the next cycle
+    # published=[]). Replay of the same ids is not a new batch, so it does
+    # not ring again. Empty/denied batches still skip notify.
+    if published:
+        if not surface and not integrated:
+            _record_ring(root, "disabled",
+                         "no ALB_SURFACE configured; mail lands, nothing rings")
+        else:
+            try:
+                if integrated:
+                    _bus_ring(recipient, "info", published[-1], binary=bus_binary)
+                else:
+                    ring.notify(transport, surface, mail / "inbox", published[-1])
+            except Exception as exc:
+                _record_ring(root, "failing", _ring_failure_reason(exc))
+            else:
+                _record_ring(root, "ok", "delivered")
+
     # Tell the platform only now: every letter in this batch is durably on
     # disk, so it is safe for the platform to forget them. Acking internally
     # was never consumption - a cycle that ends without this re-reads
@@ -336,48 +356,9 @@ def run_once(platform, transport, surface, root,
     if confirm is not None:
         confirm()
 
-    # Only now: fetched, letters durable, and the platform told. A cycle that
-    # raised before this point leaves the previous heartbeat, which is the
-    # honest signal - nothing completed.
+    # Only now: fetched, letters durable, notify attempted if there was new
+    # mail, and the platform told. A cycle that raised before this point
+    # leaves the previous heartbeat, which is the honest signal.
     loop._write_heartbeat(root / "state" / "health.json")
-
-    if not published:
-        return published
-
-    if not surface and not integrated:
-        # Integrated mode needs no surface: the letterbox helper resolves the
-        # recipient's registered pane itself, which is the whole reason to use
-        # it rather than imitate it. Requiring ALB_SURFACE here would make an
-        # operator pin a surface that nothing then reads.
-        #
-        # No multiplexer configured. Not an error and not a silent gap: the
-        # letters are on disk and the absence of a bell is recorded where
-        # --status and --doctor will show it.
-        _record_ring(root, "disabled", "no ALB_SURFACE configured; mail lands, nothing rings")
-        return published
-
-    # COALESCED: one ring for the batch, not one per letter. The recipient
-    # sweeps the inbox, so a ring per letter is noise that can outrun the
-    # reader. The ring names the newest letter only to prove one exists.
-    try:
-        if integrated:
-            # The letterbox's own doorbell, so it matches every skill that
-            # already exists there. The standalone notifier is NOT also used:
-            # two injects would be two submissions.
-            _bus_ring(recipient, "info", published[-1], binary=bus_binary)
-        else:
-            ring.notify(transport, surface, mail / "inbox", published[-1])
-    except Exception as exc:
-        # Letters are authoritative; rings only accelerate. A dead notifier
-        # must never cost a message - the mail is already on disk and will be
-        # found by a sweep.
-        #
-        # But the swallow that protects the letter also HIDES ring death, and
-        # mail-with-no-bell is a failure state, not a quieter tier. So the
-        # failure is recorded where a human and a monitor can see it, without
-        # ever being allowed to affect the letter.
-        _record_ring(root, "failing", _ring_failure_reason(exc))
-    else:
-        _record_ring(root, "ok", "delivered")
 
     return published

@@ -13,6 +13,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from alb.bridge import run  # noqa: E402
 from fake_platform import FakePlatform  # noqa: E402
 from alb.poller import loop  # noqa: E402
+from alb.adapters.telegram.api import TransientFailure  # noqa: E402
 
 
 class Config(unittest.TestCase):
@@ -291,6 +292,61 @@ class OneCycle(unittest.TestCase):
             {"update_id": 1, "chat_id": "111", "text": "hello"}]), FakeTransport())
         record = json.loads((self.root / "state" / "ring-health.json").read_text())
         self.assertEqual(record["state"], "ok")
+
+    def test_confirm_failure_after_publish_still_rings_once(self):
+        """Durable mail must get its one notify even if confirm then fails.
+        Recovery/replay of the same update must not ring a second time."""
+        class FailConfirmOnce(FakePlatform):
+            def __init__(self, updates):
+                super().__init__(updates)
+                self.fail = True
+
+            def confirm(self):
+                if self.fail:
+                    self.fail = False
+                    raise TransientFailure("confirm failed")
+                return super().confirm()
+
+        platform = FailConfirmOnce([
+            {"update_id": 1, "chat_id": "111", "text": "hello"}])
+        transport = FakeTransport()
+        with self.assertRaises(TransientFailure):
+            self._cycle(platform, transport)
+        self.assertEqual(len(list((self.root / "inbox").glob("*.md"))), 1)
+        self.assertEqual(len(transport.rung), 1)
+        self.assertFalse((self.root / "state" / "health.json").exists(),
+                         "heartbeat after a failed confirm")
+        # Replay: same letter, published=[], no second ring.
+        self._cycle(platform, transport)
+        self.assertEqual(len(list((self.root / "inbox").glob("*.md"))), 1)
+        self.assertEqual(len(transport.rung), 1)
+        self.assertTrue((self.root / "state" / "health.json").exists())
+
+    def test_a_quiet_cycle_still_confirms_and_heartbeats(self):
+        platform = FakePlatform([])
+        self._cycle(platform, FakeTransport())
+        self.assertEqual(platform.confirmed, None)
+        self.assertTrue((self.root / "state" / "health.json").exists())
+
+    def test_ring_failure_is_not_retried_on_the_next_cycle(self):
+        class BrokenThenFine:
+            def __init__(self):
+                self.calls = 0
+                self.rung = []
+
+            def deliver(self, surface, line):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RuntimeError("relay is dead")
+                self.rung.append((surface, line))
+
+        transport = BrokenThenFine()
+        platform = FakePlatform([
+            {"update_id": 1, "chat_id": "111", "text": "hello"}])
+        self._cycle(platform, transport)
+        self.assertEqual(transport.calls, 1)
+        self._cycle(platform, transport)
+        self.assertEqual(transport.calls, 1, "replay retried a failed ring")
 
     def test_a_ring_failure_does_not_lose_the_letter(self):
         """Letters are authoritative; rings only accelerate. A dead notifier
