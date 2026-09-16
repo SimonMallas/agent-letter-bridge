@@ -33,6 +33,7 @@ TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
 BRIDGE = ROOT / "src" / "alb" / "bridge" / "run.py"
 RING_OUTCOME = ROOT / "src" / "alb" / "ring_outcome.py"
+HELPER_PROBE = ROOT / "src" / "alb" / "helper_probe.py"
 OUTBOUND = ROOT / "src" / "alb" / "outbound" / "store.py"
 WIZARD = ROOT / "src" / "alb" / "setup" / "wizard.py"
 DISCOVER = ROOT / "src" / "alb" / "setup" / "discover.py"
@@ -84,6 +85,22 @@ EXTRA = {
         RING_OUTCOME, "tests.test_mail_root",
         '    retry = parsed.reason == "helper_timeout"',
         "    retry = True"),
+    "probe recipient is the reserved literal": (
+        HELPER_PROBE, "tests.test_helper_probe",
+        'PROBE_RECIPIENT = "alb-doctor-probe"',
+        'PROBE_RECIPIENT = "agent"'),
+    "probe refuses any doorbell line on stdout": (
+        HELPER_PROBE, "tests.test_helper_probe",
+        "    if any(is_permitted_doorbell(line) for line in stdout.splitlines()):",
+        "    if False:"),
+    "probe refuses submitted or pasted for the dummy recipient": (
+        HELPER_PROBE, "tests.test_helper_probe",
+        '    if cls.outcome in ("submitted", "pasted_not_submitted"):',
+        "    if False:"),
+    "probe requires classify of the whole stdout": (
+        HELPER_PROBE, "tests.test_helper_probe",
+        "    cls = classify(stdout, stderr)",
+        "    cls = classify((stdout.splitlines() or [\"\"])[0], \"\")"),
     "resume destination uses private state": (
         SEND, "tests.test_send",
         "    chat_id = destination(source.meta, state)",

@@ -5,7 +5,30 @@ import subprocess
 import unittest
 from unittest import mock
 
-from alb.helper_probe import INCOMPATIBLE, inspect_helper
+from alb.helper_probe import (
+    INCOMPATIBLE, INJECTED, PROBE_ID, PROBE_RECIPIENT, inspect_helper,
+)
+
+NLS = (
+    "doorbell-outcome v=1 outcome=no_live_surface "
+    "reason=unknown_participant target=-"
+)
+SUBMITTED = (
+    "doorbell-outcome v=1 outcome=submitted reason=- target=surface:1"
+)
+PASTED = (
+    "doorbell-outcome v=1 outcome=pasted_not_submitted "
+    "reason=enter_failed target=surface:1"
+)
+DOORBELL = "📬 letterbox doorbell: unacked info in inbox/ — please check"
+
+
+def _ok(stdout, returncode=0):
+    def runner(argv, **kw):
+        runner.argv = argv
+        return mock.Mock(returncode=returncode, stdout=stdout, stderr="")
+    runner.argv = None
+    return runner
 
 
 class InspectHelper(unittest.TestCase):
@@ -15,33 +38,51 @@ class InspectHelper(unittest.TestCase):
         self.assertIn(INCOMPATIBLE, msg)
 
     def test_legacy_prose_is_incompatible(self):
-        def runner(argv, **kw):
-            return mock.Mock(
-                returncode=0,
-                stdout="bus: doorbell no_live_surface unknown_participant for x",
-                stderr="")
-        status, msg = inspect_helper("bus.sh", runner=runner)
+        status, msg = inspect_helper("bus.sh", runner=_ok(
+            "bus: doorbell no_live_surface unknown_participant for x"))
         self.assertEqual(status, "incompatible")
         self.assertEqual(msg, INCOMPATIBLE)
 
-    def test_v1_line_is_ok(self):
-        def runner(argv, **kw):
-            return mock.Mock(
-                returncode=0,
-                stdout="doorbell-outcome v=1 outcome=no_live_surface reason=unknown_participant target=-",
-                stderr="")
-        status, msg = inspect_helper("bus.sh", runner=runner)
+    def test_v1_nls_line_is_ok(self):
+        status, msg = inspect_helper("bus.sh", runner=_ok(NLS))
         self.assertEqual(status, "ok")
         self.assertIn("emits doorbell-outcome v=1", msg)
 
-    def test_a_doorbell_line_on_stdout_is_not_ok(self):
-        def runner(argv, **kw):
-            return mock.Mock(
-                returncode=0,
-                stdout="📬 letterbox doorbell: unacked info in inbox/ — please check",
-                stderr="")
-        status, msg = inspect_helper("bus.sh", runner=runner)
+    def test_probe_argv_is_the_reserved_recipient(self):
+        runner = _ok(NLS)
+        inspect_helper("/opt/bus.sh", runner=runner)
+        self.assertEqual(
+            runner.argv,
+            ["/opt/bus.sh", "ring", "alb-doctor-probe", "info", PROBE_ID],
+        )
+        self.assertEqual(PROBE_RECIPIENT, "alb-doctor-probe")
+
+    def test_a_doorbell_line_anywhere_is_injected(self):
+        status, msg = inspect_helper("bus.sh", runner=_ok(DOORBELL))
         self.assertEqual(status, "incompatible")
+        self.assertEqual(msg, INJECTED)
+
+    def test_outcome_then_doorbell_is_injected(self):
+        status, msg = inspect_helper(
+            "bus.sh", runner=_ok(NLS + "\n" + DOORBELL))
+        self.assertEqual(status, "incompatible")
+        self.assertEqual(msg, INJECTED)
+
+    def test_duplicate_contract_lines_are_incompatible(self):
+        status, msg = inspect_helper(
+            "bus.sh", runner=_ok(NLS + "\n" + NLS))
+        self.assertEqual(status, "incompatible")
+        self.assertEqual(msg, INCOMPATIBLE)
+
+    def test_submitted_for_the_probe_recipient_is_unsafe(self):
+        status, msg = inspect_helper("bus.sh", runner=_ok(SUBMITTED))
+        self.assertEqual(status, "incompatible")
+        self.assertEqual(msg, INJECTED)
+
+    def test_pasted_for_the_probe_recipient_is_unsafe(self):
+        status, msg = inspect_helper("bus.sh", runner=_ok(PASTED))
+        self.assertEqual(status, "incompatible")
+        self.assertEqual(msg, INJECTED)
 
     def test_not_found(self):
         def runner(argv, **kw):
@@ -54,3 +95,4 @@ class InspectHelper(unittest.TestCase):
             raise subprocess.TimeoutExpired("bus.sh", 3)
         status, msg = inspect_helper("bus.sh", runner=runner)
         self.assertEqual(status, "incompatible")
+        self.assertEqual(msg, INCOMPATIBLE)
