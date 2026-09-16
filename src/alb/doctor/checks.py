@@ -318,15 +318,21 @@ def summary(process_listing, self_pid, root, environ):
     lines.append("DOORBELL HELPER")
     from alb.helper_probe import inspect_helper
     binary = (environ or {}).get("ALB_BUS_BINARY") or ""
+    helper_note = None
     if not binary:
+        from alb.bridge import run as bridge_run
         try:
-            from alb.bridge import run as bridge_run
             cfg = bridge_run.load_config(pathlib.Path(root) / "bridge.env")
             binary = cfg.get("ALB_BUS_BINARY") or (
                 "bus.sh" if cfg.get("ALB_MAIL_ROOT") else "")
-        except Exception:
-            binary = ""
-    if not binary:
+        except (bridge_run.ConfigError, OSError) as exc:
+            helper_note = (
+                f"config not loadable: {exc}; helper compatibility UNKNOWN"
+            )
+            binary = None
+    if helper_note:
+        lines.append(f"  {helper_note}")
+    elif not binary:
         lines.append("  standalone: no letterbox helper (own notifier)")
     else:
         _status, msg = inspect_helper(binary)

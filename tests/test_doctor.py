@@ -1,7 +1,9 @@
 """Doctor: local diagnostics only. No token, no platform calls, no getUpdates."""
 import ast
+import os
 import pathlib
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -73,3 +75,42 @@ class DoctorBoundary(unittest.TestCase):
                 {"ALB_BUS_BINARY": "bus.sh", "PATH": "/bin"})
         self.assertIn("helper does not emit doorbell-outcome v=1", text)
         self.assertIn("DOORBELL HELPER", text)
+
+    def test_unloadable_config_is_not_reported_as_standalone(self):
+        """A mode-0644 bridge.env is ConfigError, not 'no helper'."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = pathlib.Path(tmp.name)
+        env = root / "bridge.env"
+        env.write_text(
+            "ALB_TOKEN=1:secret\nALB_MAIL_ROOT=/tmp/mail\n", encoding="utf-8")
+        os.chmod(env, 0o644)
+        text = checks.summary([], 1, root, {"PATH": "/bin"})
+        self.assertIn("config not loadable:", text)
+        self.assertIn("helper compatibility UNKNOWN", text)
+        self.assertNotIn("standalone: no letterbox helper (own notifier)", text)
+
+    def test_unknown_config_key_is_not_reported_as_standalone(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = pathlib.Path(tmp.name)
+        env = root / "bridge.env"
+        env.write_text(
+            "ALB_TOKEN=1:secret\nALB_NOTIFIER=cmux\nALB_MADE_UP=1\n",
+            encoding="utf-8")
+        os.chmod(env, 0o600)
+        text = checks.summary([], 1, root, {"PATH": "/bin"})
+        self.assertIn("config not loadable:", text)
+        self.assertIn("helper compatibility UNKNOWN", text)
+        self.assertNotIn("standalone: no letterbox helper (own notifier)", text)
+
+    def test_loaded_standalone_config_keeps_the_standalone_line(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = pathlib.Path(tmp.name)
+        env = root / "bridge.env"
+        env.write_text("ALB_TOKEN=1:secret\nALB_NOTIFIER=cmux\n", encoding="utf-8")
+        os.chmod(env, 0o600)
+        text = checks.summary([], 1, root, {"PATH": "/bin"})
+        self.assertIn("standalone: no letterbox helper (own notifier)", text)
+        self.assertNotIn("helper compatibility UNKNOWN", text)

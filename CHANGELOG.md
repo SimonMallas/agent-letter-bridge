@@ -23,6 +23,10 @@ whose helper still prints prose.
 `paper-rev5-pending-canonical` until Pi re-anchors it to the Letterbox
 conformance SHA before any public release.
 
+TODO (public release, Pi): user-facing doctor/setup/CHANGELOG text
+"Letterbox emitter cut, not yet public" is internal vocabulary; at public
+release it becomes "requires Letterbox <version> or later".
+
 ## [0.3.2] — 2026-09-16
 
 ### Fixed
