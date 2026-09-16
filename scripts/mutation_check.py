@@ -298,12 +298,12 @@ EXTRA = {
         "    if missing:", "    if False:"),
     "a batch rings once, not once per letter": (
         BRIDGE, "tests.test_bridge",
-        "            ring.notify(transport, surface, mail / \"inbox\", published[-1])",
-        "            for _p in published:\n                ring.notify(transport, surface, mail / \"inbox\", _p)"),
+        "                    ring.notify(transport, surface, mail / \"inbox\", published[-1])",
+        "                    for _p in published:\n                        ring.notify(transport, surface, mail / \"inbox\", _p)"),
     "a dead notifier never costs a letter": (
         BRIDGE, "tests.test_bridge",
-        "    except Exception as exc:\n        # Letters are authoritative",
-        "    except ZeroDivisionError as exc:\n        # Letters are authoritative"),
+        "            except Exception as exc:\n                _record_ring(root, \"failing\", _ring_failure_reason(exc))",
+        "            except ZeroDivisionError as exc:\n                _record_ring(root, \"failing\", _ring_failure_reason(exc))"),
     "a single ring timeout does not latch failing": (
         BRIDGE, "tests.test_mail_root",
         "RING_ATTEMPTS = 3",
@@ -418,8 +418,9 @@ EXTRA = {
         'REQUIRED = ("ALB_TOKEN",)', 'REQUIRED = ("ALB_TOKEN", "ALB_SURFACE")'),
     "a missing surface is recorded, not silent": (
         BRIDGE, "tests.test_bridge",
-        '        _record_ring(root, "disabled", "no ALB_SURFACE configured; mail lands, nothing rings")',
-        "        pass"),
+        "            _record_ring(root, \"disabled\",\n"
+        "                         \"no ALB_SURFACE configured; mail lands, nothing rings\")",
+        "            pass"),
     "the letter's NAME is made durable, not just its bytes": (
         ROOT / "src" / "alb" / "letter" / "store.py", "tests.test_letter",
         "        _fsync_dir(inbox)", "        pass"),
