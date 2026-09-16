@@ -6,7 +6,8 @@ import unittest
 from unittest import mock
 
 from alb.helper_probe import (
-    INCOMPATIBLE, INJECTED, PROBE_ID, PROBE_RECIPIENT, inspect_helper,
+    INCOMPATIBLE, INJECTED, PROBE_ID, PROBE_RECIPIENT, PROBE_TIMEOUT,
+    inspect_helper,
 )
 
 NLS = (
@@ -26,8 +27,10 @@ DOORBELL = "📬 letterbox doorbell: unacked info in inbox/ — please check"
 def _ok(stdout, returncode=0):
     def runner(argv, **kw):
         runner.argv = argv
+        runner.kw = kw
         return mock.Mock(returncode=returncode, stdout=stdout, stderr="")
     runner.argv = None
+    runner.kw = None
     return runner
 
 
@@ -56,6 +59,20 @@ class InspectHelper(unittest.TestCase):
             ["/opt/bus.sh", "ring", "alb-doctor-probe", "info", PROBE_ID],
         )
         self.assertEqual(PROBE_RECIPIENT, "alb-doctor-probe")
+
+    def test_probe_timeout_is_three_seconds(self):
+        runner = _ok(NLS)
+        inspect_helper("bus.sh", runner=runner)
+        self.assertEqual(runner.kw.get("timeout"), 3)
+        self.assertEqual(PROBE_TIMEOUT, 3)
+
+    def test_a_hung_helper_returns_incompatible_via_timeout(self):
+        def runner(argv, **kw):
+            self.assertEqual(kw.get("timeout"), 3)
+            raise subprocess.TimeoutExpired(argv, kw["timeout"])
+        status, msg = inspect_helper("bus.sh", runner=runner)
+        self.assertEqual(status, "incompatible")
+        self.assertEqual(msg, INCOMPATIBLE)
 
     def test_a_doorbell_line_anywhere_is_injected(self):
         status, msg = inspect_helper("bus.sh", runner=_ok(DOORBELL))

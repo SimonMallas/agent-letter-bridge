@@ -14,6 +14,7 @@ from alb.ring_outcome import classify
 
 PROBE_RECIPIENT = "alb-doctor-probe"
 PROBE_ID = "1970-01-01T000000-alb-probe-00000000"
+PROBE_TIMEOUT = 3
 INCOMPATIBLE = "helper does not emit doorbell-outcome v=1"
 INJECTED = "helper injected during probe"
 
@@ -26,7 +27,7 @@ def _decode(blob):
     return blob
 
 
-def inspect_helper(binary, runner=subprocess.run, timeout=3):
+def inspect_helper(binary, runner=subprocess.run, timeout=PROBE_TIMEOUT):
     """Return (status, message). status is ok | missing | incompatible.
 
     Scan all stdout first. Any permitted doorbell line is an injection.
@@ -41,7 +42,7 @@ def inspect_helper(binary, runner=subprocess.run, timeout=3):
     try:
         result = runner(
             [binary, "ring", PROBE_RECIPIENT, "info", PROBE_ID],
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True, text=True, timeout=PROBE_TIMEOUT,
         )
         stdout = result.stdout or ""
         stderr = result.stderr or ""

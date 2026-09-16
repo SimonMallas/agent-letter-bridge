@@ -101,6 +101,14 @@ EXTRA = {
         HELPER_PROBE, "tests.test_helper_probe",
         "    cls = classify(stdout, stderr)",
         "    cls = classify((stdout.splitlines() or [\"\"])[0], \"\")"),
+    "probe timeout bound is three seconds": (
+        HELPER_PROBE, "tests.test_helper_probe",
+        "PROBE_TIMEOUT = 3",
+        "PROBE_TIMEOUT = None"),
+    "probe always passes the timeout kwarg": (
+        HELPER_PROBE, "tests.test_helper_probe",
+        "            capture_output=True, text=True, timeout=PROBE_TIMEOUT,",
+        "            capture_output=True, text=True,"),
     "resume destination uses private state": (
         SEND, "tests.test_send",
         "    chat_id = destination(source.meta, state)",
