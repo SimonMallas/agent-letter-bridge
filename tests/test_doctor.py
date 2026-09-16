@@ -2,6 +2,7 @@
 import ast
 import os
 import pathlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -75,6 +76,27 @@ class DoctorBoundary(unittest.TestCase):
                 {"ALB_BUS_BINARY": "bus.sh", "PATH": "/bin"})
         self.assertIn("helper does not emit doorbell-outcome v=1", text)
         self.assertIn("DOORBELL HELPER", text)
+
+    def test_doctor_names_a_helper_that_hangs_after_a_valid_line(self):
+        nls = (
+            "doorbell-outcome v=1 outcome=no_live_surface "
+            "reason=unknown_participant target=-"
+        )
+        from alb.helper_probe import inspect_helper as real_inspect
+
+        def hang_runner(argv, **kw):
+            raise subprocess.TimeoutExpired(argv, 3, output=nls)
+
+        def wrapped(binary, runner=None):
+            return real_inspect(binary, runner=hang_runner)
+
+        with mock.patch("alb.helper_probe.inspect_helper", wrapped):
+            text = checks.summary(
+                [], 1, pathlib.Path("/no-such-root"),
+                {"ALB_BUS_BINARY": "bus.sh", "PATH": "/bin"})
+        self.assertIn(
+            "helper hung after 3 s; every ring would be unconfirmed", text)
+        self.assertNotIn("helper emits doorbell-outcome v=1", text)
 
     def test_unloadable_config_is_not_reported_as_standalone(self):
         """A mode-0644 bridge.env is ConfigError, not 'no helper'."""

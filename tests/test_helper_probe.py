@@ -6,7 +6,7 @@ import unittest
 from unittest import mock
 
 from alb.helper_probe import (
-    INCOMPATIBLE, INJECTED, PROBE_ID, PROBE_RECIPIENT, PROBE_TIMEOUT,
+    HUNG, INCOMPATIBLE, INJECTED, PROBE_ID, PROBE_RECIPIENT, PROBE_TIMEOUT,
     inspect_helper,
 )
 
@@ -72,7 +72,21 @@ class InspectHelper(unittest.TestCase):
             raise subprocess.TimeoutExpired(argv, kw["timeout"])
         status, msg = inspect_helper("bus.sh", runner=runner)
         self.assertEqual(status, "incompatible")
-        self.assertEqual(msg, INCOMPATIBLE)
+        self.assertEqual(msg, HUNG)
+
+    def test_hang_after_a_valid_nls_line_is_not_compatible(self):
+        def runner(argv, **kw):
+            raise subprocess.TimeoutExpired(argv, 3, output=NLS)
+        status, msg = inspect_helper("bus.sh", runner=runner)
+        self.assertEqual(status, "incompatible")
+        self.assertEqual(msg, HUNG)
+
+    def test_hang_after_a_doorbell_line_is_still_injected(self):
+        def runner(argv, **kw):
+            raise subprocess.TimeoutExpired(argv, 3, output=DOORBELL)
+        status, msg = inspect_helper("bus.sh", runner=runner)
+        self.assertEqual(status, "incompatible")
+        self.assertEqual(msg, INJECTED)
 
     def test_a_doorbell_line_anywhere_is_injected(self):
         status, msg = inspect_helper("bus.sh", runner=_ok(DOORBELL))
@@ -112,4 +126,4 @@ class InspectHelper(unittest.TestCase):
             raise subprocess.TimeoutExpired("bus.sh", 3)
         status, msg = inspect_helper("bus.sh", runner=runner)
         self.assertEqual(status, "incompatible")
-        self.assertEqual(msg, INCOMPATIBLE)
+        self.assertEqual(msg, HUNG)

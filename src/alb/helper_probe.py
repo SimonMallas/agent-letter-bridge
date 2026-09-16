@@ -17,6 +17,7 @@ PROBE_ID = "1970-01-01T000000-alb-probe-00000000"
 PROBE_TIMEOUT = 3
 INCOMPATIBLE = "helper does not emit doorbell-outcome v=1"
 INJECTED = "helper injected during probe"
+HUNG = "helper hung after 3 s; every ring would be unconfirmed"
 
 
 def _decode(blob):
@@ -27,18 +28,20 @@ def _decode(blob):
     return blob
 
 
-def inspect_helper(binary, runner=subprocess.run, timeout=PROBE_TIMEOUT):
+def inspect_helper(binary, runner=subprocess.run):
     """Return (status, message). status is ok | missing | incompatible.
 
     Scan all stdout first. Any permitted doorbell line is an injection.
     Compatibility requires exactly one contract line (via classify) that is
     no_live_surface with target=-. submitted/pasted for the probe recipient
-    is unsafe, not compatible.
+    is unsafe, not compatible. TimeoutExpired is never ok: a helper that
+    hangs after a valid line would make every live ring unconfirmed.
     """
     if not binary:
         return "missing", INCOMPATIBLE + " (no helper configured)"
     if PROBE_RECIPIENT != "alb-doctor-probe":
         return "incompatible", "probe recipient is not reserved"
+    hung = False
     try:
         result = runner(
             [binary, "ring", PROBE_RECIPIENT, "info", PROBE_ID],
@@ -51,11 +54,14 @@ def inspect_helper(binary, runner=subprocess.run, timeout=PROBE_TIMEOUT):
     except subprocess.TimeoutExpired as exc:
         stdout = _decode(exc.stdout)
         stderr = _decode(exc.stderr)
+        hung = True
     except OSError:
         return "missing", INCOMPATIBLE + " (not executable)"
 
     if any(is_permitted_doorbell(line) for line in stdout.splitlines()):
         return "incompatible", INJECTED
+    if hung:
+        return "incompatible", HUNG
 
     cls = classify(stdout, stderr)
     if cls.status == "unparseable":

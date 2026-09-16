@@ -109,6 +109,10 @@ EXTRA = {
         HELPER_PROBE, "tests.test_helper_probe",
         "            capture_output=True, text=True, timeout=PROBE_TIMEOUT,",
         "            capture_output=True, text=True,"),
+    "a helper that hangs after a valid line is not compatible": (
+        HELPER_PROBE, "tests.test_helper_probe",
+        "    if hung:\n        return \"incompatible\", HUNG",
+        "    if False:\n        return \"incompatible\", HUNG"),
     "resume destination uses private state": (
         SEND, "tests.test_send",
         "    chat_id = destination(source.meta, state)",
