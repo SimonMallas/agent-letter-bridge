@@ -3,6 +3,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -54,6 +55,15 @@ class RingDiscipline(unittest.TestCase):
         transport = FakeTransport()
         with self.assertRaises(store.UnsafeIdentifier):
             ring.notify(transport, "SURFACE-1", self.inbox, "../escape")
+        self.assertEqual(transport.rung, [])
+
+    def test_standalone_ring_refuses_an_interagent_doorbell_payload(self):
+        letter_id = store.publish(self.inbox, "body", {"chat_id": "111"})
+        transport = FakeTransport()
+        doorbell = "📬 letterbox doorbell: unacked info in inbox/ — please check"
+        with mock.patch.object(ring, "DOORBELL_LINE", doorbell):
+            with self.assertRaises(ValueError):
+                ring.notify(transport, "SURFACE-1", self.inbox, letter_id)
         self.assertEqual(transport.rung, [])
 
     def test_it_refuses_without_a_target_surface(self):

@@ -32,6 +32,7 @@ ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
 TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
 BRIDGE = ROOT / "src" / "alb" / "bridge" / "run.py"
+RING_OUTCOME = ROOT / "src" / "alb" / "ring_outcome.py"
 OUTBOUND = ROOT / "src" / "alb" / "outbound" / "store.py"
 WIZARD = ROOT / "src" / "alb" / "setup" / "wizard.py"
 DISCOVER = ROOT / "src" / "alb" / "setup" / "discover.py"
@@ -79,12 +80,10 @@ EXTRA = {
         OUTBOUND, "tests.test_send",
         '    if platform != "telegram" or not sep or not chat:',
         "    if not sep or not chat:"),
-    "pasted refusal outranks timeout retry": (
-        BRIDGE, "tests.test_mail_root",
-        "    configured cmux bound, not a statement that a timeout occurred.\n"
-        "    \"\"\"\n    return False",
-        "    configured cmux bound, not a statement that a timeout occurred.\n"
-        "    \"\"\"\n    return \"timeout=\" in output"),
+    "retry only a proven pre-inject helper_timeout": (
+        RING_OUTCOME, "tests.test_mail_root",
+        '    retry = parsed.reason == "helper_timeout"',
+        "    retry = True"),
     "resume destination uses private state": (
         SEND, "tests.test_send",
         "    chat_id = destination(source.meta, state)",
@@ -308,14 +307,10 @@ EXTRA = {
         BRIDGE, "tests.test_mail_root",
         "RING_ATTEMPTS = 3",
         "RING_ATTEMPTS = 1"),
-    "ring timeout is not surface not found": (
+    "caller timeout is unconfirmed, not surface-not-found": (
         BRIDGE, "tests.test_mail_root",
-        '        return "ring timed out (outcome unconfirmed)"',
+        "        return cls.reason or cls.status",
         '        return "surface not found"'),
-    "unknown participant is surface not found": (
-        BRIDGE, "tests.test_mail_root",
-        '    if token in ("unknown_participant", "surface_not_found", "not_registered"):\n        return "surface not found"',
-        "    if False:\n        return \"surface not found\""),
     "the offset survives a restart": (
         TG, "tests.test_telegram_adapter",
         "            self._save_offset()", "            pass"),
@@ -500,8 +495,14 @@ EXTRA = {
         "    integrated = True"),
     "the ring outcome is parsed, not assumed from the exit code": (
         BRIDGE, "tests.test_mail_root",
-        '        if result.returncode == 0 and "doorbell submitted" in output:\n            return',
+        "        if cls.health == \"ok\":\n            return",
         "        if result.returncode == 0:\n            return"),
+    "stderr is not an outcome": (
+        BRIDGE, "tests.test_mail_root",
+        '            result.stdout or "", result.stderr or "",\n'
+        "            exit_code=result.returncode)",
+        '            f"{result.stdout}\\n{result.stderr}", "",\n'
+        "            exit_code=result.returncode)"),
     "the BINARY replies to letters where they live": (
         ROOT / "src" / "alb" / "cli.py", "tests.test_mail_root",
         '    mail = pathlib.Path(args.mail_root or config.get("ALB_MAIL_ROOT") or root)',

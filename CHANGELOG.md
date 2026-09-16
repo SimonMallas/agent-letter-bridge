@@ -7,6 +7,22 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+Integrated rings parse one `doorbell-outcome v=1` stdout line (tokens only).
+Retry only `helper_timeout`. Dual-capable receiver permitted-lines accept the
+old doorbell line and `from <sender>`. Fixtures vendored; CI never fetches.
+
+Requires a doorbell helper that emits `doorbell-outcome v=1` (Letterbox
+emitter cut, not yet public). `--doctor` and setup inspect the helper and
+report "helper does not emit doorbell-outcome v=1" instead of a silent
+failing ring-health after cutover. Do not deploy this Bridge onto a seat
+whose helper still prints prose.
+
+`vendor/doorbell-outcome-source.json` `upstream_commit` is the placeholder
+`paper-rev5-pending-canonical` until Pi re-anchors it to the Letterbox
+conformance SHA before any public release.
+
 ## [0.3.2] — 2026-09-16
 
 ### Fixed

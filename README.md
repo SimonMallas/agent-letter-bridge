@@ -9,6 +9,12 @@ incoming message becomes a durable file on disk **before** it is acknowledged an
 how it gets read. Letter first, then ring — without a bell, mail lands in a dead
 drop and nobody is told.
 
+Integrated mode **requires a doorbell helper that emits `doorbell-outcome v=1`**
+(Letterbox emitter cut, not yet public). A helper that still prints prose will
+make every ring `failing` / `unparseable`. `alb --doctor` reports
+`helper does not emit doorbell-outcome v=1` instead of waiting for a silent
+ring-health failure after cutover.
+
 Most tools in this space deliver an external message **as the agent's input** —
 typed into its terminal, or handed to its session as a prompt. This one delivers
 it as a **durable, deduplicated, enveloped letter**, written to disk before the

@@ -248,68 +248,74 @@ class TheHealthFileMustNotLie(unittest.TestCase):
 
     def test_a_submitted_ring_is_recorded_as_delivered(self):
         record, _ = self._cycle_with_helper_saying(
-            "bus: doorbell submitted to research-bot on SOME-UUID")
+            "doorbell-outcome v=1 outcome=submitted reason=- target=surface:1")
         self.assertEqual(record["state"], "ok")
 
     def test_no_live_surface_is_not_recorded_as_delivered(self):
         record, runner = self._cycle_with_helper_saying(
-            "bus: doorbell no_live_surface unknown_participant for research-bot")
+            "doorbell-outcome v=1 outcome=no_live_surface reason=unknown_participant target=-")
         self.assertEqual(record["state"], "failing")
-        self.assertIn("surface not found", record["reason"])
+        self.assertEqual(record["reason"], "unknown_participant")
         self.assertEqual(runner.call_count, 1)
 
     def test_pasted_but_not_submitted_is_not_delivered(self):
-        record, _ = self._cycle_with_helper_saying("bus: pasted_not_submitted")
+        record, _ = self._cycle_with_helper_saying(
+            "doorbell-outcome v=1 outcome=pasted_not_submitted reason=enter_failed target=surface:1")
         self.assertEqual(record["state"], "failing")
 
-    def test_transient_timeout_retries_and_does_not_latch_failing(self):
+    def test_helper_timeout_retries_then_succeeds(self):
+        timeout = mock.Mock(
+            returncode=0,
+            stdout="doorbell-outcome v=1 outcome=no_live_surface reason=helper_timeout target=-",
+            stderr="")
         ok = mock.Mock(
             returncode=0,
-            stdout="bus: doorbell submitted to research-bot on SOME-UUID",
+            stdout="doorbell-outcome v=1 outcome=submitted reason=- target=surface:1",
             stderr="")
         record, runner = self._cycle_with_helper_saying(
-            "", side_effect=[subprocess.TimeoutExpired("bus", 10), ok])
+            "", side_effect=[timeout, ok])
         self.assertEqual(record["state"], "ok")
         self.assertEqual(runner.call_count, 2)
         self.assertTrue(list((self.mail / "inbox").glob("*.md")))
 
-    def test_persistent_timeout_is_failing_but_honest(self):
+    def test_caller_timeout_empty_stdout_is_unconfirmed_without_retry(self):
         record, runner = self._cycle_with_helper_saying(
             "", side_effect=subprocess.TimeoutExpired("bus", 10))
         self.assertEqual(record["state"], "failing")
-        self.assertIn("timed out", record["reason"])
-        self.assertIn("unconfirmed", record["reason"])
-        self.assertNotIn("surface not found", record["reason"])
-        self.assertNotIn("surface valid", record["reason"])
-        self.assertEqual(runner.call_count, 3)
+        self.assertEqual(record["reason"], "unconfirmed")
+        self.assertEqual(runner.call_count, 1)
         self.assertTrue(list((self.mail / "inbox").glob("*.md")))
 
-    def test_send_failed_with_timeout_suffix_is_not_a_timeout(self):
+    def test_legacy_timeout_suffix_prose_is_unparseable(self):
         record, runner = self._cycle_with_helper_saying(
             "bus: doorbell no_live_surface send_failed timeout=3s for research-bot")
         self.assertEqual(record["state"], "failing")
-        self.assertEqual(record["reason"], "send_failed")
+        self.assertEqual(record["reason"], "unparseable")
         self.assertEqual(runner.call_count, 1)
         self.assertTrue(list((self.mail / "inbox").glob("*.md")))
 
-    def test_surface_not_found_with_timeout_suffix_is_not_a_timeout(self):
+    def test_send_failed_contract_line_is_not_retried(self):
         record, runner = self._cycle_with_helper_saying(
-            "bus: doorbell no_live_surface surface_not_found timeout=3s for research-bot")
+            "doorbell-outcome v=1 outcome=no_live_surface reason=send_failed target=-")
         self.assertEqual(record["state"], "failing")
-        self.assertEqual(record["reason"], "surface not found")
+        self.assertEqual(record["reason"], "send_failed")
         self.assertEqual(runner.call_count, 1)
 
-    def test_pasted_not_submitted_outranks_timeout_text(self):
+    def test_stderr_submitted_is_not_delivered(self):
+        completed = mock.Mock(
+            returncode=0, stdout="",
+            stderr="doorbell-outcome v=1 outcome=submitted reason=- target=surface:1")
         record, runner = self._cycle_with_helper_saying(
-            "bus: pasted_not_submitted timeout=3s for research-bot")
+            "", side_effect=[completed])
         self.assertEqual(record["state"], "failing")
+        self.assertEqual(record["reason"], "unparseable")
         self.assertEqual(runner.call_count, 1)
 
-    def test_unknown_participant_is_surface_not_found(self):
+    def test_unknown_participant_keeps_its_reason(self):
         record, runner = self._cycle_with_helper_saying(
-            "bus: doorbell no_live_surface unknown_participant for research-bot")
+            "doorbell-outcome v=1 outcome=no_live_surface reason=unknown_participant target=-")
         self.assertEqual(record["state"], "failing")
-        self.assertEqual(record["reason"], "surface not found")
+        self.assertEqual(record["reason"], "unknown_participant")
         self.assertEqual(runner.call_count, 1)
 
 

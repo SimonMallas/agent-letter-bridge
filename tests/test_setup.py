@@ -60,6 +60,11 @@ class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = pathlib.Path(self.tmp.name) / "alb"
+        self._probe = unittest.mock.patch(
+            "alb.helper_probe.inspect_helper",
+            return_value=("ok", "helper emits doorbell-outcome v=1"))
+        self._probe.start()
+        self.addCleanup(self._probe.stop)
 
     def tearDown(self):
         self.tmp.cleanup()

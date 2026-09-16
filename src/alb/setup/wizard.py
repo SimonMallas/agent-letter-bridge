@@ -226,6 +226,17 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
             console.say("Integrated mode rings through your letterbox's own")
             console.say("doorbell helper, and bus.sh is not on PATH here.")
             helper = console.ask("  path to the helper", "").strip()
+        probe_path = helper or found
+        if probe_path:
+            from alb.helper_probe import inspect_helper
+            status, msg = inspect_helper(probe_path)
+            if status != "ok":
+                console.say()
+                console.say(msg)
+                console.say("This Bridge requires a doorbell helper that emits")
+                console.say("doorbell-outcome v=1 (Letterbox emitter cut, not")
+                console.say("yet public). Installing now will record every ring")
+                console.say("as failing/unparseable until that helper ships.")
 
     # 3. The token. Never echoed, never an argument, never printed back.
     console.say()

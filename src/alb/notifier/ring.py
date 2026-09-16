@@ -8,6 +8,7 @@ Injected text arrives at an agent as authoritative user input, so the payload is
 a fixed, innocuous, operator-authored line. Anything richer is keyboard
 prompt-injection.
 """
+from alb.doorbell_line import is_permitted_doorbell
 from alb.letter import store
 
 # Fixed and content-free. Never interpolate anything into this.
@@ -39,5 +40,11 @@ def notify(transport, surface, inbox, letter_id):
     # announce something that does not exist. resolve() also refuses
     # path-shaped identifiers and inexact matches.
     store.resolve(inbox, letter_id)
+
+    # Self-exclusion: the Bridge must not inject an inter-agent doorbell line.
+    # That grammar belongs to the letterbox helper. A loop-riding canary that
+    # looked like one would be accepted as a ring.
+    if is_permitted_doorbell(DOORBELL_LINE):
+        raise ValueError("standalone ring must not look like an inter-agent doorbell")
 
     transport.deliver(surface, DOORBELL_LINE)

@@ -315,6 +315,28 @@ def summary(process_listing, self_pid, root, environ):
             lines.append(f"    pid {c['pid']}: {c['command']}")
     lines.append(f"  {lock_state(root)}")
     lines.append("")
+    lines.append("DOORBELL HELPER")
+    from alb.helper_probe import inspect_helper
+    binary = (environ or {}).get("ALB_BUS_BINARY") or ""
+    if not binary:
+        try:
+            from alb.bridge import run as bridge_run
+            cfg = bridge_run.load_config(pathlib.Path(root) / "bridge.env")
+            binary = cfg.get("ALB_BUS_BINARY") or (
+                "bus.sh" if cfg.get("ALB_MAIL_ROOT") else "")
+        except Exception:
+            binary = ""
+    if not binary:
+        lines.append("  standalone: no letterbox helper (own notifier)")
+    else:
+        _status, msg = inspect_helper(binary)
+        lines.append(f"  {msg}")
+        if _status != "ok":
+            lines.append("  requires a doorbell helper that emits")
+            lines.append("  doorbell-outcome v=1 (Letterbox emitter cut,")
+            lines.append("  not yet public). Do not cut over this Bridge")
+            lines.append("  onto a seat whose helper still prints prose.")
+    lines.append("")
     lines.append("DAEMON CONTEXT")
     lines.append(f"  interpreter now : {context['interpreter']}")
     lines.append(f"  cmux resolves   : {context['cmux_found']}")

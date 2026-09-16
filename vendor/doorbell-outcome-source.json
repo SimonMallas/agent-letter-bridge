@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "upstream_repository": "agent-letterbox-cmux",
+  "upstream_commit": "paper-rev5-pending-canonical",
+  "snapshot_directory": "vendor/doorbell-outcome-v1",
+  "manifest_sha256": "3eb97900647645a59560384286be6f9100a728ef4d9adf711fe6aa00bacf5131",
+  "sync_policy": "Explicit reviewed updates only; CI and runtime never fetch upstream."
+}

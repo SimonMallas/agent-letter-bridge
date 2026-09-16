@@ -13,6 +13,7 @@ import time
 
 from alb.notifier import ring
 from alb.poller import loop
+from alb.ring_outcome import Classification, classify as classify_ring
 
 # ALB_SURFACE is deliberately NOT required. Running without a multiplexer is a
 # supported way to use this: mail lands durably and nothing pings, and the
@@ -166,6 +167,14 @@ class RingNotDelivered(Exception):
     failure rather than swallowed into a success.
     """
 
+    def __init__(self, classification):
+        if isinstance(classification, Classification):
+            self.classification = classification
+            super().__init__(classification.reason or classification.status)
+        else:
+            self.classification = None
+            super().__init__(classification)
+
 
 def prepare_mail_root(mail_root):
     """Create ONLY what letters need, in a directory that may not be ours.
@@ -210,37 +219,23 @@ RING_ATTEMPTS = 3
 RING_RETRY_SLEEP = 0.05
 
 
-def _no_live_surface_token(msg):
-    """Reason word after `no_live_surface`. `timeout=` is config, not an outcome."""
-    marker = "no_live_surface "
-    i = msg.find(marker)
-    if i < 0:
-        return None
-    token = msg[i + len(marker):].split(None, 1)[0] if msg[i + len(marker):].strip() else ""
-    if not token or token.startswith("timeout="):
-        return None
-    return token
-
-
-def _transient_ring_failure(output):
-    """Only a real helper hang (TimeoutExpired) is retryable.
-
-    bus.sh prints timeout=<cfg>s on every no_live_surface line. That is the
-    configured cmux bound, not a statement that a timeout occurred.
-    """
-    return False
+def _decode_captured(blob):
+    if blob is None:
+        return ""
+    if isinstance(blob, bytes):
+        return blob.decode("utf-8", "replace")
+    return blob
 
 
 def _ring_failure_reason(exc):
-    """Honest ring-health: configured timeout= is not a timeout outcome."""
-    msg = str(exc)
-    if isinstance(exc, subprocess.TimeoutExpired) or "helper timed out after" in msg:
-        return "ring timed out (outcome unconfirmed)"
-    token = _no_live_surface_token(msg)
-    if token in ("unknown_participant", "surface_not_found", "not_registered"):
-        return "surface not found"
-    if token:
-        return token
+    """Ring-health reason from the v=1 classification, never a substring hunt."""
+    cls = getattr(exc, "classification", None)
+    if cls is not None:
+        return cls.reason or cls.status
+    if isinstance(exc, subprocess.TimeoutExpired):
+        return "unconfirmed"
+    if isinstance(exc, FileNotFoundError):
+        return "adapter_unavailable"
     return f"{type(exc).__name__}: {exc}"
 
 
@@ -256,28 +251,32 @@ def _bus_ring(recipient, kind, letter_id, binary=None):
     pointing at a letterbox, which implies one is installed.
     """
     last = None
+    argv = [binary or BUS_BINARY, "ring", recipient, kind, letter_id]
     for attempt in range(RING_ATTEMPTS):
         try:
             result = subprocess.run(
-                [binary or BUS_BINARY, "ring", recipient, kind, letter_id],
-                capture_output=True, text=True, timeout=RING_TIMEOUT)
+                argv, capture_output=True, text=True, timeout=RING_TIMEOUT)
+        except FileNotFoundError as exc:
+            raise RingNotDelivered(classify_ring(
+                "", "", missing_executable=True)) from exc
         except subprocess.TimeoutExpired as exc:
-            last = RingNotDelivered(f"helper timed out after {RING_TIMEOUT}s")
-            if attempt + 1 < RING_ATTEMPTS:
+            cls = classify_ring(
+                _decode_captured(exc.stdout), _decode_captured(exc.stderr),
+                timed_out=True)
+            last = RingNotDelivered(cls)
+            if attempt + 1 < RING_ATTEMPTS and cls.retry:
                 time.sleep(RING_RETRY_SLEEP)
                 continue
             raise last from exc
-        # THE EXIT CODE IS NOT THE OUTCOME. The helper exits 0 whether the ring
-        # was submitted, merely pasted into a pane without being submitted, or had
-        # no live surface at all. Trusting the code would record a delivered ring
-        # for a pane that is gone - and this record is the only tell that a
-        # doorbell has stopped working, so it must not lie.
-        output = f"{result.stdout}\n{result.stderr}"
-        if result.returncode == 0 and "doorbell submitted" in output:
+        # THE EXIT CODE IS NOT THE OUTCOME. Tokens on stdout are. stderr is
+        # never merged. Retry only a proven pre-inject helper_timeout.
+        cls = classify_ring(
+            result.stdout or "", result.stderr or "",
+            exit_code=result.returncode)
+        if cls.health == "ok":
             return
-        last = RingNotDelivered(output.strip().splitlines()[-1] if output.strip()
-                                else f"helper exited {result.returncode}")
-        if attempt + 1 < RING_ATTEMPTS and _transient_ring_failure(output):
+        last = RingNotDelivered(cls)
+        if attempt + 1 < RING_ATTEMPTS and cls.retry:
             time.sleep(RING_RETRY_SLEEP)
             continue
         raise last

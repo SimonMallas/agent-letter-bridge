@@ -3,6 +3,7 @@ import ast
 import pathlib
 import sys
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -61,3 +62,14 @@ class DoctorBoundary(unittest.TestCase):
                     names.add(node.attr.lower())
             for banned in forbidden:
                 self.assertNotIn(banned, names, f"{path.name} can reach the network")
+
+    def test_an_incompatible_helper_is_named_not_silent(self):
+        with mock.patch(
+                "alb.helper_probe.inspect_helper",
+                return_value=("incompatible",
+                              "helper does not emit doorbell-outcome v=1")):
+            text = checks.summary(
+                [], 1, pathlib.Path("/no-such-root"),
+                {"ALB_BUS_BINARY": "bus.sh", "PATH": "/bin"})
+        self.assertIn("helper does not emit doorbell-outcome v=1", text)
+        self.assertIn("DOORBELL HELPER", text)

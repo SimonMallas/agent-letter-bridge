@@ -106,7 +106,7 @@ class TheBoundActuallyBites(unittest.TestCase):
                 f"#!{sys.executable}\n"
                 "import time\n"
                 "time.sleep(5)\n"
-                "print('doorbell submitted')\n",
+                "print('doorbell-outcome v=1 outcome=submitted reason=- target=surface:1')\n",
                 encoding="utf-8")
             sleeper.chmod(0o700)
             with mock.patch.object(run, "RING_TIMEOUT", 0.1), \
