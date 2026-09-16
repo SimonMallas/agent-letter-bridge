@@ -7,6 +7,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-09-16
+
+### Fixed
+
+Newly durable inbound mail now gets its bounded doorbell attempt before
+platform confirmation. A confirmation failure can no longer skip that
+attempt and leave the saved letter silent on a deduplicated replay.
+
+Notifications remain coalesced per new batch. Replayed updates do not ring
+again, and a failed notification attempt does not prevent confirmation.
+The completed-cycle heartbeat still follows successful confirmation.
+
+This does not add a persistent notification queue or retry previously
+missed notifications. Transport acceptance is not proof of agent handling.
+
 ## [0.3.1] — 2026-09-14
 
 Small live traps on the phone path.
