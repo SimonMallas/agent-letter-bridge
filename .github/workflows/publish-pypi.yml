@@ -32,8 +32,8 @@ jobs:
           python -I -c 'import tomllib; from pathlib import Path; p = tomllib.loads(Path("pyproject.toml").read_text())["project"]; assert p["name"] == "agent-letter-bridge" and p["version"] == "0.3.2" and p["dependencies"] == []'
       - name: Build and check distributions
         run: |
-          python -I -m pip install build==1.6.1 twine==7.0.0
-          python -I -m build
+          python -I -m pip install build==1.6.1 twine==7.0.0 hatchling==1.32.0
+          python -I -m build --no-isolation
           python -I -m twine check dist/*.whl dist/*.tar.gz
           python -I - <<'PY'
           import hashlib
