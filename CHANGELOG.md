@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] — 2026-09-17
 
 ### Changed
 
@@ -13,19 +13,17 @@ Integrated rings parse one `doorbell-outcome v=1` stdout line (tokens only).
 Retry only `helper_timeout`. Dual-capable receiver permitted-lines accept the
 old doorbell line and `from <sender>`. Fixtures vendored; CI never fetches.
 
-Requires a doorbell helper that emits `doorbell-outcome v=1` (Letterbox
-emitter cut, not yet public). `--doctor` and setup inspect the helper and
+**Requires Letterbox 0.4.0 or later** (a doorbell helper that emits
+`doorbell-outcome v=1`). `--doctor` and setup inspect the helper and
 report "helper does not emit doorbell-outcome v=1" instead of a silent
 failing ring-health after cutover. Do not deploy this Bridge onto a seat
 whose helper still prints prose.
 
-`vendor/doorbell-outcome-source.json` `upstream_commit` is the placeholder
-`paper-rev5-pending-canonical` until Pi re-anchors it to the Letterbox
-conformance SHA before any public release.
-
-TODO (public release, Pi): user-facing doctor/setup/CHANGELOG text
-"Letterbox emitter cut, not yet public" is internal vocabulary; at public
-release it becomes "requires Letterbox <version> or later".
+`vendor/doorbell-outcome-source.json` pins the canonical fixture source:
+cmux commit `47b818a63a862094f87eff0b8926ae4a6759a35b`,
+`conformance/doorbell-outcome-v1/`, with per-file SHA256s. The zellij
+edition carries no conformance snapshot yet; vendoring there is a later
+explicit step.
 
 ## [0.3.2] — 2026-09-16
 

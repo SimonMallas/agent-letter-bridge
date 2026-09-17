@@ -10,7 +10,7 @@ how it gets read. Letter first, then ring — without a bell, mail lands in a de
 drop and nobody is told.
 
 Integrated mode **requires a doorbell helper that emits `doorbell-outcome v=1`**
-(Letterbox emitter cut, not yet public). A helper that still prints prose will
+(Letterbox 0.4.0 or later). A helper that still prints prose will
 make every ring `failing` / `unparseable`. `alb --doctor` reports
 `helper does not emit doorbell-outcome v=1` instead of waiting for a silent
 ring-health failure after cutover.

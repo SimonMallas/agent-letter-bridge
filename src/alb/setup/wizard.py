@@ -234,8 +234,8 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
                 console.say()
                 console.say(msg)
                 console.say("This Bridge requires a doorbell helper that emits")
-                console.say("doorbell-outcome v=1 (Letterbox emitter cut, not")
-                console.say("yet public). Installing now will record every ring")
+                console.say("doorbell-outcome v=1 (Letterbox 0.4.0 or later).")
+                console.say("Installing now will record every ring")
                 console.say("as failing/unparseable until that helper ships.")
 
     # 3. The token. Never echoed, never an argument, never printed back.

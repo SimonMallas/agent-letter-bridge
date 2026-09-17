@@ -1,8 +1,17 @@
 {
   "schema": 1,
   "upstream_repository": "agent-letterbox-cmux",
-  "upstream_commit": "paper-rev5-pending-canonical",
+  "upstream_commit": "47b818a63a862094f87eff0b8926ae4a6759a35b",
   "snapshot_directory": "vendor/doorbell-outcome-v1",
-  "manifest_sha256": "3eb97900647645a59560384286be6f9100a728ef4d9adf711fe6aa00bacf5131",
-  "sync_policy": "Explicit reviewed updates only; CI and runtime never fetch upstream."
+  "manifest_sha256": "5d42b46aab01156b849aeda660723c917e16be05082d6ca234012ae88c660f58",
+  "sync_policy": "Explicit reviewed updates only; CI and runtime never fetch upstream.",
+  "upstream_path": "conformance/doorbell-outcome-v1",
+  "files": {
+    "README.md": "8a3748a11b948d876e4c7271c23b1440bcb298c60280034d9054f9d2a2443db6",
+    "accepted.tsv": "e666e570f1468e9b0a33a2381f204c73b84c7f71097918839fa8f2b815ee923b",
+    "doorbell-line-accepted.tsv": "b4b2bdaac875ffacf3c7c349e88645a9ab645f1973488b87a1282d0cd7255205",
+    "doorbell-line-rejected.tsv": "c76e3c6a6b971df5adfc44d72b8eba3613bc90cfbc1293af65cc1d52f1113f52",
+    "parse-cases.tsv": "73882b545e1febe6efa960d939830e9ddcb6c04b24e464b9a2308c2fa10f5b70",
+    "rejected.tsv": "278bc726147e56450a253f96ade1869542c7566da6c696e728e7425cd49e4ebc"
+  }
 }

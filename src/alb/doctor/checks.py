@@ -339,8 +339,8 @@ def summary(process_listing, self_pid, root, environ):
         lines.append(f"  {msg}")
         if _status != "ok":
             lines.append("  requires a doorbell helper that emits")
-            lines.append("  doorbell-outcome v=1 (Letterbox emitter cut,")
-            lines.append("  not yet public). Do not cut over this Bridge")
+            lines.append("  doorbell-outcome v=1 (Letterbox 0.4.0 or later).")
+            lines.append("  Do not cut over this Bridge")
             lines.append("  onto a seat whose helper still prints prose.")
     lines.append("")
     lines.append("DAEMON CONTEXT")

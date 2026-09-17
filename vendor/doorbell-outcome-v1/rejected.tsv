@@ -13,7 +13,6 @@ doorbell-outcome v=1 outcome=submitted reason=- target=surface:1; rm -rf /	illeg
 doorbell-outcome v=1 outcome=submitted reason=because it worked target=surface:1	space in value
 doorbell-outcome v=2 outcome=submitted reason=- target=surface:1	unknown version
 herdr doorbell deferred: herdr is unavailable	legacy prose, not in the three outcomes
-letterbox: doorbell no_live_surface surface_not_found cmux_bound=3s for agent	legacy; bound is config
 letterbox: doorbell no_live_surface surface_not_found timeout=3s for agent	legacy; timeout= is config
 letterbox: doorbell submitted to agent on surface:1	legacy prose
 tmux doorbell submitted to agent on %1	legacy prose
