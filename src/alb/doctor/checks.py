@@ -338,8 +338,9 @@ def summary(process_listing, self_pid, root, environ):
         _status, msg = inspect_helper(binary)
         lines.append(f"  {msg}")
         if _status != "ok":
-            lines.append("  requires a doorbell helper that emits")
-            lines.append("  doorbell-outcome v=1 (Letterbox 0.4.0 or later).")
+            lines.append("  requires a doorbell helper with a `ring <to> <type> <id>`")
+            lines.append("  command that prints doorbell-outcome v=1. Letterbox 0.4.0")
+            lines.append("  defines the format; no public edition ships `ring` yet.")
             lines.append("  Do not cut over this Bridge")
             lines.append("  onto a seat whose helper still prints prose.")
     lines.append("")

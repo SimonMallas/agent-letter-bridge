@@ -233,8 +233,10 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
             if status != "ok":
                 console.say()
                 console.say(msg)
-                console.say("This Bridge requires a doorbell helper that emits")
-                console.say("doorbell-outcome v=1 (Letterbox 0.4.0 or later).")
+                console.say("This Bridge requires a doorbell helper with a")
+                console.say("`ring <to> <type> <id>` command that prints one")
+                console.say("doorbell-outcome v=1 line. Letterbox 0.4.0 defines")
+                console.say("the format; no public edition ships `ring` yet.")
                 console.say("Installing now will record every ring")
                 console.say("as failing/unparseable until that helper ships.")
 

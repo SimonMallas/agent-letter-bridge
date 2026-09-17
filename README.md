@@ -9,8 +9,11 @@ incoming message becomes a durable file on disk **before** it is acknowledged an
 how it gets read. Letter first, then ring — without a bell, mail lands in a dead
 drop and nobody is told.
 
-Integrated mode **requires a doorbell helper that emits `doorbell-outcome v=1`**
-(Letterbox 0.4.0 or later). A helper that still prints prose will
+Integrated mode **requires a doorbell helper with a `ring <to> <type> <id>`
+command that prints one `doorbell-outcome v=1` line**. Letterbox 0.4.0
+defines that format and its fixtures, but no public Letterbox edition ships
+a `ring` dispatcher yet — integrated deployment needs a helper that provides
+it. A helper that still prints prose will
 make every ring `failing` / `unparseable`. `alb --doctor` reports
 `helper does not emit doorbell-outcome v=1` instead of waiting for a silent
 ring-health failure after cutover.

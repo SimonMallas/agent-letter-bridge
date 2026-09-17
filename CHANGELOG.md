@@ -13,8 +13,10 @@ Integrated rings parse one `doorbell-outcome v=1` stdout line (tokens only).
 Retry only `helper_timeout`. Dual-capable receiver permitted-lines accept the
 old doorbell line and `from <sender>`. Fixtures vendored; CI never fetches.
 
-**Requires Letterbox 0.4.0 or later** (a doorbell helper that emits
-`doorbell-outcome v=1`). `--doctor` and setup inspect the helper and
+**Integrated rings require a doorbell helper with a `ring <to> <type> <id>`
+command that prints one `doorbell-outcome v=1` line.** Letterbox 0.4.0
+defines that format and its fixtures; no public Letterbox edition ships a
+`ring` dispatcher yet. `--doctor` and setup inspect the helper and
 report "helper does not emit doorbell-outcome v=1" instead of a silent
 failing ring-health after cutover. Do not deploy this Bridge onto a seat
 whose helper still prints prose.

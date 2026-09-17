@@ -1,6 +1,8 @@
 """v=1 ring-outcome consumer: vendored fixtures plus phase/exit edges."""
 from __future__ import annotations
 
+import hashlib
+import json
 import subprocess
 import unittest
 from pathlib import Path
@@ -22,6 +24,12 @@ def _rows(name: str):
         yield line.split("\t")
 
 
+def _pinned_sha256(name: str) -> str:
+    source = json.loads(
+        (ROOT / "vendor" / "doorbell-outcome-source.json").read_text(encoding="utf-8"))
+    return source["files"][name]
+
+
 class FixtureAccepted(unittest.TestCase):
     def test_every_accepted_line_parses_to_its_columns(self):
         count = 0
@@ -35,13 +43,26 @@ class FixtureAccepted(unittest.TestCase):
 
 
 class FixtureRejected(unittest.TestCase):
+    # Canonical expectation, tied to the vendored pin in
+    # vendor/doorbell-outcome-source.json (cmux 47b818a6,
+    # conformance/doorbell-outcome-v1): rejected.tsv carries exactly 42 data
+    # rows (one private-stack row lives only in the private workspace, by
+    # design). Equality is the non-vacuous check — every pinned row must be
+    # exercised, and a truncated or swapped fixture fails here.
+    EXPECTED_ROWS = 42
+
+    def test_vendored_rejected_bytes_match_the_pin(self):
+        digest = hashlib.sha256(
+            (FIXTURES / "rejected.tsv").read_bytes()).hexdigest()
+        self.assertEqual(digest, _pinned_sha256("rejected.tsv"))
+
     def test_every_rejected_line_fails_parse(self):
         count = 0
         for line, _why in _rows("rejected.tsv"):
             count += 1
             got = ring_outcome.parse_line(line)
             self.assertIsInstance(got, str, line)
-        self.assertGreaterEqual(count, 43)
+        self.assertEqual(count, self.EXPECTED_ROWS)
 
 
 class FixtureParseCases(unittest.TestCase):
