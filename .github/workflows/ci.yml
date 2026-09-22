@@ -36,12 +36,28 @@ jobs:
       - name: Conformance fixture snapshot
         run: python3 scripts/check_conformance_vendor.py
 
-      # A wheel that imports cleanly is proved by INSTALLING it, not by the
-      # suite - which runs from the source tree so mutations stay visible.
+      # Inspect actual archives: tracked-source scans cannot see build leakage.
+      - name: Build and inspect distributions
+        run: |
+          python3 -m venv /tmp/albbuild
+          /tmp/albbuild/bin/pip install --quiet build==1.2.2.post1
+          /tmp/albbuild/bin/python -m build --outdir /tmp/albdist
+          python3 scripts/check_distribution.py /tmp/albdist/*.whl /tmp/albdist/*.tar.gz
+          git worktree add --detach /tmp/albdirty HEAD
+          mkdir -p /tmp/albdirty/.venv-review/bin /tmp/albdirty/copied-mail
+          printf 'synthetic build canary\n' > /tmp/albdirty/.venv-review/bin/python
+          printf 'synthetic build canary\n' > /tmp/albdirty/copied-mail/letter.md
+          printf 'synthetic build canary\n' > /tmp/albdirty/review.log
+          /tmp/albbuild/bin/python -m build --outdir /tmp/albdirtydist /tmp/albdirty
+          python3 scripts/check_distribution.py /tmp/albdirtydist/*.whl /tmp/albdirtydist/*.tar.gz
+          cmp /tmp/albdist/*.tar.gz /tmp/albdirtydist/*.tar.gz
+          cmp /tmp/albdist/*.whl /tmp/albdirtydist/*.whl
+
+      # Install the wheel that was inspected, not a second build from source.
       - name: Install smoke test
         run: |
           python3 -m venv /tmp/albvenv
-          /tmp/albvenv/bin/pip install --quiet .
+          /tmp/albvenv/bin/pip install --quiet --no-deps --no-index /tmp/albdist/*.whl
           /tmp/albvenv/bin/alb --help > /dev/null
           /tmp/albvenv/bin/python -m alb --help > /dev/null
           echo "wheel installs and both entry points run"

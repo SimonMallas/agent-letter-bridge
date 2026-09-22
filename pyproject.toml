@@ -47,3 +47,13 @@ alb = "alb.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/alb"]
+
+[tool.hatch.build.targets.sdist]
+# A worktree's .git is a FILE; default directory exclusions do not protect it.
+# Select public source roots rather than guessing every local scratch name.
+only-include = [
+    "src", "tests", "docs", "scripts", "examples", "vendor",
+    "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "INSTALL.md",
+    "SECURITY.md", "LICENSE", "pyproject.toml",
+    ".github", ".githooks", ".gitignore",
+]

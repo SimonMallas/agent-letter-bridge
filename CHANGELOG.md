@@ -20,7 +20,10 @@ remain unchanged; their historical timezone cannot be inferred from this fix.
 
 Package metadata includes project links and supported-platform classifiers.
 The README links to PyPI and documents package-index installation. The build
-backend is pinned; runtime dependencies remain empty.
+backend is pinned; runtime dependencies remain empty. Source distributions use
+an explicit public-source allow-list, excluding worktree pointers and unrelated
+local build files. CI inspects built archives for structural privacy leaks and
+compares clean and deliberately dirty worktree builds before installing the wheel.
 
 ## [0.4.0] — 2026-09-17
 

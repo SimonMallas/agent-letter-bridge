@@ -44,6 +44,18 @@ POLLER = ROOT / "src" / "alb" / "poller" / "loop.py"
 
 # invariant -> (file, tests module, old, new)
 EXTRA = {
+    "distribution rejects VCS members": (
+        ROOT / "scripts" / "check_distribution.py", "tests.test_distribution",
+        '        if any(p in (".git", ".hg", ".svn", ".venv", "__pycache__") for p in parts):',
+        '        if False:'),
+    "distribution enforces source allow-list": (
+        ROOT / "scripts" / "check_distribution.py", "tests.test_distribution",
+        '        if source and (len(parts) < 2 or parts[1] not in allowed):',
+        '        if False:'),
+    "distribution scans actual member payloads": (
+        ROOT / "scripts" / "check_distribution.py", "tests.test_distribution",
+        '            if pattern.search(text):',
+        '            if False:'),
     "allowlist denies on a missing file": (
         ALLOW, "tests.test_allowlist", "    except OSError:\n        return False",
         "    except OSError:\n        return True"),

@@ -17,6 +17,15 @@ class PackageMetadata(unittest.TestCase):
         self.assertRegex(requires[0], r"\Ahatchling==[0-9]+\.[0-9]+\.[0-9]+\Z")
         self.assertEqual(self.data["project"]["dependencies"], [])
 
+    def test_sdist_has_an_explicit_public_source_allow_list(self):
+        allowed = self.data["tool"]["hatch"]["build"]["targets"]["sdist"]["only-include"]
+        self.assertIn("src", allowed)
+        self.assertIn("INSTALL.md", allowed)
+        self.assertIn("CONTRIBUTING.md", allowed)
+        self.assertNotIn(".git", allowed)
+        self.assertNotIn("*", allowed)
+        self.assertNotIn(".", allowed)
+
     def test_public_listing_has_links_and_classifiers(self):
         project = self.data["project"]
         for key in ("Homepage", "Repository", "Issues", "Changelog"):
