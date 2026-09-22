@@ -5,6 +5,23 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] — Unreleased
+
+### Fixed
+
+New inbound letter IDs use UTC rather than the host's local timezone. The ID
+and explicit UTC `sent:` metadata use the same clock snapshot. Outbound reply
+records also carry UTC `sent:` metadata while retaining their source-derived
+claim IDs. This field records local publication/composition, not transport
+delivery or the original platform message's authoring time. Existing letters
+remain unchanged; their historical timezone cannot be inferred from this fix.
+
+### Changed
+
+Package metadata includes project links and supported-platform classifiers.
+The README links to PyPI and documents package-index installation. The build
+backend is pinned; runtime dependencies remain empty.
+
 ## [0.4.0] — 2026-09-17
 
 ### Changed

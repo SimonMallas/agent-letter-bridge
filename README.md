@@ -1,5 +1,7 @@
 # Agent Letter Bridge
 
+[![PyPI version](https://img.shields.io/pypi/v/agent-letter-bridge)](https://pypi.org/project/agent-letter-bridge/)
+
 **Message the CLI agents on your machine from your phone — and every message
 becomes part of their memory.**
 
@@ -135,9 +137,13 @@ brief, with the boundaries an agent needs and a human infers.
 The short version, once you know the shape:
 
 ```sh
-pipx install .                                  # or: uv tool install .
+pipx install agent-letter-bridge                # or: uv tool install agent-letter-bridge
 alb --init --root ~/.alb                        # creates the files, asks for the rest
 ```
+
+For pip, first create and activate a dedicated virtual environment, then run
+`python -m pip install agent-letter-bridge`. For development from a checkout,
+use `pipx install .` instead. Installation does not configure or start a relay.
 
 **`--init` may offer to start the bridge for you, and what comes next depends
 on your answer.** Only one process may hold a root at a time, so these are two
@@ -209,29 +215,44 @@ how mail crosses in from outside.
 
 ## Status
 
-**v0.2.5.** Across releases, inbound delivery, ringing and bounded replies
+**v0.4.1.** Across releases, inbound delivery, ringing and bounded replies
 have been exercised live against real bots on macOS and Linux, cmux and tmux. v0.2 adds
 durable outbound letters, correspondent
 identity and threading, and read-only retrieval (`--list`, `--show`, `--search`,
 `--thread`, `--export`); those are covered by the suite and reviewed, but have
 not yet had the same live mileage as the inbound path. **Automated coverage
 still uses fakes** — the suite proves the invariants, the live runs prove the
-transports, and those are different claims. Not on a package index, and not
-formally audited; see `docs/threat-model.md` for what is and is not claimed.
+transports, and those are different claims. Available on
+[PyPI](https://pypi.org/project/agent-letter-bridge/), but not formally audited;
+see `docs/threat-model.md` for what is and is not claimed.
 
-**Upgrading from v0.2.1**, which is what most installs are on. Three things
+New inbound letter IDs use UTC. New inbound letters and outbound reply records
+also carry an explicit UTC `sent:` field: local publication/composition time,
+not proof of platform delivery or the original message's authoring time.
+Delivery events remain separate records beside the reply. Reply IDs remain
+source-derived so retries keep the same claim identity; their inherited ID
+stamp need not equal the reply's composition time. Existing letters are neither
+rewritten nor assigned a timezone they did not declare.
+
+**Upgrading from v0.2.1** (legacy installations). Three things
 change that you would notice. A rate limit or a gateway error is now waited out
 and retried rather than ending the bridge, so the relay survives the platform
 asking it to slow down. `alb --check` gives an agent a verdict to act on when it
 wakes: nothing to do, restart it and here is how, or something a restart will not
 fix. And `alb --stop` asks the process holding the lock to stand down, rather
 than signalling a pid that may by then belong to something else. Upgrading is
-`pipx install --force .` from the checkout — plain `pipx install .` sees the
-existing install, prints `Not modifying existing installation` and stops.
+`pipx upgrade agent-letter-bridge` for a PyPI installation, or
+`pipx install --force .` from a reviewed checkout. Plain `pipx install .` sees
+the existing install, prints `Not modifying existing installation` and stops.
 Stop the running bridge by whatever route the version you are ON supports:
 `alb --stop` is new here, and 0.2.1 will not honour it. Configs, allowlist and
 state carry forward untouched; check with `alb --version` before restarting. The
 full list is in [`CHANGELOG.md`](CHANGELOG.md).
+
+If multiple environments or editable checkouts exist, verify `command -v alb`
+and `alb --version`, and check that the resident launch command uses the intended
+environment's executable. Upgrading one environment does not update another
+or reload a running bridge.
 
 ## What you need
 

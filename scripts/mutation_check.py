@@ -431,8 +431,28 @@ EXTRA = {
         "    out = {k: meta[k] for k in ENVELOPE_ORDER if k in meta}", "    out = {}"),
     "the id timestamp is dashed for the shared parser": (
         ROOT / "src" / "alb" / "letter" / "store.py", "tests.test_envelope",
-        'stamp = time.strftime("%Y-%m-%dT%H%M%S")',
-        'stamp = time.strftime("%Y%m%dT%H%M%S")'),
+        'stamp = time.strftime("%Y-%m-%dT%H%M%S", published_at)',
+        'stamp = time.strftime("%Y%m%dT%H%M%S", published_at)'),
+    "publication time is UTC rather than host local": (
+        SRC, "tests.test_publication_time",
+        "    published_at = time.gmtime(time.time())",
+        "    published_at = time.localtime(time.time())"),
+    "published letter carries explicit sent metadata": (
+        SRC, "tests.test_publication_time",
+        '    meta["sent"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", published_at)',
+        '    meta.pop("sent", None)'),
+    "id and sent use the same clock snapshot": (
+        SRC, "tests.test_publication_time",
+        '    meta["sent"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", published_at)',
+        '    meta["sent"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time()))'),
+    "reply composition carries explicit sent metadata": (
+        OUTBOUND, "tests.test_publication_time",
+        '    meta["sent"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time()))',
+        '    meta.pop("sent", None)'),
+    "reply sent time is UTC rather than host local": (
+        OUTBOUND, "tests.test_publication_time",
+        '    meta["sent"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time()))',
+        '    meta["sent"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.localtime(time.time()))'),
     "an empty value is a bare key": (
         ROOT / "src" / "alb" / "letter" / "store.py", "tests.test_envelope",
         'lines.append(f"{key}: {text}" if text else f"{key}:")',

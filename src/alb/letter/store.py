@@ -175,7 +175,10 @@ def publish(inbox, body, meta, update_id=None):
     # parser extracts the timestamp with a dashed pattern, so an undashed id
     # reads as unknown and any timestamp-derived logic loses its input. Checked
     # against that parser, not against how the id looks.
-    stamp = time.strftime("%Y-%m-%dT%H%M%S")
+    # One UTC snapshot keeps the id and explicit publication time aligned,
+    # including across midnight. Neither timestamp proves transport delivery.
+    published_at = time.gmtime(time.time())
+    stamp = time.strftime("%Y-%m-%dT%H%M%S", published_at)
     letter_id = (f"{stamp}-{unique}-u{update_token(update_id)}"
                  if update_id is not None else f"{stamp}-{unique}")
     temp = inbox / f".tmp-{letter_id}"
@@ -184,6 +187,7 @@ def publish(inbox, body, meta, update_id=None):
     # The envelope's id is the letter id. It is stamped here because this is
     # the first moment the id exists.
     meta = dict(meta or {})
+    meta["sent"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", published_at)
     if "id" in meta:
         meta["id"] = letter_id
 
