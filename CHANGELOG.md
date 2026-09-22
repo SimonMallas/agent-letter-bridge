@@ -22,8 +22,11 @@ Package metadata includes project links and supported-platform classifiers.
 The README links to PyPI and documents package-index installation. The build
 backend is pinned; runtime dependencies remain empty. Source distributions use
 an explicit public-source allow-list, excluding worktree pointers and unrelated
-local build files. CI inspects built archives for structural privacy leaks and
-compares clean and deliberately dirty worktree builds before installing the wheel.
+local build files. Archive inspection validates directory and regular-member
+names, types and metadata, checks container comments and raw metadata records,
+and constrains wheel members to the package and its metadata directory. Inspection
+limits refuse rather than report incomplete inspection as clean. CI compares clean
+and deliberately dirty worktree builds before installing the inspected wheel.
 
 ## [0.4.0] — 2026-09-17
 

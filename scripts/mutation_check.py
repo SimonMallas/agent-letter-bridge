@@ -50,12 +50,32 @@ EXTRA = {
         '        if False:'),
     "distribution enforces source allow-list": (
         ROOT / "scripts" / "check_distribution.py", "tests.test_distribution",
-        '        if source and (len(parts) < 2 or parts[1] not in allowed):',
+        '        if source and not source_root and (len(parts) < 2 or parts[1] not in allowed):',
         '        if False:'),
     "distribution scans actual member payloads": (
         ROOT / "scripts" / "check_distribution.py", "tests.test_distribution",
         '            if pattern.search(text):',
         '            if False:'),
+    "distribution validates directories before skipping payloads": (
+        ROOT / "scripts" / "check_distribution.py", "tests.test_distribution_metadata",
+        '        entries += 1\n        scan(name, entries)',
+        '        entries += 1\n        if directory:\n            return True\n        scan(name, entries)'),
+    "distribution allows only supported ZIP file types": (
+        ROOT / "scripts" / "check_distribution.py", "tests.test_distribution_metadata",
+        '                    regular = not member.is_dir() and mode in (0, stat.S_IFREG)',
+        '                    regular = not member.is_dir()'),
+    "distribution validates wheel member roots": (
+        ROOT / "scripts" / "check_distribution.py", "tests.test_distribution_metadata",
+        '        if not source and parts[0] not in wheel_roots:',
+        '        if False:'),
+    "distribution scans raw container metadata": (
+        ROOT / "scripts" / "check_distribution.py", "tests.test_distribution_metadata",
+        '        scan(raw, 0)',
+        '        pass'),
+    "distribution scans consumed TAR metadata": (
+        ROOT / "scripts" / "check_distribution.py", "tests.test_distribution_metadata",
+        '            scan(raw_tar, 0)',
+        '            pass'),
     "allowlist denies on a missing file": (
         ALLOW, "tests.test_allowlist", "    except OSError:\n        return False",
         "    except OSError:\n        return True"),

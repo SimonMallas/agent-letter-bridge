@@ -37,15 +37,16 @@ class DistributionPrivacy(unittest.TestCase):
     def test_clean_source_and_wheel_controls_pass(self):
         source = self.sdist({"src/alb/__init__.py": b"", "README.md": b"public",
                              "INSTALL.md": b"install", "PKG-INFO": b"Version: 1"})
-        wheel = self.wheel({"alb/__init__.py": b"", "example.dist-info/METADATA": b"Version: 1"})
+        wheel = self.wheel({"alb/__init__.py": b"", "agent_letter_bridge-0.4.1.dist-info/METADATA": b"Version: 0.4.1"})
         self.assertEqual(gate.check_artifact(source), [])
         self.assertEqual(gate.check_artifact(wheel), [])
 
     def test_worktree_pointer_is_refused_in_both_formats(self):
-        source = self.sdist({".git": b"gitdir: synthetic-pointer"})
-        wheel = self.wheel({".git": b"gitdir: synthetic-pointer"})
-        for path in (source, wheel):
-            self.assertTrue(gate.check_artifact(path))
+        for source_name, wheel_name in ((".git", ".git"), ("src/.git/config", "alb/.git/config")):
+            source = self.sdist({source_name: b"gitdir: synthetic-pointer"})
+            wheel = self.wheel({wheel_name: b"gitdir: synthetic-pointer"})
+            for path in (source, wheel):
+                self.assertTrue(gate.check_artifact(path))
 
     def test_arbitrary_untracked_roots_are_not_shippable(self):
         for name in (".venv-review/bin/python", "copied-mail/letter.md", "review.log"):
