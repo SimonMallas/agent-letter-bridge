@@ -212,6 +212,8 @@ def compose(outbox, state, source_id, origin_chat, sender, body,
     meta["re"] = source_id
     # The reply lives in the source's thread (or the source roots one).
     meta["thread"] = thread or source_id
+    # Composition time, not delivery. Keep the source-derived claim id intact.
+    meta["sent"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time()))
     text = letters._serialise(meta, body)
 
     path = outbox / f"{letter_id}.md"

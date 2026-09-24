@@ -72,6 +72,21 @@ name that looks like an ordinary word). Supply those out of band via
 committed. **CI does not set it**, so that class is covered by review and the
 pre-release history audit — not by the automated gate. Do not assume CI covers it.
 
+## Built distributions
+
+Tracked-source scans do not cover everything a build backend can package. After
+building a wheel and sdist, run `python3 scripts/check_distribution.py dist/*`
+on those exact artifacts. The gate inspects members without extracting them,
+checks the sdist's public-source allow-list and the wheel's package/metadata
+roots, and applies structural privacy patterns to names, payloads and metadata.
+Directories do not bypass validation; unsupported member types are refused.
+Bounded raw-container and expanded-TAR scans cover metadata that parsers may skip
+or override. Exceeding an inspection bound is a refusal, never a clean result.
+The gate reports finding classes, never matched secrets. CI also requires clean
+and deliberately dirty worktree builds to produce identical artifacts. Pattern
+checks do not detect every encoding or semantic private fact and do not replace
+semantic review or the history audit.
+
 ## Claims
 
 Every claim in the docs must be traceable to the mechanism that makes it true.
