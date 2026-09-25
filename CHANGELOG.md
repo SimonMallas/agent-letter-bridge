@@ -14,8 +14,9 @@ A grant with no limit override inherits those numbers; an override still wins.
 `alb --grant-limits` sets the override. `alb --grant-list` prints the
 effective hour and day limits and still does not print a chat id or token.
 A capacity refusal names the hourly, daily, or queued limit and, for the
-clock limits, when that window next opens in Europe/London. Replies to an
-inbound letter are not counted against these limits.
+clock limits, when that window next opens in Europe/London. If the hour and
+the day are both full, both are named. The count is what was already sent.
+Replies to an inbound letter are not counted against these limits.
 
 ## [0.4.1] — Unreleased
 

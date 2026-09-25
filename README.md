@@ -306,8 +306,12 @@ alb: capacity refused: daily limit 300 reached (300 sent today); clears at 00:00
 alb: capacity refused: queued limit 5 reached (5 waiting)
 ```
 
-The clock times are the next hour and the next local midnight. A queued
-refusal clears when one of those waiting sends settles.
+The count is how many were already sent or are already waiting, not the
+message that was just refused. If the hour and the day are both full, both
+are named: the next hour opening does not show a day that stays closed until
+midnight. The clock times are the next hour and the next local midnight. A
+queued refusal has no clock reset; it clears when one of those waiting sends
+settles.
 
 ## Requirements
 

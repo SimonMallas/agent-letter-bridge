@@ -194,8 +194,27 @@ class Budget(Base):
                 label=LABEL, intent_id="n2", text=TEXT, reason=REASON,
                 seat=SEAT, now=t0)
         self.assertIn("hourly limit 2 reached (2 sent this hour)", str(caught.exception))
+        self.assertNotIn("daily limit", str(caught.exception))
         self.assertIn("Europe/London", str(caught.exception))
         self.assertEqual(len(sender.calls), 2)
+
+    def test_hour_and_day_both_full_names_both(self):
+        grants.set_limits(self.state, self.grant["grant_id"], per_hour=2, per_day=2)
+        sender = FakeSender()
+        t0 = 1_700_000_000
+        for i in range(2):
+            initiate.send_initiated(
+                sender, self.state, self.outbox, self.allow,
+                label=LABEL, intent_id=f"b{i}", text=TEXT, reason=REASON,
+                seat=SEAT, now=t0)
+        with self.assertRaises(budget.CapacityRefused) as caught:
+            initiate.send_initiated(
+                sender, self.state, self.outbox, self.allow,
+                label=LABEL, intent_id="b2", text=TEXT, reason=REASON,
+                seat=SEAT, now=t0)
+        message = str(caught.exception)
+        self.assertIn("hourly limit 2 reached (2 sent this hour)", message)
+        self.assertIn("daily limit 2 reached (2 sent today)", message)
 
     def test_next_hour_clears_the_hourly_limit(self):
         sender = FakeSender()
@@ -269,6 +288,34 @@ class Budget(Base):
                 label=LABEL, intent_id="q-new", text=TEXT, reason=REASON,
                 seat=SEAT, now=1_700_000_000)
         self.assertIn("queued limit 5 reached (5 waiting)", str(caught.exception))
+
+    def test_readmit_counts_messages_already_sent(self):
+        grants.set_limits(self.state, self.grant["grant_id"], per_hour=2, per_day=30)
+        later = 1_700_000_000 + 3600
+        sender = FakeSender()
+        for i in range(2):
+            initiate.send_initiated(
+                sender, self.state, self.outbox, self.allow,
+                label=LABEL, intent_id=f"later{i}", text=TEXT, reason=REASON,
+                seat=SEAT, now=later)
+        day_key, hour_key = ids.window_keys(1_700_000_000, tz_name="Europe/London")
+        old = reservation.create(self.state, {
+            "outbound_id": ids.outbound_id(self.grant["grant_id"], SEAT, "earlier"),
+            "binding_key": self.grant["binding_key"],
+            "grant_id": self.grant["grant_id"],
+            "intent_id": "earlier",
+            "seat": SEAT,
+            "payload_digest": "0" * 64,
+            "day_key": day_key,
+            "hour_key": hour_key,
+            "status": "held",
+        })
+        grant = grants.load(self.state, self.grant["grant_id"])
+        with self.assertRaises(budget.CapacityRefused) as caught:
+            budget.readmit_existing(self.state, old, now=later, grant=grant)
+        message = str(caught.exception)
+        self.assertIn("hourly limit 2 reached (2 sent this hour)", message)
+        self.assertNotIn("3 sent this hour", message)
 
 
 class Authority(Base):

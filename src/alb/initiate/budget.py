@@ -43,14 +43,23 @@ def refusal(kind, limit, used, *, now=None, tz_name=None):
     raise CapacityRefused("capacity refused")
 
 
+def _refusals(hits, *, now, tz_name):
+    parts = [refusal(kind, limit, used, now=now, tz_name=tz_name).split(": ", 1)[1]
+             for kind, limit, used in hits]
+    return "capacity refused: " + "; ".join(parts)
+
+
 def _which(used_day, used_hour, active_q, per_day, per_hour, max_queued):
+    """Every exhausted limit. Hour and day are both named when both are full,
+    because the day stays closed after the hour opens."""
+    hits = []
     if used_hour >= per_hour:
-        return "hourly", per_hour, used_hour
+        hits.append(("hourly", per_hour, used_hour))
     if used_day >= per_day:
-        return "daily", per_day, used_day
+        hits.append(("daily", per_day, used_day))
     if active_q >= max_queued:
-        return "queued", max_queued, active_q
-    return None
+        hits.append(("queued", max_queued, active_q))
+    return hits
 
 
 class Quarantined(Exception):
@@ -138,11 +147,9 @@ def admit_new(state, binding_key, *, outbound_id, grant_id, intent_id, seat,
         day_key, hour_key = ids.window_keys(now, tz_name=tz_name)
         used_day, used_hour, active_q = counts(
             state, binding_key, day_key=day_key, hour_key=hour_key)
-        hit = _which(used_day, used_hour, active_q, per_day, per_hour, max_queued)
-        if hit is not None:
-            kind, limit, used = hit
-            raise CapacityRefused(refusal(
-                kind, limit, used, now=now, tz_name=tz_name))
+        hits = _which(used_day, used_hour, active_q, per_day, per_hour, max_queued)
+        if hits:
+            raise CapacityRefused(_refusals(hits, now=now, tz_name=tz_name))
         rec = {
             "outbound_id": outbound_id,
             "binding_key": binding_key,
@@ -171,12 +178,13 @@ def readmit_existing(state, rec, *, now=None, grant=None):
             exclude=rec["outbound_id"])
         if rec.get("day_key") == day_key and rec.get("hour_key") == hour_key:
             return rec
-        if used_hour + 1 > per_hour:
-            raise CapacityRefused(refusal(
-                "hourly", per_hour, used_hour + 1, now=now, tz_name=tz_name))
-        if used_day + 1 > per_day:
-            raise CapacityRefused(refusal(
-                "daily", per_day, used_day + 1, now=now, tz_name=tz_name))
+        if used_hour + 1 > per_hour or used_day + 1 > per_day:
+            hits = []
+            if used_hour + 1 > per_hour:
+                hits.append(("hourly", per_hour, used_hour))
+            if used_day + 1 > per_day:
+                hits.append(("daily", per_day, used_day))
+            raise CapacityRefused(_refusals(hits, now=now, tz_name=tz_name))
         rec = dict(rec)
         rec["day_key"] = day_key
         rec["hour_key"] = hour_key
