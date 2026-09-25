@@ -470,6 +470,23 @@ Repeat Steps 3–7 with a different directory, e.g. `~/.alb/grok`.
 
 ---
 
+## Starting a conversation: grants and limits
+
+Replying uses `alb --reply-to` and is not counted against a quota. Starting
+a conversation is different: it needs a grant, which is operator permission
+to originate, bound to a label rather than typed as a chat id.
+
+```text
+alb --grant-create --as owner --platform telegram --chat-id <id>
+alb --send --to owner --id <stable-intent> --text "..." --reason "..."
+```
+
+The defaults are 30 an hour and 300 a day. A grant without its own numbers
+inherits them. Set an override with `alb --grant-limits --as owner --per-hour 30 --per-day 300`.
+`alb --grant-list` shows the effective limits and does not show the chat id
+or token. A refusal looks like `alb: capacity refused: hourly limit 30 reached (30 sent this hour); clears at 09:00 Europe/London`,
+and the same shape names a daily or queued limit.
+
 ## Did it work?
 
 | Check | Command | Healthy |

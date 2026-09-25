@@ -141,6 +141,12 @@ def main(argv=None):
                         help="explicit operator grant; never minted on use")
     parser.add_argument("--grant-list", action="store_true",
                         help="list labelled grants; reads only")
+    parser.add_argument("--grant-limits", action="store_true",
+                        help="set --per-hour and/or --per-day on the grant bound to --as")
+    parser.add_argument("--per-hour", dest="per_hour", type=int,
+                        help="hourly originate limit for --grant-limits")
+    parser.add_argument("--per-day", dest="per_day", type=int,
+                        help="daily originate limit for --grant-limits")
     parser.add_argument("--grant-disable", action="store_true",
                         help="disable the grant bound to --as")
     parser.add_argument("--as", dest="as_label", metavar="LABEL",
@@ -399,7 +405,8 @@ def main(argv=None):
     mail = pathlib.Path(args.mail_root or config.get("ALB_MAIL_ROOT") or root)
     state = root / "state"
 
-    if args.grant_create or args.grant_list or args.grant_disable:
+    if (args.grant_create or args.grant_list or args.grant_disable
+            or args.grant_limits):
         return _grant_admin(args, state)
 
     if args.send:
@@ -607,7 +614,25 @@ def _grant_admin(args, state):
                     enabled = rec.get("enabled") is True
                 except grants.PolicyError:
                     enabled = False
-                print(f"{label} {grant_id} {'enabled' if enabled else 'disabled'}")
+                if enabled:
+                    hour = grants.effective(rec, "per_hour")
+                    day = grants.effective(rec, "per_day")
+                    print(f"{label} {grant_id} enabled per_hour={hour} per_day={day}")
+                else:
+                    print(f"{label} {grant_id} disabled")
+            return 0
+        if args.grant_limits:
+            if not args.as_label or (args.per_hour is None and args.per_day is None):
+                print("alb: --grant-limits needs --as and --per-hour or --per-day",
+                      file=sys.stderr)
+                return 2
+            grant_id = destinations.resolve(state, args.as_label)
+            grants.set_limits(state, grant_id, per_hour=args.per_hour,
+                              per_day=args.per_day)
+            rec = grants.load(state, grant_id)
+            print(f"alb: grant limits {args.as_label} "
+                  f"per_hour={grants.effective(rec, 'per_hour')} "
+                  f"per_day={grants.effective(rec, 'per_day')}")
             return 0
         if args.grant_create:
             if not args.as_label or not args.chat_id:

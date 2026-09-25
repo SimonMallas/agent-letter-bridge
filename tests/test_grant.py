@@ -3,6 +3,7 @@
 Fixture chat ids are labelled fakes, not production tokens.
 """
 import errno
+import io
 import json
 import os
 import pathlib
@@ -112,6 +113,25 @@ class FailClosed(Base):
         grants.validate(rec)
         self.assertEqual(grants.effective(rec, "per_day"), 10)
         self.assertEqual(grants.effective(rec, "per_hour"), grants.POLICY["per_hour"])
+
+    def test_defaults_are_thirty_an_hour_and_three_hundred_a_day(self):
+        rec = self.create()
+        self.assertNotIn("overrides", rec)
+        self.assertEqual(grants.effective(rec, "per_hour"), 30)
+        self.assertEqual(grants.effective(rec, "per_day"), 300)
+
+    def test_set_limits_keeps_precedence_and_rejects_bad_numbers(self):
+        rec = self.create()
+        updated = grants.set_limits(self.state, rec["grant_id"], per_hour=4, per_day=9)
+        loaded = grants.load(self.state, rec["grant_id"])
+        self.assertEqual(grants.effective(loaded, "per_hour"), 4)
+        self.assertEqual(grants.effective(loaded, "per_day"), 9)
+        self.assertEqual(updated["overrides"]["per_hour"], 4)
+        for bad in (0, 1001, True):
+            with self.assertRaises(grants.PolicyError):
+                grants.set_limits(self.state, rec["grant_id"], per_hour=bad)
+        with self.assertRaises(grants.PolicyError):
+            grants.set_limits(self.state, rec["grant_id"], per_hour=10, per_day=4)
 
     def test_override_may_exceed_policy(self):
         """overrides live in the 0600 grants dir; that dir is the trust
@@ -707,6 +727,53 @@ class SetupDoesNotMintAuthority(Base):
         src = pathlib.Path(wizard.__file__).read_text(encoding="utf-8")
         self.assertNotIn("alb.grant", src)
         self.assertNotIn("grant.create", src)
+
+
+class GrantLimitsCommand(Base):
+    def setUp(self):
+        super().setUp()
+        from alb.initiate import destinations
+        self.destinations = destinations
+        rec = self.create()
+        destinations.bind(self.state, "owner", rec["grant_id"])
+        self.rec = rec
+        self.env = self.state.parent / "bridge.env"
+        self.env.write_text("ALB_TOKEN=fixture-token\n", encoding="utf-8")
+        os.chmod(self.env, 0o600)
+
+    def _cli(self, *args):
+        from alb import cli
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch("sys.stdout", out), mock.patch("sys.stderr", err):
+            rc = cli.main(["--config", str(self.env), "--root", str(self.state.parent), *args])
+        return rc, out.getvalue(), err.getvalue()
+
+    def test_list_prints_effective_limits_and_not_the_chat(self):
+        rc, out, err = self._cli("--grant-list")
+        self.assertEqual(rc, 0, err)
+        self.assertIn("per_hour=30", out)
+        self.assertIn("per_day=300", out)
+        self.assertNotIn(CHAT, out + err)
+        self.assertNotIn("fixture-token", out + err)
+
+    def test_limits_command_rejects_unknown_label_and_bad_range(self):
+        rc, _out, err = self._cli("--grant-limits", "--as", "missing", "--per-hour", "4")
+        self.assertEqual(rc, 1)
+        self.assertNotIn(CHAT, err)
+        rc, _out, err = self._cli("--grant-limits", "--as", "owner", "--per-hour", "10", "--per-day", "4")
+        self.assertEqual(rc, 1)
+        self.assertIn("grant limits refused", err)
+        self.assertNotIn(CHAT, err)
+
+    def test_limits_command_updates_in_place(self):
+        rc, out, err = self._cli("--grant-limits", "--as", "owner", "--per-hour", "6", "--per-day", "40")
+        self.assertEqual(rc, 0, err)
+        self.assertIn("per_hour=6", out)
+        self.assertIn("per_day=40", out)
+        loaded = grants.load(self.state, self.rec["grant_id"])
+        self.assertEqual(grants.effective(loaded, "per_hour"), 6)
+        self.assertEqual(grants.effective(loaded, "per_day"), 40)
+        self.assertNotIn(CHAT, out + err)
 
 
 if __name__ == "__main__":

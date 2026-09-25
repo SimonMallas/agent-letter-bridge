@@ -175,6 +175,11 @@ class HappyPath(Base):
 
 
 class Budget(Base):
+    def setUp(self):
+        super().setUp()
+        self.grant = grants.set_limits(
+            self.state, self.grant["grant_id"], per_hour=2, per_day=3)
+
     def test_third_message_in_an_hour_is_refused(self):
         sender = FakeSender()
         t0 = 1_700_000_000
@@ -183,12 +188,28 @@ class Budget(Base):
                 sender, self.state, self.outbox, self.allow,
                 label=LABEL, intent_id=f"n{i}", text=TEXT, reason=REASON,
                 seat=SEAT, now=t0)
-        with self.assertRaises(budget.CapacityRefused):
+        with self.assertRaises(budget.CapacityRefused) as caught:
             initiate.send_initiated(
                 sender, self.state, self.outbox, self.allow,
                 label=LABEL, intent_id="n2", text=TEXT, reason=REASON,
                 seat=SEAT, now=t0)
+        self.assertIn("hourly limit 2 reached (2 sent this hour)", str(caught.exception))
+        self.assertIn("Europe/London", str(caught.exception))
         self.assertEqual(len(sender.calls), 2)
+
+    def test_next_hour_clears_the_hourly_limit(self):
+        sender = FakeSender()
+        t0 = 1_700_000_000
+        for i in range(2):
+            initiate.send_initiated(
+                sender, self.state, self.outbox, self.allow,
+                label=LABEL, intent_id=f"h{i}", text=TEXT, reason=REASON,
+                seat=SEAT, now=t0)
+        initiate.send_initiated(
+            sender, self.state, self.outbox, self.allow,
+            label=LABEL, intent_id="h2", text=TEXT, reason=REASON,
+            seat=SEAT, now=t0 + 3600)
+        self.assertEqual(len(sender.calls), 3)
 
     def test_day_cap_is_three_across_hours(self):
         sender = FakeSender()
@@ -205,12 +226,49 @@ class Budget(Base):
             sender, self.state, self.outbox, self.allow,
             label=LABEL, intent_id="d2", text=TEXT, reason=REASON,
             seat=SEAT, now=t0 + 3600)
-        with self.assertRaises(budget.CapacityRefused):
+        with self.assertRaises(budget.CapacityRefused) as caught:
             initiate.send_initiated(
                 sender, self.state, self.outbox, self.allow,
                 label=LABEL, intent_id="d3", text=TEXT, reason=REASON,
                 seat=SEAT, now=t0 + 3600)
+        self.assertIn("daily limit 3 reached (3 sent today)", str(caught.exception))
+        self.assertIn("Europe/London", str(caught.exception))
         self.assertEqual(len(sender.calls), 3)
+
+    def test_next_day_clears_the_daily_limit(self):
+        sender = FakeSender()
+        t0 = 1_700_000_000
+        for i, at in enumerate((t0, t0, t0 + 3600)):
+            initiate.send_initiated(
+                sender, self.state, self.outbox, self.allow,
+                label=LABEL, intent_id=f"day{i}", text=TEXT, reason=REASON,
+                seat=SEAT, now=at)
+        initiate.send_initiated(
+            sender, self.state, self.outbox, self.allow,
+            label=LABEL, intent_id="day3", text=TEXT, reason=REASON,
+            seat=SEAT, now=t0 + 86400)
+        self.assertEqual(len(sender.calls), 4)
+
+    def test_queued_limit_is_named(self):
+        for i in range(5):
+            reservation.create(self.state, {
+                "outbound_id": ids.outbound_id(
+                    self.grant["grant_id"], SEAT, f"q{i}"),
+                "binding_key": self.grant["binding_key"],
+                "grant_id": self.grant["grant_id"],
+                "intent_id": f"q{i}",
+                "seat": SEAT,
+                "payload_digest": "0" * 64,
+                "day_key": "1999-01-01",
+                "hour_key": "1999-01-01T00",
+                "status": "held",
+            })
+        with self.assertRaises(budget.CapacityRefused) as caught:
+            initiate.send_initiated(
+                FakeSender(), self.state, self.outbox, self.allow,
+                label=LABEL, intent_id="q-new", text=TEXT, reason=REASON,
+                seat=SEAT, now=1_700_000_000)
+        self.assertIn("queued limit 5 reached (5 waiting)", str(caught.exception))
 
 
 class Authority(Base):
