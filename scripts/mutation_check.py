@@ -38,6 +38,7 @@ OUTBOUND = ROOT / "src" / "alb" / "outbound" / "store.py"
 WIZARD = ROOT / "src" / "alb" / "setup" / "wizard.py"
 DISCOVER = ROOT / "src" / "alb" / "setup" / "discover.py"
 GRANT = ROOT / "src" / "alb" / "grant" / "store.py"
+BUDGET = ROOT / "src" / "alb" / "initiate" / "budget.py"
 ATTACH = ROOT / "src" / "alb" / "media" / "attach.py"
 INITIATE_SEND = ROOT / "src" / "alb" / "initiate" / "send.py"
 POLLER = ROOT / "src" / "alb" / "poller" / "loop.py"
@@ -1015,6 +1016,18 @@ EXTRA = {
         WIZARD, "tests.test_setup",
         "    if any(ch.isspace() for ch in token):\n        raise SetupError(\"token file refused\")",
         "    if False:\n        raise SetupError(\"token file refused\")"),
+    "hourly limit comparison is inclusive": (
+        BUDGET, "tests.test_initiate",
+        "    if used_hour >= per_hour:",
+        "    if used_hour > per_hour:"),
+    "daily limit comparison is inclusive": (
+        BUDGET, "tests.test_initiate",
+        "    if used_day >= per_day:",
+        "    if used_day > per_day:"),
+    "queued limit comparison is inclusive": (
+        BUDGET, "tests.test_initiate",
+        "    if active_q >= max_queued:",
+        "    if active_q > max_queued:"),
     "grant overrides are not clamped to POLICY": (
         GRANT, "tests.test_grant",
         "        out[key] = value",

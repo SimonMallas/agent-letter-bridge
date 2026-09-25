@@ -29,8 +29,8 @@ GRANT_ID_BYTES = 16  # 128 bits
 GRANT_ID_HEX = GRANT_ID_BYTES * 2
 _GRANT_ID_RE = re.compile(rf"^[0-9a-f]{{{GRANT_ID_HEX}}}$")
 POLICY = {
-    "per_day": 3,
-    "per_hour": 2,
+    "per_day": 300,
+    "per_hour": 30,
     "timezone": "Europe/London",
     "max_queued": 5,
     "max_body": 4000,
@@ -90,6 +90,31 @@ def _checked_overrides(overrides):
             raise PolicyError("grant invalid")
         out[key] = value
     return out
+
+
+def _limit_int(value):
+    if type(value) is not int or not 1 <= value <= 1000:
+        raise PolicyError("grant limits refused")
+    return value
+
+
+def set_limits(state, grant_id, *, per_hour=None, per_day=None):
+    """Replace this grant's hour/day overrides. Other overrides stay."""
+    if per_hour is None and per_day is None:
+        raise PolicyError("grant limits refused")
+    rec = load(state, grant_id)
+    overrides = dict(rec.get("overrides") or {})
+    if per_hour is not None:
+        overrides["per_hour"] = _limit_int(per_hour)
+    if per_day is not None:
+        overrides["per_day"] = _limit_int(per_day)
+    hour = overrides["per_hour"] if "per_hour" in overrides else effective(rec, "per_hour")
+    day = overrides["per_day"] if "per_day" in overrides else effective(rec, "per_day")
+    if day < hour:
+        raise PolicyError("grant limits refused")
+    rec["overrides"] = _checked_overrides(overrides)
+    _publish(pathlib.Path(state) / "grants", rec["grant_id"], rec, exclusive=False)
+    return rec
 
 
 def effective(grant, key):

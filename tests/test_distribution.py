@@ -2,6 +2,7 @@
 import contextlib
 import io
 import pathlib
+import re
 import sys
 import tarfile
 import tempfile
@@ -34,10 +35,20 @@ class DistributionPrivacy(unittest.TestCase):
                 archive.writestr(name, payload)
         return path
 
+    def project_version(self):
+        text = (pathlib.Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+        match = re.search(r'(?m)^version = "([^"]+)"', text)
+        self.assertIsNotNone(match)
+        return match.group(1)
+
     def test_clean_source_and_wheel_controls_pass(self):
+        version = self.project_version()
         source = self.sdist({"src/alb/__init__.py": b"", "README.md": b"public",
                              "INSTALL.md": b"install", "PKG-INFO": b"Version: 1"})
-        wheel = self.wheel({"alb/__init__.py": b"", "agent_letter_bridge-0.4.1.dist-info/METADATA": b"Version: 0.4.1"})
+        wheel = self.wheel({
+            "alb/__init__.py": b"",
+            f"agent_letter_bridge-{version}.dist-info/METADATA": f"Version: {version}".encode(),
+        })
         self.assertEqual(gate.check_artifact(source), [])
         self.assertEqual(gate.check_artifact(wheel), [])
 

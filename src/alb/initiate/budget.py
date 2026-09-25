@@ -1,5 +1,7 @@
 """A0 §4: derived counts under a per-binding flock. No stored counter."""
 import pathlib
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from alb.grant import store as grants
 from alb.initiate import durable, ids, reservation
@@ -11,6 +13,53 @@ LIVE = {"reserved", "held"}
 
 class CapacityRefused(Exception):
     """No new admission. Nothing durable was created."""
+
+
+def _when(now, tz_name):
+    tz = ZoneInfo(tz_name)
+    if now is None:
+        return datetime.now(tz)
+    if isinstance(now, (int, float)):
+        return datetime.fromtimestamp(now, tz=timezone.utc).astimezone(tz)
+    return now.astimezone(tz)
+
+
+def refusal(kind, limit, used, *, now=None, tz_name=None):
+    """Name the limit. Hour and day say when that window next opens."""
+    tz_name = tz_name or grants.POLICY["timezone"]
+    if kind == "hourly":
+        nxt = _when(now, tz_name).replace(minute=0, second=0, microsecond=0)
+        nxt += timedelta(hours=1)
+        return (f"capacity refused: hourly limit {limit} reached "
+                f"({used} sent this hour); clears at {nxt.strftime('%H:%M')} {tz_name}")
+    if kind == "daily":
+        nxt = _when(now, tz_name).replace(hour=0, minute=0, second=0, microsecond=0)
+        nxt += timedelta(days=1)
+        return (f"capacity refused: daily limit {limit} reached "
+                f"({used} sent today); clears at {nxt.strftime('%H:%M')} {tz_name}")
+    if kind == "queued":
+        return (f"capacity refused: queued limit {limit} reached "
+                f"({used} waiting)")
+    raise CapacityRefused("capacity refused")
+
+
+def _refusals(hits, *, now, tz_name):
+    parts = [refusal(kind, limit, used, now=now, tz_name=tz_name).split(": ", 1)[1]
+             for kind, limit, used in hits]
+    return "capacity refused: " + "; ".join(parts)
+
+
+def _which(used_day, used_hour, active_q, per_day, per_hour, max_queued):
+    """Every exhausted limit. Hour and day are both named when both are full,
+    because the day stays closed after the hour opens."""
+    hits = []
+    if used_hour >= per_hour:
+        hits.append(("hourly", per_hour, used_hour))
+    if used_day >= per_day:
+        hits.append(("daily", per_day, used_day))
+    if active_q >= max_queued:
+        hits.append(("queued", max_queued, active_q))
+    return hits
 
 
 class Quarantined(Exception):
@@ -98,9 +147,9 @@ def admit_new(state, binding_key, *, outbound_id, grant_id, intent_id, seat,
         day_key, hour_key = ids.window_keys(now, tz_name=tz_name)
         used_day, used_hour, active_q = counts(
             state, binding_key, day_key=day_key, hour_key=hour_key)
-        if (used_day >= per_day or used_hour >= per_hour
-                or active_q >= max_queued):
-            raise CapacityRefused("capacity refused")
+        hits = _which(used_day, used_hour, active_q, per_day, per_hour, max_queued)
+        if hits:
+            raise CapacityRefused(_refusals(hits, now=now, tz_name=tz_name))
         rec = {
             "outbound_id": outbound_id,
             "binding_key": binding_key,
@@ -129,8 +178,13 @@ def readmit_existing(state, rec, *, now=None, grant=None):
             exclude=rec["outbound_id"])
         if rec.get("day_key") == day_key and rec.get("hour_key") == hour_key:
             return rec
-        if used_day + 1 > per_day or used_hour + 1 > per_hour:
-            raise CapacityRefused("capacity refused")
+        if used_hour + 1 > per_hour or used_day + 1 > per_day:
+            hits = []
+            if used_hour + 1 > per_hour:
+                hits.append(("hourly", per_hour, used_hour))
+            if used_day + 1 > per_day:
+                hits.append(("daily", per_day, used_day))
+            raise CapacityRefused(_refusals(hits, now=now, tz_name=tz_name))
         rec = dict(rec)
         rec["day_key"] = day_key
         rec["hour_key"] = hour_key

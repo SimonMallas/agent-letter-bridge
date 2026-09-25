@@ -5,6 +5,19 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] — Unreleased
+
+### Changed
+
+Originating through a grant defaults to 30 messages an hour and 300 a day.
+A grant with no limit override inherits those numbers; an override still wins.
+`alb --grant-limits` sets the override. `alb --grant-list` prints the
+effective hour and day limits and still does not print a chat id or token.
+A capacity refusal names the hourly, daily, or queued limit and, for the
+clock limits, when that window next opens in Europe/London. If the hour and
+the day are both full, both are named. The count is what was already sent.
+Replies to an inbound letter are not counted against these limits.
+
 ## [0.4.1] — Unreleased
 
 ### Fixed
