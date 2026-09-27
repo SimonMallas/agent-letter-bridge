@@ -51,6 +51,7 @@ import sys
 import time
 
 from alb.adapters.cmux import transport as cmux_transport
+from alb.adapters.herdr import transport as herdr_transport
 from alb.adapters.tmux import transport as tmux_transport
 from alb.adapters.telegram import api
 from alb.bridge import run, singleton
@@ -461,6 +462,9 @@ def main(argv=None):
     # refused any value that is not a transport we ship.
     if config.get("ALB_NOTIFIER", "cmux") == "tmux":
         transport = tmux_transport.Tmux()
+    elif config.get("ALB_NOTIFIER") == "herdr":
+        transport = herdr_transport.Herdr(
+            socket=config.get("ALB_HERDR_SOCKET", ""))
     else:
         transport = cmux_transport.Cmux()
     surface = config.get("ALB_SURFACE", "")

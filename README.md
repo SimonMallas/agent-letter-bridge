@@ -193,16 +193,16 @@ It refuses to start on a missing, world-readable or incomplete config. That is
 deliberate: a bridge that starts wrong is harder to diagnose at 3am than one
 that will not start at all.
 
-**The ring is what makes the bridge live**, and it needs a multiplexer — cmux
-or tmux, selected with `ALB_NOTIFIER`. Mail without a bell is a dead drop:
+**The ring is what makes the bridge live**, and it needs a multiplexer — cmux,
+tmux or Herdr, selected with `ALB_NOTIFIER`. Mail without a bell is a dead drop:
 delivered, safe, and unread until someone thinks to look. What the design
 guarantees is that the ring may *fail* without costing a letter — never that
 you would want to run without one. If you must (no multiplexer, an agent that
 sweeps on its own schedule), the bridge still delivers and `alb --status` says
 the ring is `disabled` rather than leaving you guessing. Adapters are small files behind a written contract
-([`docs/adapter-contract.md`](docs/adapter-contract.md)); a Herdr adapter is
-planned, and will ship when there is a live workspace to prove the doorbell
-against — untested transports do not ship here.
+([`docs/adapter-contract.md`](docs/adapter-contract.md)). The Herdr adapter
+was proven against a live Herdr 0.9.1 workspace before it shipped — untested
+transports do not ship here.
 
 Reference and failure modes: [`docs/operations.md`](docs/operations.md).
 Waking an agent that already handles other mail: [`docs/agent-setup.md`](docs/agent-setup.md).

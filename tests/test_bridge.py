@@ -73,6 +73,12 @@ class Config(unittest.TestCase):
         self._write("ALB_TOKEN=1:x\nALB_NOTIFIER=tmux\n")
         self.assertEqual(run.load_config(self.path)["ALB_NOTIFIER"], "tmux")
 
+    def test_herdr_can_be_selected_with_a_pinned_socket(self):
+        self._write("ALB_TOKEN=1:x\nALB_NOTIFIER=herdr\nALB_HERDR_SOCKET=/s.sock\n")
+        config = run.load_config(self.path)
+        self.assertEqual(config["ALB_NOTIFIER"], "herdr")
+        self.assertEqual(config["ALB_HERDR_SOCKET"], "/s.sock")
+
     def test_an_unsupported_notifier_is_refused_by_name(self):
         """Naming a transport we do not have must fail loudly. The dogfood
         install set a notifier nothing read, believed it had selected one, and
