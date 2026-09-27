@@ -31,6 +31,7 @@ OUTBOUND = ROOT / "src" / "alb" / "outbound" / "store.py"
 ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
 TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
+HERDR = ROOT / "src" / "alb" / "adapters" / "herdr" / "transport.py"
 BRIDGE = ROOT / "src" / "alb" / "bridge" / "run.py"
 RING_OUTCOME = ROOT / "src" / "alb" / "ring_outcome.py"
 HELPER_PROBE = ROOT / "src" / "alb" / "helper_probe.py"
@@ -541,6 +542,34 @@ EXTRA = {
         "tests.test_tmux_adapter",
         '_run([self._binary, "send-keys", "-t", surface, "-l", line])',
         '_run([self._binary, "send-keys", "-t", surface, line])'),
+    "herdr is a selectable notifier": (
+        BRIDGE, "tests.test_bridge",
+        'NOTIFIERS = ("cmux", "tmux", "herdr")', 'NOTIFIERS = ("cmux", "tmux")'),
+    "the herdr socket key is read": (
+        BRIDGE, "tests.test_herdr_adapter",
+        '"ALB_BUS_BINARY", "ALB_HERDR_SOCKET")', '"ALB_BUS_BINARY")'),
+    "selecting herdr rings through herdr": (
+        CLI, "tests.test_herdr_adapter",
+        '    elif config.get("ALB_NOTIFIER") == "herdr":', '    elif False:'),
+    "the herdr socket pins the server": (
+        HERDR, "tests.test_herdr_adapter",
+        'env = dict(os.environ, HERDR_SOCKET_PATH=self._socket)', 'env = None'),
+    "pinning the herdr socket keeps the environment": (
+        HERDR, "tests.test_herdr_adapter",
+        'env = dict(os.environ, HERDR_SOCKET_PATH=self._socket)',
+        'env = {"HERDR_SOCKET_PATH": self._socket}'),
+    "a herdr refusal names its code": (
+        HERDR, "tests.test_herdr_adapter",
+        'raise HerdrRefused(code) from exc', 'pass'),
+    "no herdr pane means no ring": (
+        HERDR, "tests.test_herdr_adapter",
+        'raise ring.NoTargetSurface("no herdr pane; refusing to guess")', 'pass'),
+    "the herdr payload is one line": (
+        HERDR, "tests.test_herdr_adapter",
+        'if "\\n" in line or "\\r" in line:', 'if "\\n" in line:'),
+    "the herdr ring cannot hang": (
+        HERDR, "tests.test_notifier_bounds",
+        'timeout=RING_TIMEOUT, env=env)', 'env=env)'),
     "the platform destination field takes precedence": (
         SEND, "tests.test_send",
         'DESTINATION_KEYS = ("telegram_chat_id", "chat_id")',
