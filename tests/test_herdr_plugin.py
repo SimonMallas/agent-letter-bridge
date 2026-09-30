@@ -77,6 +77,26 @@ class StatusPopup(unittest.TestCase):
         self.assertNotIn(b"\x07", out)
         self.assertNotIn(b"\xc2\x9b", out)
 
+    def test_a_root_name_with_control_bytes_is_stripped_too(self):
+        """Every string the popup prints is sanitized, not only the child's output."""
+        poisoned = self.tmp / "r\x1b]0;POISON\x07oot"
+        poisoned.mkdir()
+        self.configure(f"ALB_ROOT={poisoned}\nALB_BIN={self.alb}\n")
+        out = self.view()
+        self.assertIn(b"]0;POISONoot", out)
+        self.assertNotIn(b"\x1b", out)
+        self.assertNotIn(b"\x07", out)
+
+    def test_a_bare_8bit_c1_byte_is_stripped_and_real_utf8_kept(self):
+        self.alb.write_text(
+            "#!/bin/sh\n"
+            "printf 'ring   : \\233""31mred \\302\\233x caf\\303\\251 \\342\\202\\254\\n'\n",
+            encoding="utf-8")
+        self.configure(f"ALB_ROOT={self.root}\nALB_BIN={self.alb}\n")
+        out = self.view()
+        self.assertNotIn(b"\x9b", out)
+        self.assertIn("ring   : 31mred x café €".encode(), out)
+
     def test_without_a_root_it_says_how_to_configure_and_runs_nothing(self):
         self.configure(f"ALB_BIN={self.alb}\n")
         out = self.view()
