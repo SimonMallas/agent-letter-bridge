@@ -5,6 +5,17 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] — Unreleased
+
+### Added
+
+`ALB_NOTIFIER=herdr` rings a Herdr agent pane with `herdr agent prompt`.
+Herdr refuses a pane that is not a detected agent and an agent waiting at a
+dialog before typing anything; ring health records its code
+(`agent_blocked`, `agent_not_found`, `server_not_running`). An optional
+`ALB_HERDR_SOCKET` pins the Herdr server. `alb --init` does not discover
+Herdr panes yet: set `ALB_NOTIFIER` and `ALB_SURFACE` by hand.
+
 ## [0.4.2] — Unreleased
 
 ### Changed

@@ -18,6 +18,7 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from alb.adapters.cmux import transport as cmux_transport  # noqa: E402
+from alb.adapters.herdr import transport as herdr_transport  # noqa: E402
 from alb.adapters.tmux import transport as tmux_transport  # noqa: E402
 from alb.bridge import run  # noqa: E402
 
@@ -59,6 +60,10 @@ class EveryRingPathIsBounded(unittest.TestCase):
         self._assert_bounded(self._timeouts_passed(
             lambda: tmux_transport.Tmux().deliver("%1", "a line")))
 
+    def test_the_herdr_ring_cannot_hang(self):
+        self._assert_bounded(self._timeouts_passed(
+            lambda: herdr_transport.Herdr().deliver("w1:p1", "a line")))
+
     def test_the_integrated_ring_cannot_hang(self):
         self._assert_bounded(self._timeouts_passed(
             lambda: run._bus_ring("codex", "info", "some-id", binary="/bin/true")))
@@ -88,6 +93,11 @@ class TheBoundActuallyBites(unittest.TestCase):
         with mock.patch.object(tmux_transport, "RING_TIMEOUT", 0.1):
             with self.assertRaises(subprocess.TimeoutExpired):
                 tmux_transport._run(self._sleeper())
+
+    def test_a_hanging_herdr_call_is_cut_off(self):
+        with mock.patch.object(herdr_transport, "RING_TIMEOUT", 0.1):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                herdr_transport._run(self._sleeper())
 
     def test_a_hanging_integrated_ring_is_cut_off(self):
         import tempfile

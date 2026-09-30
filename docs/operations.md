@@ -50,7 +50,7 @@ the reason.
 
 **4. A surface id for the ring — OPTIONAL.**
 
-Two transports ship. Choose with `ALB_NOTIFIER`; an unsupported value is
+Three transports ship. Choose with `ALB_NOTIFIER`; an unsupported value is
 **refused by name**, never silently defaulted.
 
 **cmux** (`ALB_NOTIFIER=cmux`, the default) — surface id from:
@@ -64,6 +64,24 @@ cmux --id-format uuids tree --all
 ```sh
 tmux list-panes -a -F '#{pane_id} #{session_name}:#{window_index}.#{pane_index}'
 ```
+
+**Herdr** (`ALB_NOTIFIER=herdr`) — agent pane id such as `w1:p1` from:
+
+```sh
+herdr agent list
+```
+
+The ring is one `herdr agent prompt` call: Herdr pastes the line and presses
+return as a single submission. It refuses, before typing anything, a pane that
+is not a detected agent (`agent_not_found`) and an agent waiting at an approval
+or question dialog (`agent_blocked`); `alb --status` shows that code as the
+ring's reason and the letter waits. Proven live on Herdr 0.9.1: the same line
+sent to Claude Code's folder-trust dialog with type-then-return chose
+"No, exit" and closed the agent. Herdr cannot see the agent's input box, so a
+half-typed draft is still appended to, exactly as below. If more than one Herdr
+session runs, pin the server with `ALB_HERDR_SOCKET` (the `socket` column of
+`herdr session list`); unset, `herdr` resolves the server from the bridge's own
+environment.
 
 A typo in the key itself — `ALB_NOTIFER` — is also refused. An unread setting
 that appears to have worked is worse than an error, which is how a real
@@ -192,7 +210,7 @@ The ordering is the content. Do these in sequence.
 5. **Settle the webhook case.** `doctor` prints a read-only `getWebhookInfo`
    command; you run it in your own shell. If a webhook is set, the remedy is
    `deleteWebhook` or a token re-issue — polling cannot coexist with it.
-   **The ring requires a multiplexer** (cmux or tmux) with a uniquely
+   **The ring requires a multiplexer** (cmux, tmux or Herdr) with a uniquely
    identified pane. v0.1 has no notifier that works without one.
 6. **Start it, then run the Day-0 test — inbound only.** A message from a listed
    sender must produce a letter. A message from an unknown sender must produce

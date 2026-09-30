@@ -7,7 +7,7 @@ that must never vary. Both lists are explicit.
 
 Seat identity · lock target name · state and env paths · allowlist contents ·
 token · poll cadence *within validated bounds* · notification transport
-(cmux / tmux / none) · store layout root.
+(cmux / tmux / herdr / none) · store layout root.
 
 ## Must stay FIXED
 

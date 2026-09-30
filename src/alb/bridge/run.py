@@ -27,12 +27,12 @@ REQUIRED = ("ALB_TOKEN",)
 # did not exist, and their deployment diverged from their config in silence. A
 # key that looks like it did something is worse than one that errors.
 KNOWN = ("ALB_TOKEN", "ALB_SURFACE", "ALB_FROM", "ALB_TO", "ALB_NOTIFIER",
-         "ALB_MAIL_ROOT", "ALB_BUS_BINARY")
+         "ALB_MAIL_ROOT", "ALB_BUS_BINARY", "ALB_HERDR_SOCKET")
 
 # Transports that exist. Naming one that does not is refused rather than
 # defaulted, because defaulting is what let a deployment believe it had
 # selected tmux for days while nothing read the setting.
-NOTIFIERS = ("cmux", "tmux")
+NOTIFIERS = ("cmux", "tmux", "herdr")
 
 # Surface values that are an unfinished edit rather than a pane. This build ran
 # for days on ALB_SURFACE=PLACEHOLDER: every ring failed, and because ring
