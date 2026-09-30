@@ -114,6 +114,13 @@ class StatusPopup(unittest.TestCase):
         out = self.view()
         self.assertIn(b"alb was not found", out)
 
+    def test_a_crlf_config_file_still_names_the_root(self):
+        """A config saved with Windows line endings must not add a CR to the path."""
+        self.configure(f"ALB_ROOT={self.root}\r\nALB_BIN={self.alb}\r\n")
+        self.view()
+        self.assertEqual(self.argv_log.read_text().splitlines(),
+                         ["--status", "--root", str(self.root)])
+
     def test_tilde_in_the_root_means_home(self):
         self.configure(f"ALB_ROOT=~/root\nALB_BIN={self.alb}\n")
         self.view()

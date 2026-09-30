@@ -12,6 +12,7 @@ ALB_ROOT='' ALB_BIN=''
 conf="${HERDR_PLUGIN_CONFIG_DIR:-}/alb-plugin.env"
 if [[ -n "${HERDR_PLUGIN_CONFIG_DIR:-}" && -f "$conf" ]]; then
   while IFS='=' read -r key value || [[ -n "$key" ]]; do
+    value="${value%$'\r'}"  # a file saved with CRLF line endings
     case "$key" in
       ALB_ROOT) ALB_ROOT="$value" ;;
       ALB_BIN) ALB_BIN="$value" ;;
