@@ -1,0 +1,19 @@
+id = "agent-letter-bridge"
+name = "Agent Letter Bridge"
+version = "0.4.3"
+min_herdr_version = "0.9.1"
+description = "Should I worry about the phone bridge? Shows `alb --status` (heartbeat, canary, last ring) in a popup. Reads state files only: no token, no network."
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "status"
+title = "Letter Bridge: status"
+command = ["bash", "open.sh"]
+
+[[panes]]
+id = "status"
+title = "Agent Letter Bridge"
+placement = "popup"
+width = "70%"
+height = "40%"
+command = ["bash", "view.sh"]

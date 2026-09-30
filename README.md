@@ -204,6 +204,12 @@ the ring is `disabled` rather than leaving you guessing. Adapters are small file
 was proven against a live Herdr 0.9.1 workspace before it shipped — untested
 transports do not ship here.
 
+On Herdr, a read-only popup shows `alb --status` for one bridge:
+`herdr plugin install SimonMallas/agent-letter-bridge/herdr`, then put
+`ALB_ROOT=~/.alb` (and `ALB_BIN=/path/to/alb` if `alb` is not on Herdr's
+`PATH`) in `alb-plugin.env` under `herdr plugin config-dir agent-letter-bridge`.
+It reads state files only: no token, no network, no letters.
+
 Reference and failure modes: [`docs/operations.md`](docs/operations.md).
 Waking an agent that already handles other mail: [`docs/agent-setup.md`](docs/agent-setup.md).
 

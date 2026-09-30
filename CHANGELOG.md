@@ -5,6 +5,15 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+A Herdr plugin in `herdr/`: one action opens a popup with `alb --status`
+(heartbeat, canary, last ring) for the root named by `ALB_ROOT` in the
+plugin's `alb-plugin.env`. The file is parsed, never sourced; the popup loads
+no token, makes no network call and strips C0 and C1 control characters.
+
 ## [0.4.3] — Unreleased
 
 ### Added
