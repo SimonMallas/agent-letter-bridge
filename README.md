@@ -69,6 +69,10 @@ way home. Since v0.2 the archive runs both ways: an outbound reply is
 written as its own letter *before* the platform is touched, and its delivery
 events are recorded as immutable files beside it.
 
+The case for keeping the record this way — the letter as the memory,
+queryable by envelope — is made in
+[The Case for Vectorless Accountability in Agent Memory](https://github.com/SimonMallas/vectorless-accountability).
+
 Sending works the same way round. Your agent answers a letter it holds, and
 the destination comes from that letter rather than from anything the agent
 chose — so a reply goes where the message came from, checked against the
