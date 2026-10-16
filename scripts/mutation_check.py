@@ -111,6 +111,10 @@ EXTRA = {
         ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_slack_ops",
         "    if count > 1:",
         "    if count > 99:"),
+    "privacy scan catches Slack tokens": (
+        ROOT / "scripts" / "privacy_scan.py", "tests.test_privacy_scan",
+        '    (r"\\bxox" + r"[abprs]-[0-9]+-[0-9A-Za-z-]{20,}", "Slack-token-shaped string"),\n',
+        ""),
     # --- Slack setup ----------------------------------------------------
     "slack setup reads nothing unless asked": (
         ROOT / "src" / "alb" / "setup" / "slack_wizard.py",

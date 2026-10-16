@@ -5,6 +5,25 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+Slack, as a second platform beside Telegram, selected with
+`ALB_PLATFORM=slack`. A Slack direct message, or a channel message that
+@mentions the bot, becomes the same durable letter a Telegram message does,
+and replies, initiated sends, photos, the allowlist, the claim ledger and the
+ambiguous-outcome rule work as they do for Telegram. The bridge connects over
+Slack's Socket Mode with its own standard-library WebSocket client, so the core
+still has no third-party runtime dependency. Messages sent while the bridge
+was off are recovered from Slack history when it reconnects. The receiving
+object holds both Slack tokens and has no send path; sending uses the bot
+token alone. `alb --init --platform slack` prints the app manifest and walks
+through the two tokens and the allowlist pair. `--status`, `--check` and
+`--doctor` warn about allowlist entries written as bare Slack IDs and about a
+second connection on the same Slack app. Telegram configs, state, letters and
+output are unchanged. See [`docs/slack.md`](docs/slack.md).
+
 ## [0.4.4] — Unreleased
 
 ### Added

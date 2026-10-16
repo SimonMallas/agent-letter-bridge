@@ -79,3 +79,26 @@ capability boundary.
 
 **A remote `getUpdates` consumer on another machine cannot be detected before
 first poll.** Revoke and re-issue the token if its history is unknown.
+
+**Slack: both tokens sit in the receiving process.** The app-level token opens
+the Socket Mode connection; the bot token is needed on the same side to read
+history for catch-up and to download images. There is no credential
+separation to claim, as for Telegram. The sending object is given the bot
+token only.
+
+**Slack: the app can read every message in a channel it is added to.**
+Recovering channel mentions sent while the bridge was off means reading
+channel history (`channels:history`, `groups:history`). Only messages that
+mention the bot become letters, and nothing else is stored, but the scope is
+broader than the letters it produces. Setup and [`slack.md`](slack.md) say so.
+
+**Slack: a second bridge on the same app is not detectable.** Slack spreads
+events across every connection on an app without an error, so two bridges
+would each see part of the traffic. The lock covers one machine. Across
+machines the only signal is the connection count Slack reports at connect,
+which `alb --status` shows; one Slack app per bridge is the rule.
+
+**Slack: agent text is escaped, not trusted to be harmless.** `&`, `<` and
+`>` are escaped and formatting and link previews are turned off, so an
+agent's text cannot produce a mass mention, a ping or an unfurl. A photo
+caption is escaped the same way but may still show Slack formatting.

@@ -164,3 +164,19 @@ last captured line is a status bar, not the input line; and the payload joins
 the existing text with no separator, so a clean write and a dirty one are
 identical in form. Do not re-derive this — the evidence is in the commit
 history.
+
+## Slack: the same invariants, mapped
+
+A second platform keeps every invariant here; none is relaxed for it. Where
+Slack's mechanics differ, the rule is restated in Slack's terms:
+
+| Invariant | On Slack |
+| --- | --- |
+| Ack only after the durable write | A Socket Mode envelope is acknowledged from `confirm()`, after its letter exists. Slack redelivers an unacknowledged envelope, so a crash in between causes a redelivery, never a loss. |
+| Delivered-ids ledger | Keyed on workspace, conversation and message timestamp. A thread timestamp is provenance only, never part of the key. |
+| The platform holds what the bridge missed | Slack retries an unacknowledged event three times, the last about five minutes after the first. On every connect the bridge reads conversation history since the last message it recorded and publishes anything new through the same path; a message that arrives both ways lands once. The per-conversation marker advances only in `confirm()`, and not at all for a conversation whose catch-up failed. |
+| Liveness means a completed cycle | A cycle completes when events are fetched, written and acknowledged. When the socket is idle, a frame from Slack or an answered ping is required; silence is a transient failure and a reconnect, never a fresh heartbeat. |
+| Allowlist fail-closed at both ends | An entry is `<conversation>/<member>`; both must match. Checked again at send. |
+| Ambiguous outcome never retried | A Slack server error, a broken connection or an unreadable response after a send left is ambiguous and dead-letters. A 429 is the one provably unsent outcome. |
+| The poller has no send path | Stronger than Telegram: the Slack receiving object has no send method at all. Sending is a separate object holding only the bot token. The token is still not credential-separated: the receiving side holds the bot token too, to read history and download files. |
+| Token hygiene | Both tokens live only in the mode-600 config. Neither appears in argv, a log line, an error, a `repr`, a letter or a test fixture. |

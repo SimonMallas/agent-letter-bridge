@@ -23,7 +23,13 @@ VIOLATIONS = {
     "assistant_trailer": "Co-Authored" + "-By: Claude <noreply@example.com>",
     "session_trailer": "Claude-" + "Session: https://example.com/s",
     "uppercase_uuid": 'sid = "AAAAAAAA-BBBB-CCCC' + "-DDDD-EEEEEEEEEEEE" + '"',
+    "slack_bot_token": 'T = "xox' + 'b-1234567890-1234567890123-' + 'AbCdEfGhIjKlMnOpQrStUvWx"',
+    "slack_app_token": 'T = "xap' + 'p-1-A0123ABCD-1234567890123-' + '0123456789abcdef0123456789abcdef"',
 }
+
+# What the suite's own Slack fixtures look like. Shaped so a scanner can never
+# mistake them for a credential - and must not.
+SLACK_FIXTURES = 'BOT = "xox' + 'b-" + "fixture"\nAPP = "xap' + 'p-1-A0000001-1-" + "fixture"\n'
 
 TRAILER_MSG = "feat: a change\n\n" + "Co-Authored" + "-By: Claude <x@example.com>\n"
 
@@ -47,6 +53,12 @@ class PrivacyScanTests(unittest.TestCase):
                     self.assertEqual(
                         result.returncode, 1, f"{name} was not caught:\n{result.stdout}"
                     )
+
+    def test_slack_test_fixtures_are_not_mistaken_for_tokens(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (pathlib.Path(tmp) / "fixtures.py").write_text(SLACK_FIXTURES,
+                                                           encoding="utf-8")
+            self.assertEqual(run_scan(tmp).returncode, 0)
 
     def test_commit_message_trailer_is_caught(self):
         """Trailers must be blocked in the message, not only in the tree."""

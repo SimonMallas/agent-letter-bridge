@@ -403,6 +403,29 @@ package itself is send-free and proved so by test.
 This is **code discipline, not process isolation** — the same honest limit
 already stated for the token. Anyone modifying the running bridge can send.
 
+## Slack bridges
+
+Everything above applies to a Slack bridge. What differs is in
+[`slack.md`](slack.md); the operational points are these:
+
+- **One Slack app per bridge.** Two bridges on one app silently split the
+  traffic. `alb --status` shows a warning when Slack reported more than one
+  connection for the app at the last connect; a bridge that has just been
+  restarted can leave its old connection counted for a short while.
+- **An allowlist entry is a pair**, `<conversation>/<member>`. `--status` and
+  `--check` name any entry written as a bare ID, which matches nothing.
+- **Stopped is not lost, within limits.** On connect the bridge reads history
+  since the last message it recorded in each allowlisted conversation, for
+  as long as the workspace keeps history (90 days on the free plan). Threads
+  it has never seen are covered only by Slack's own retries, about six
+  minutes.
+- **Moving machines:** carry `state/slack-markers.json` with the other state
+  files. Without it the bridge re-reads the last 24 hours, and the ledger
+  keeps that from producing duplicate letters.
+- **Revoking a token:** regenerate the app-level token under Basic
+  Information, or reinstall the app for a new bot token, then edit
+  `bridge.env` and restart.
+
 ## Canary
 
 A local timer **you own** (cron, launchd, or a systemd user unit) runs:

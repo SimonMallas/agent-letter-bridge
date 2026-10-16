@@ -159,6 +159,10 @@ pipx install agent-letter-bridge                # or: uv tool install agent-lett
 alb --init --root ~/.alb                        # creates the files, asks for the rest
 ```
 
+For Slack instead of Telegram, run `alb --init --platform slack --root
+~/.alb-slack`; it prints the app manifest and asks for the two tokens. What
+differs from Telegram is in [`docs/slack.md`](docs/slack.md).
+
 For pip, first create and activate a dedicated virtual environment, then run
 `python -m pip install agent-letter-bridge`. For development from a checkout,
 use `pipx install .` instead. Installation does not configure or start a relay.
@@ -288,7 +292,8 @@ or reload a running bridge.
   The bridge runs regardless, and `alb --status` reports the ring as
   `disabled` rather than leaving you guessing.
 - **A CLI agent** sitting in that pane.
-- **A bot** on your chat platform.
+- **A bot** on your chat platform: Telegram, or a Slack app in your own
+  workspace ([`docs/slack.md`](docs/slack.md)).
 
 **You do not need Agent Letterbox.** They are separate products that share a
 metaphor and nothing else — no shared code, no shared files, no shared config.
