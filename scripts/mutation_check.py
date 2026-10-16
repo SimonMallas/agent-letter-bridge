@@ -30,6 +30,7 @@ CLI = ROOT / "src" / "alb" / "cli.py"
 OUTBOUND = ROOT / "src" / "alb" / "outbound" / "store.py"
 ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
 TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
+SLACK = ROOT / "src" / "alb" / "adapters" / "slack" / "api.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
 HERDR = ROOT / "src" / "alb" / "adapters" / "herdr" / "transport.py"
 BRIDGE = ROOT / "src" / "alb" / "bridge" / "run.py"
@@ -1073,6 +1074,17 @@ EXTRA = {
         "            raise SetupError(\"token file refused\")",
         "        if False:\n"
         "            raise SetupError(\"token file refused\")"),
+    "slack acks only in confirm": (
+        SLACK, "tests.test_slack_inbound",
+        "        items = list(self._queue)\n"
+        "        self._queue.clear()\n"
+        "        return items",
+        "        items = list(self._queue)\n"
+        "        self._queue.clear()\n"
+        "        for _envelopes in self._pending.values():\n"
+        "            for _envelope in _envelopes:\n"
+        "                self._ws.send_text(json.dumps({\"envelope_id\": _envelope}))\n"
+        "        return items"),
 }
 
 MUTATIONS = {
