@@ -71,19 +71,19 @@ class WebSocket:
         self._send(0x9, payload)
 
     def recv(self):
-        """Return the next data frame. Server pings are answered on the way."""
-        answered_ping = False
+        """Return the next frame: ("text", str), ("ping", bytes), ("pong", b"")
+        or ("close", bytes).
+
+        A server ping is answered here and then RETURNED, never swallowed. The
+        caller owns the deadline: Slack pings about every ten seconds, so a
+        recv that answered pings and kept reading would never reach a timeout
+        longer than that, and a fetch would never get control back.
+        """
         while True:
-            try:
-                opcode, data, fin = self._read_frame()
-            except socket.timeout:
-                if answered_ping:
-                    return "pong", b""
-                raise
+            opcode, data, fin = self._read_frame()
             if opcode == 0x9:
                 self._send(0xA, data)
-                answered_ping = True
-                continue
+                return "ping", data
             if opcode == 0xA:
                 return "pong", b""
             if opcode == 0x8:

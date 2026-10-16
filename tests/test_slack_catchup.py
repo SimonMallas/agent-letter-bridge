@@ -139,13 +139,25 @@ class CatchUp(unittest.TestCase):
 
     def test_first_run_reads_the_last_24_hours(self):
         bridge, _sock = self.bridge([hello(), ("pong", b"")])
-        expected = self.clock() - 86400
+        expected = f"{self.clock() - 86400:.6f}"
         self.assertEqual(bridge.fetch(), [])
         self.assertEqual(len(self.history_calls), 1)
         call = self.history_calls[0]
         self.assertEqual(call["channel"], DM)
         self.assertEqual(call["oldest"], expected)
         self.assertIs(call["inclusive"], False)
+
+    def test_first_run_oldest_is_written_as_a_slack_timestamp(self):
+        # A float from the real clock has seven decimals. Slack answers such
+        # an `oldest` with ok:true and NO messages - found live, where the
+        # first run silently missed every message waiting for it.
+        self.clock.now = 1700000000.6767669
+        bridge, _sock = self.bridge([hello(), ("pong", b"")])
+        bridge.fetch()
+        oldest = self.history_calls[0]["oldest"]
+        self.assertIsInstance(oldest, str)
+        self.assertRegex(oldest, r"^[0-9]+\.[0-9]{6}$")
+        self.assertEqual(oldest, "1699913600.676767")
 
     def test_messages_sent_while_off_are_queued_before_live_events(self):
         self.history[DM] = [{"ok": True, "messages": [

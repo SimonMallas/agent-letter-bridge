@@ -136,11 +136,22 @@ class WebSocketClient(unittest.TestCase):
         payload = b"ping-body"
         sock = ScriptSocket(server_frame(0x9, payload), [3, 1, 8])
         client = websocket.WebSocket(sock)
-        self.assertEqual(client.recv(), ("pong", b""))
+        # Returned, not swallowed: the caller owns the deadline. Slack pings
+        # every ten seconds, so a recv that answered pings and kept waiting
+        # never reached a timeout shorter than the fetch window - the live
+        # bridge sat in one recv for as long as Slack kept pinging.
+        self.assertEqual(client.recv(), ("ping", payload))
         sent = bytes(sock.sent)
         self.assertEqual(sent[0], 0x8A)
         self.assertTrue(sent[1] & 0x80)
         self.assertEqual(unmask(sent), payload)
+
+    def test_each_server_ping_returns_control_to_the_caller(self):
+        stream = b"".join(server_frame(0x9, b"p%d" % n) for n in range(3))
+        sock = ScriptSocket(stream, [len(stream)])
+        client = websocket.WebSocket(sock)
+        for n in range(3):
+            self.assertEqual(client.recv(), ("ping", b"p%d" % n))
 
     def test_client_frames_are_masked(self):
         left, right = socket.socketpair()

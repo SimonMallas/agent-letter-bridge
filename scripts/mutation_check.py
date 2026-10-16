@@ -117,6 +117,17 @@ EXTRA = {
         ROOT / "scripts" / "privacy_scan.py", "tests.test_privacy_scan",
         '    (r"\\bxox" + r"[abprs]-[0-9]+-[0-9A-Za-z-]{20,}", "Slack-token-shaped string"),\n',
         ""),
+    # --- Found by the live round trip ------------------------------------
+    "a server ping returns control to the caller": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "websocket.py",
+        "tests.test_slack_websocket",
+        '                self._send(0xA, data)\n                return "ping", data',
+        "                self._send(0xA, data)\n                continue"),
+    "first-run oldest is a six-decimal Slack timestamp": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "api.py",
+        "tests.test_slack_catchup",
+        '        return f"{self._clock() - self.FIRST_RUN_WINDOW:.6f}"',
+        "        return self._clock() - self.FIRST_RUN_WINDOW"),
     # --- Slack setup ----------------------------------------------------
     "slack setup reads nothing unless asked": (
         ROOT / "src" / "alb" / "setup" / "slack_wizard.py",

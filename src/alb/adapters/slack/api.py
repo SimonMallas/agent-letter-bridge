@@ -241,7 +241,7 @@ class Slack:
             except socket.timeout:
                 return
             self._saw_frame = True
-            if kind == "pong":
+            if kind in ("pong", "ping"):
                 continue
             if kind == "close" or self._take_text(kind, data) == "disconnect":
                 self._close_socket()
@@ -261,7 +261,8 @@ class Slack:
                 kind, data = self._ws.recv()
             except socket.timeout:
                 continue
-            if kind == "pong":
+            if kind in ("pong", "ping"):
+                # Either way the connection is alive in both directions.
                 return
             if kind == "close" or self._take_text(kind, data) == "disconnect":
                 self._close_socket()
@@ -419,7 +420,9 @@ class Slack:
         marker = (self._markers.get("conversations") or {}).get(conv)
         if marker:
             return marker
-        return self._clock() - self.FIRST_RUN_WINDOW
+        # Six decimals, as Slack writes a ts. A float's own repr can carry
+        # seven, and Slack answers that with ok:true and no messages.
+        return f"{self._clock() - self.FIRST_RUN_WINDOW:.6f}"
 
     def _all_pages(self, method, conv, oldest, extra=None):
         cursor = ""
