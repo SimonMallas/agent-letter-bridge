@@ -27,6 +27,9 @@ class Slack:
     HELLO_TIMEOUT = 30
     QUIET = 0.2
     PONG_TIMEOUT = 10
+    FIRST_RUN_WINDOW = 86400
+    MAX_PAGES = 10
+    MAX_THREADS = 200
 
     def __init__(self, bot_token, app_token=None, *, state=None,
                  allowlist_path=None, poll_timeout=25, call=web.call,
@@ -44,9 +47,13 @@ class Slack:
         self._bot_user = None
         self._queue = []
         self._seen = set()
-        self._pending = {}
+        self._envelopes = {}
         self._staged = {}
         self._dropped = []
+        self._marks = {}
+        self._dropped_marks = []
+        self._pending = set()
+        self._markers = None
         self._saw_frame = False
 
     def __repr__(self):
@@ -55,6 +62,7 @@ class Slack:
     def fetch(self, offset=None):
         self._seen.clear()
         try:
+            self._retry_pending()
             self._ensure_connection()
             self._read_live()
             if not self._queue and not self._saw_frame:
@@ -75,12 +83,17 @@ class Slack:
             raise TransientFailure(f"network: {exc}") from None
 
     def ack(self, update_id):
-        found = self._pending.pop(update_id, None)
+        # Catch-up has no envelope. Staging the id anyway is what lets confirm
+        # move the marker after the poller has accepted the item.
+        found = self._envelopes.pop(update_id, None)
+        staged = self._staged.setdefault(update_id, [])
         if found:
-            self._staged.setdefault(update_id, []).extend(found)
+            staged.extend(found)
 
     def confirm(self):
+        acked = list(self._staged)
         self._send_envelope_acks()
+        self._advance_markers(acked)
         self._persist_markers()
 
     def close(self):
@@ -101,8 +114,7 @@ class Slack:
             raise TransientFailure("network: slack missing socket url")
         self._ws = self._connect(url)
         self._await_hello()
-        for item in self._catch_up():
-            self._remember(item)
+        self._catch_up()
 
     def _ensure_identity(self):
         if self._team is not None:
@@ -206,29 +218,252 @@ class Slack:
             event = payload.get("event") if isinstance(payload, dict) else None
             self._remember(events.normalise(
                 event, team=self._team, bot_user=self._bot_user,
-            ), envelope)
+            ), envelope, raw=event if isinstance(event, dict) else None)
             return "event"
         if envelope:
             self._dropped.append(envelope)
         return "other"
 
-    def _remember(self, item, envelope=""):
+    def _remember(self, item, envelope="", raw=None, conv=""):
+        mark = _mark(item, raw, conv)
         if item is None:
             if envelope:
                 self._dropped.append(envelope)
+            if mark is not None:
+                self._dropped_marks.append(mark)
             return
         update_id = item["update_id"]
+        if mark is not None:
+            self._marks[update_id] = mark
         if envelope:
-            self._pending.setdefault(update_id, []).append(envelope)
+            self._envelopes.setdefault(update_id, []).append(envelope)
         if update_id not in self._seen:
             self._seen.add(update_id)
             self._queue.append(item)
 
+    def _retry_pending(self):
+        """A conversation that failed last time is read again on the next fetch."""
+        if self._team is None:
+            return
+        for conv in list(self._pending):
+            self._ingest_history(conv)
+
     def _catch_up(self):
-        return []
+        self._load_markers()
+        for conv in self._watched_conversations():
+            self._ingest_history(conv)
+        threads = (self._markers or {}).get("threads") or {}
+        for conv, mapping in list(threads.items()):
+            if not isinstance(mapping, dict) or conv in self._pending:
+                continue
+            for thread_ts, marker in list(mapping.items()):
+                self._ingest_replies(conv, thread_ts, marker)
+
+    def _watched_conversations(self):
+        found = []
+        for entry in self._allowlist_entries():
+            conv = entry.split("/", 1)[0]
+            if conv and conv not in found:
+                found.append(conv)
+        for conv in ((self._markers or {}).get("threads") or {}):
+            if conv not in found:
+                found.append(conv)
+        return found
+
+    def _allowlist_entries(self):
+        if not self._allowlist_path:
+            return []
+        try:
+            data = json.loads(pathlib.Path(self._allowlist_path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return []
+        chats = data.get("chats") if isinstance(data, dict) else None
+        if not isinstance(chats, list):
+            return []
+        return [entry for entry in chats if isinstance(entry, str) and "/" in entry]
+
+    def _ingest_history(self, conv):
+        got = self._all_pages("conversations.history", conv, self._oldest_conversation(conv))
+        if got is None or got == "skip":
+            return
+        self._pending.discard(conv)
+        self._queue_history(conv, got)
+
+    def _ingest_replies(self, conv, thread_ts, marker):
+        got = self._all_pages(
+            "conversations.replies", conv, marker, {"ts": thread_ts},
+        )
+        if got is None or got == "skip":
+            return
+        self._pending.discard(conv)
+        self._queue_history(conv, got)
+
+    def _queue_history(self, conv, messages):
+        rows = []
+        for message in messages:
+            item = self._normalise_history(conv, message)
+            ts = message.get("ts") if isinstance(message.get("ts"), str) else ""
+            rows.append((ts, item, message))
+        rows.sort(key=lambda row: _ts_value(row[0]))
+        for _ts, item, message in rows:
+            if item is None:
+                self._remember(None, raw=message, conv=conv)
+            else:
+                self._remember(item)
+
+    def _normalise_history(self, conv, message):
+        event = dict(message)
+        event.setdefault("type", "message")
+        if not isinstance(event.get("channel"), str) or not event.get("channel"):
+            event["channel"] = conv
+        channel_type = "im" if str(conv).startswith("D") else "channel"
+        return events.normalise(
+            event, team=self._team, bot_user=self._bot_user,
+            channel_type=channel_type,
+        )
+
+    def _oldest_conversation(self, conv):
+        self._load_markers()
+        marker = (self._markers.get("conversations") or {}).get(conv)
+        if marker:
+            return marker
+        return self._clock() - self.FIRST_RUN_WINDOW
+
+    def _all_pages(self, method, conv, oldest, extra=None):
+        cursor = ""
+        pages = 0
+        found = []
+        while pages < self.MAX_PAGES:
+            params = {"channel": conv, "oldest": oldest, "inclusive": False}
+            if extra:
+                params.update(extra)
+            if cursor:
+                params["cursor"] = cursor
+            body = self._history_call(method, params, conv)
+            if body is None:
+                return None
+            if body == "skip":
+                return "skip"
+            messages = body.get("messages")
+            if isinstance(messages, list):
+                found.extend(message for message in messages if isinstance(message, dict))
+            pages += 1
+            meta = body.get("response_metadata")
+            nxt = meta.get("next_cursor") if isinstance(meta, dict) else ""
+            if not isinstance(nxt, str) or not nxt:
+                break
+            cursor = nxt
+        return found
+
+    def _history_call(self, method, params, conv):
+        try:
+            body = self._call(method, self._bot, params)
+        except web.HttpError as exc:
+            if exc.status == 429 or exc.status >= 500:
+                self._pending.add(conv)
+            if exc.status == 429:
+                raise TransientFailure(
+                    f"slack deferred: HTTP {exc.status}", exc.retry_after,
+                ) from None
+            if exc.status >= 500:
+                return None
+            raise FetchFailed(f"slack refused: HTTP {exc.status}") from None
+        except OSError:
+            self._pending.add(conv)
+            return None
+        if not isinstance(body, dict):
+            self._pending.add(conv)
+            return None
+        if body.get("ok") is False:
+            error = str(body.get("error") or "unknown")
+            if error in ("not_in_channel", "channel_not_found"):
+                return "skip"
+            if error in _REFUSED:
+                raise FetchFailed(f"slack refused: {error}")
+            self._pending.add(conv)
+            raise TransientFailure(f"network: slack {error}")
+        return body
+
+    def _load_markers(self):
+        if self._markers is not None:
+            return
+        self._markers = {"conversations": {}, "threads": {}}
+        if self._state is None:
+            return
+        path = self._state / "slack-markers.json"
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        if not isinstance(data, dict):
+            return
+        conversations = data.get("conversations")
+        threads = data.get("threads")
+        if isinstance(conversations, dict):
+            self._markers["conversations"] = {
+                str(key): str(value) for key, value in conversations.items()
+            }
+        if isinstance(threads, dict):
+            cleaned = {}
+            for conv, mapping in threads.items():
+                if isinstance(mapping, dict):
+                    cleaned[str(conv)] = {
+                        str(key): str(value) for key, value in mapping.items()
+                    }
+            self._markers["threads"] = cleaned
+
+    def _advance_markers(self, acked):
+        self._load_markers()
+        for mark in self._marks_to_apply(acked):
+            conv = mark["conv"]
+            if conv in self._pending: continue
+            self._bump(mark)
+        self._cap_threads()
+
+    def _marks_to_apply(self, acked):
+        found = []
+        for update_id in acked:
+            mark = self._marks.get(update_id)
+            if mark is not None:
+                found.append(mark)
+        found.extend(self._dropped_marks)
+        return found
+
+    def _bump(self, mark):
+        conv = mark["conv"]
+        ts = mark["ts"]
+        conversations = self._markers.setdefault("conversations", {})
+        conversations[conv] = _max_ts(conversations.get(conv), ts)
+        thread = mark.get("thread") or ""
+        if not thread:
+            return
+        threads = self._markers.setdefault("threads", {}).setdefault(conv, {})
+        threads[thread] = _max_ts(threads.get(thread), ts)
+
+    def _cap_threads(self):
+        threads = self._markers.get("threads") or {}
+        flat = []
+        for conv, mapping in threads.items():
+            if not isinstance(mapping, dict):
+                continue
+            for thread, ts in mapping.items():
+                flat.append((_ts_value(ts), conv, thread, ts))
+        if len(flat) <= self.MAX_THREADS:
+            return
+        flat.sort(reverse=True)
+        kept = {}
+        for _value, conv, thread, ts in flat[:self.MAX_THREADS]:
+            kept.setdefault(conv, {})[thread] = ts
+        self._markers["threads"] = kept
 
     def _persist_markers(self):
-        return None
+        if self._state is None:
+            return
+        self._load_markers()
+        _write_private(
+            self._state / "slack-markers.json",
+            json.dumps(self._markers, sort_keys=True),
+        )
 
     def _send_envelope_acks(self):
         if self._ws is None:
@@ -273,6 +508,43 @@ def _json(data):
     except (TypeError, json.JSONDecodeError):
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _ts_value(ts):
+    try:
+        return float(ts)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _max_ts(current, candidate):
+    if not candidate:
+        return current
+    if current is None or _ts_value(candidate) >= _ts_value(current):
+        return str(candidate)
+    return current
+
+
+def _mark(item, raw, conv=""):
+    raw = raw if isinstance(raw, dict) else {}
+    thread = ""
+    if item is not None:
+        provenance = item.get("provenance")
+        provenance = provenance if isinstance(provenance, dict) else {}
+        conv = provenance.get("slack_channel") or conv
+        ts = item.get("message_id") or ""
+        thread = provenance.get("slack_thread_ts") or ""
+        if not thread and not str(conv).startswith("D"):
+            thread = item.get("reply_thread") or ""
+    else:
+        if isinstance(raw.get("channel"), str) and raw.get("channel"):
+            conv = raw["channel"]
+        ts = raw.get("ts") if isinstance(raw.get("ts"), str) else ""
+        if isinstance(raw.get("thread_ts"), str):
+            thread = raw["thread_ts"]
+    if not conv or not ts:
+        return None
+    return {"conv": str(conv), "ts": str(ts), "thread": str(thread or "")}
 
 
 def _write_private(path, text):

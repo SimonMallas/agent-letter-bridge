@@ -1081,10 +1081,19 @@ EXTRA = {
         "        return items",
         "        items = list(self._queue)\n"
         "        self._queue.clear()\n"
-        "        for _envelopes in self._pending.values():\n"
+        "        for _envelopes in self._envelopes.values():\n"
         "            for _envelope in _envelopes:\n"
         "                self._ws.send_text(json.dumps({\"envelope_id\": _envelope}))\n"
         "        return items"),
+    "slack marker persisted only in confirm": (
+        SLACK, "tests.test_slack_catchup",
+        "            self._read_live()\n",
+        "            self._read_live()\n"
+        "            self._persist_markers()\n"),
+    "failed catch-up freezes its marker": (
+        SLACK, "tests.test_slack_catchup",
+        "            if conv in self._pending: continue\n",
+        ""),
 }
 
 MUTATIONS = {
