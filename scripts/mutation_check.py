@@ -132,6 +132,22 @@ EXTRA = {
         ROOT / "src" / "alb" / "canary" / "probe.py", "tests.test_slack_outbound",
         '    if platform != "telegram":\n        from alb.outbound import store as outbound',
         '    if False:\n        from alb.outbound import store as outbound'),
+    # --- Found by the adversarial review ---------------------------------
+    "an unconfirmed batch is carried into the next fetch": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "api.py",
+        "tests.test_slack_recovery",
+        "        if not self._inflight:\n            return\n        carried, self._inflight",
+        "        if True:\n            return\n        carried, self._inflight"),
+    "a page cap is partial, never done": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "api.py",
+        "tests.test_slack_recovery",
+        '        self._continuations[key] = (oldest, cursor)\n        return "partial", found',
+        '        self._continuations[key] = (oldest, cursor)\n        return "done", found'),
+    "marks wait until a conversation is caught up": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "api.py",
+        "tests.test_slack_recovery",
+        '            if mark["conv"] in self._pending:\n                held.append(mark)',
+        "            if False:\n                held.append(mark)"),
     # --- Slack setup ----------------------------------------------------
     "slack setup reads nothing unless asked": (
         ROOT / "src" / "alb" / "setup" / "slack_wizard.py",
@@ -1189,9 +1205,11 @@ EXTRA = {
         SLACK, "tests.test_slack_inbound",
         "        items = list(self._queue)\n"
         "        self._queue.clear()\n"
+        "        self._inflight = list(items)\n"
         "        return items",
         "        items = list(self._queue)\n"
         "        self._queue.clear()\n"
+        "        self._inflight = list(items)\n"
         "        for _envelopes in self._envelopes.values():\n"
         "            for _envelope in _envelopes:\n"
         "                self._ws.send_text(json.dumps({\"envelope_id\": _envelope}))\n"
@@ -1203,8 +1221,8 @@ EXTRA = {
         "            self._persist_markers()\n"),
     "failed catch-up freezes its marker": (
         SLACK, "tests.test_slack_catchup",
-        "            if conv in self._pending: continue\n",
-        ""),
+        '            if mark["conv"] in self._pending:\n                held.append(mark)',
+        "            if False:\n                held.append(mark)"),
     "unread conversations stay pending": (
         SLACK, "tests.test_slack_catchup",
         "        for conv in watched:\n"

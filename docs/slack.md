@@ -122,9 +122,13 @@ Limits, stated plainly:
   Slack's free plan**.
 - The very first run reads back **24 hours**, matching Telegram's hold, so a
   message sent before you first started the bridge still arrives.
-- Threads are caught up when the bridge has already seen them. A reply in a
-  thread the bridge has never seen, sent while it is off, arrives only if
-  Slack's own retries deliver it — within about six minutes.
+- Threads are caught up when the bridge is tracking them: the 200 most
+  recently active threads it has seen. A reply sent while it is off, in a
+  thread it has never seen or one that has dropped out of those 200, arrives
+  only if Slack's own retries deliver it — within about six minutes.
+- A long backlog is read in steps of up to ten pages a cycle. The marker for
+  that conversation does not move until the whole backlog has been read, so
+  nothing in it is skipped.
 - Edits and deletions do not change a letter. A letter is a record of what
   arrived.
 

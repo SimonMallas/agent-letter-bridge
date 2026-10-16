@@ -57,12 +57,21 @@ class Slack:
         self._markers = None
         self._saw_frame = False
         self._file_urls = {}
+        # Returned by fetch and not yet confirmed. See _requeue_inflight.
+        self._inflight = []
+        # Marks for a conversation still being caught up, held until it is
+        # finished so the marker moves once, to the true high-water mark.
+        self._held = []
+        # (method, conversation, thread) -> (oldest, cursor) for a history
+        # read that stopped at the page cap and continues next cycle.
+        self._continuations = {}
 
     def __repr__(self):
         return "<Slack app>"
 
     def fetch(self, offset=None):
         self._seen.clear()
+        self._requeue_inflight()
         # Catch-up can raise while a live frame is already on the socket.
         # Hold that error, read the socket, and re-raise only when nothing
         # arrived. A queued live event still has to be confirmed, with the
@@ -113,6 +122,8 @@ class Slack:
             self._marks.pop(update_id, None)
         self._dropped_marks.clear()
         self._file_urls.clear()
+        # Every item the last fetch returned was handled: the cycle confirmed.
+        self._inflight = []
 
     def close(self):
         self._close_socket()
@@ -172,7 +183,25 @@ class Slack:
     def _queued(self):
         items = list(self._queue)
         self._queue.clear()
+        self._inflight = list(items)
         return items
+
+    def _requeue_inflight(self):
+        """Items a fetch returned whose cycle never reached confirm go again.
+
+        The poller raised part-way through them - a photo download waiting
+        out a 429, say - so some may have letters and some not. The ledger
+        lands the written ones once; the rest must not be forgotten. Dropping
+        them is how a later idle cycle confirmed a mark past mail that never
+        landed, and the reconnect after excluded it for good.
+        """
+        if not self._inflight:
+            return
+        carried, self._inflight = self._inflight, []
+        for item in carried:
+            if item["update_id"] not in self._seen:
+                self._seen.add(item["update_id"])
+                self._queue.append(item)
 
     def _ensure_connection(self):
         if self._ws is not None:
@@ -345,27 +374,34 @@ class Slack:
     def _read_conversation(self, conv):
         """History and known threads. Pending until both have been read."""
         self._pending.add(conv)
-        history = self._all_pages(
+        status, history = self._all_pages(
             "conversations.history", conv, self._oldest_conversation(conv),
         )
-        if history == "skip":
+        if status == "skip":
             self._pending.discard(conv)
             return
-        if history is None:
+        if status == "failed":
             return
         self._queue_history(conv, history)
+        if status == "partial":
+            # More history than one cycle reads. Publish this much, stay
+            # pending so the marker cannot pass the unread tail, continue next
+            # cycle from the saved cursor.
+            return
         threads = ((self._markers or {}).get("threads") or {}).get(conv) or {}
         if not isinstance(threads, dict):
             threads = {}
         for thread_ts, marker in list(threads.items()):
-            replies = self._all_pages(
+            status, replies = self._all_pages(
                 "conversations.replies", conv, marker, {"ts": thread_ts},
             )
-            if replies == "skip":
+            if status == "skip":
                 continue
-            if replies is None:
+            if status == "failed":
                 return
             self._queue_history(conv, replies)
+            if status == "partial":
+                return
         self._pending.discard(conv)
 
     def _watched_conversations(self):
@@ -425,10 +461,20 @@ class Slack:
         return f"{self._clock() - self.FIRST_RUN_WINDOW:.6f}"
 
     def _all_pages(self, method, conv, oldest, extra=None):
+        """("done" | "partial" | "skip" | "failed", messages).
+
+        At most MAX_PAGES pages a cycle. Stopping there is "partial", never
+        "done": the cursor and the window it belongs to are kept, and the
+        next cycle continues from them. Treating a cap as completion let the
+        marker pass an unread tail that no later read would reach.
+        """
+        key = (method, conv, (extra or {}).get("ts", ""))
+        saved = self._continuations.get(key)
         cursor = ""
-        pages = 0
+        if saved:
+            oldest, cursor = saved
         found = []
-        while pages < self.MAX_PAGES:
+        for _page in range(self.MAX_PAGES):
             params = {"channel": conv, "oldest": oldest, "inclusive": False}
             if extra:
                 params.update(extra)
@@ -436,19 +482,28 @@ class Slack:
                 params["cursor"] = cursor
             body = self._history_call(method, params, conv)
             if body is None:
-                return None
+                return "failed", []
             if body == "skip":
-                return "skip"
+                self._continuations.pop(key, None)
+                return "skip", []
+            if body == "restart":
+                # The cursor is no longer valid. Start this read again from
+                # the frozen marker next cycle; nothing read so far is lost,
+                # because the ledger lands a re-read message once.
+                self._continuations.pop(key, None)
+                self._pending.add(conv)
+                return "failed", []
             messages = body.get("messages")
             if isinstance(messages, list):
                 found.extend(message for message in messages if isinstance(message, dict))
-            pages += 1
             meta = body.get("response_metadata")
             nxt = meta.get("next_cursor") if isinstance(meta, dict) else ""
             if not isinstance(nxt, str) or not nxt:
-                break
+                self._continuations.pop(key, None)
+                return "done", found
             cursor = nxt
-        return found
+        self._continuations[key] = (oldest, cursor)
+        return "partial", found
 
     def _history_call(self, method, params, conv):
         try:
@@ -473,6 +528,8 @@ class Slack:
             error = str(body.get("error") or "unknown")
             if error in ("not_in_channel", "channel_not_found"):
                 return "skip"
+            if error == "invalid_cursor":
+                return "restart"
             if error in _REFUSED:
                 raise FetchFailed(f"slack refused: {error}")
             self._pending.add(conv)
@@ -508,11 +565,18 @@ class Slack:
             self._markers["threads"] = cleaned
 
     def _advance_markers(self, acked):
+        """Move markers for what this cycle handled - except in a conversation
+        still being caught up. Those marks are held, and applied together once
+        the conversation is finished, so its marker moves to the true
+        high-water mark and never across an unread stretch."""
         self._load_markers()
-        for mark in self._marks_to_apply(acked):
-            conv = mark["conv"]
-            if conv in self._pending: continue
+        held = []
+        for mark in self._held + self._marks_to_apply(acked):
+            if mark["conv"] in self._pending:
+                held.append(mark)
+                continue
             self._bump(mark)
+        self._held = held
         self._cap_threads()
 
     def _marks_to_apply(self, acked):
