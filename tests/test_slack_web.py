@@ -92,6 +92,31 @@ class SlackWeb(unittest.TestCase):
         )
         self.assertEqual(got, body)
 
+    def test_get_bytes_does_not_read_past_the_limit(self):
+        class Stream:
+            def __init__(self):
+                self.pos = 0
+
+            def read(self, size):
+                self.pos += size
+                return b"x" * size
+
+            def close(self):
+                pass
+
+        stream = Stream()
+
+        def opener(request, timeout):
+            return 200, {}, stream
+
+        with self.assertRaises(ValueError) as caught:
+            web.get_bytes(
+                "https://files.slack.com/files/F0000001", TOKEN, 4,
+                opener=opener,
+            )
+        self.assertEqual(str(caught.exception), "file too large")
+        self.assertLessEqual(stream.pos, 5)
+
     def test_post_bytes_returns_status_without_a_token(self):
         seen = {}
 

@@ -32,6 +32,7 @@ ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
 TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
 SLACK = ROOT / "src" / "alb" / "adapters" / "slack" / "api.py"
 SOCKET = ROOT / "src" / "alb" / "adapters" / "slack" / "websocket.py"
+SLACK_WEB = ROOT / "src" / "alb" / "adapters" / "slack" / "web.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
 HERDR = ROOT / "src" / "alb" / "adapters" / "herdr" / "transport.py"
 BRIDGE = ROOT / "src" / "alb" / "bridge" / "run.py"
@@ -1102,6 +1103,10 @@ EXTRA = {
         "    if confirm is not None:\n"
         "        confirm()\n"
         "    published = loop.poll_once(\n"),
+    "file download stops at the size limit": (
+        SLACK_WEB, "tests.test_slack_web",
+        "min(64 * 1024, max_bytes + 1 - total)",
+        "min(64 * 1024, max_bytes + 10 ** 9 - total)"),
     "partial frame timeout is not retried": (
         SOCKET, "tests.test_slack_websocket",
         "            chunk = self.sock.recv(count - len(self.buf))\n"
