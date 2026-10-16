@@ -128,6 +128,10 @@ EXTRA = {
         "tests.test_slack_catchup",
         '        return f"{self._clock() - self.FIRST_RUN_WINDOW:.6f}"',
         "        return self._clock() - self.FIRST_RUN_WINDOW"),
+    "canary fixture names the sender's platform": (
+        ROOT / "src" / "alb" / "canary" / "probe.py", "tests.test_slack_outbound",
+        '    if platform != "telegram":\n        from alb.outbound import store as outbound',
+        '    if False:\n        from alb.outbound import store as outbound'),
     # --- Slack setup ----------------------------------------------------
     "slack setup reads nothing unless asked": (
         ROOT / "src" / "alb" / "setup" / "slack_wizard.py",

@@ -348,6 +348,39 @@ class Photos(Base):
         self.assertEqual(sender.call.calls, [])
 
 
+class Canary(Base):
+    def test_canary_sends_through_a_slack_sender(self):
+        # Found live: the canary's fixture named a raw chat id, which only
+        # Telegram letters may, so a Slack canary was refused at the gate.
+        from alb.canary import probe
+        self.allow.write_text(json.dumps({"chats": [PAIR]}), encoding="utf-8")
+        sender = SlackSender()
+        probe.run(sender, self.root)
+        method, _token, params = sender.call.calls[0]
+        self.assertEqual(method, "chat.postMessage")
+        self.assertEqual(params["channel"], "D0000001")
+        self.assertIn("canary", params["text"])
+
+    def test_telegram_canary_fixture_is_unchanged(self):
+        from alb.canary import probe
+        self.allow.write_text(json.dumps({"chats": ["8675309"]}), encoding="utf-8")
+
+        class TelegramLike:
+            def __init__(self):
+                self.calls = []
+
+            def send(self, chat_id, text):
+                self.calls.append(chat_id)
+                return "1"
+
+        sender = TelegramLike()
+        probe.run(sender, self.root)
+        self.assertEqual(sender.calls, ["8675309"])
+        fixture = next((self.state / "canary").glob("*.md"))
+        self.assertEqual(store.resolve(fixture.parent, fixture.stem).meta["chat_id"],
+                         "8675309")
+
+
 class Initiated(Base):
     LABEL = "owner"
 
