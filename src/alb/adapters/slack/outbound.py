@@ -178,3 +178,43 @@ def send_photo(call, post_bytes, bot_token, chat_id, data, caption="",
         params["thread_ts"] = thread
     _post(call, "files.completeUploadExternal", bot_token, params)
     return file_id
+
+
+def _web_call():
+    # Resolved when a send happens, so importing this module needs no network
+    # code - and so a test can stand in for the network at one seam.
+    from alb.adapters.slack import web
+    return web.call
+
+
+def _web_post_bytes():
+    from alb.adapters.slack import web
+    return web.post_bytes
+
+
+class Sender:
+    """Slack's sending half: the bot token, and nothing that can receive.
+
+    The receiving adapter holds both tokens and has no send method at all, so
+    the inbound process has no Slack send path to misuse. This object is what
+    --reply-to, --send and --canary are given.
+    """
+
+    name = "slack"
+
+    def __init__(self, bot_token, *, call=None, post_bytes=None):
+        self._bot = bot_token
+        self._call = call
+        self._post_bytes = post_bytes
+
+    def __repr__(self):
+        # The token must never reach a log line, an error message or a repr.
+        return "<Slack sender>"
+
+    def send(self, chat_id, text, thread=None):
+        return send(self._call or _web_call(), self._bot, chat_id, text, thread)
+
+    def send_photo(self, chat_id, data, caption="", thread=None):
+        return send_photo(self._call or _web_call(),
+                          self._post_bytes or _web_post_bytes(), self._bot,
+                          chat_id, data, caption, thread)

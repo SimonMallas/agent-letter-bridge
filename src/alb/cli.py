@@ -101,6 +101,9 @@ def main(argv=None):
                              "deny-all allowlist, asking for what cannot be derived")
     parser.add_argument("--token-file", metavar="PATH",
                         help="with --init: read a mode-600 token file, then delete it")
+    parser.add_argument("--app-token-file", metavar="PATH",
+                        help="with --init --platform slack: read a mode-600 "
+                             "app-level token file, then delete it")
     parser.add_argument("--once", action="store_true", help="one cycle, then exit")
     parser.add_argument("--canary", action="store_true",
                         help="prove the send path is alive; sends to your own chat")
@@ -152,8 +155,10 @@ def main(argv=None):
                         help="disable the grant bound to --as")
     parser.add_argument("--as", dest="as_label", metavar="LABEL",
                         help="label to bind or disable")
-    parser.add_argument("--platform", default="telegram",
-                        help="grant platform (grant-create)")
+    parser.add_argument("--platform", default=None,
+                        help="telegram or slack: what --init sets up, and the "
+                             "grant platform for --grant-create (default: the "
+                             "bridge's own)")
     parser.add_argument("--chat-id", dest="chat_id",
                         help="exact chat binding (grant-create only)")
     parser.add_argument("--photo", metavar="PATH",
@@ -167,6 +172,13 @@ def main(argv=None):
         return 2
     if args.token_file and not args.init:
         print("alb: --token-file is only valid with --init", file=sys.stderr)
+        return 2
+    if args.app_token_file and not args.init:
+        print("alb: --app-token-file is only valid with --init", file=sys.stderr)
+        return 2
+    if args.platform is not None and args.platform not in run.PLATFORMS:
+        print(f"alb: unsupported --platform {args.platform!r}. Available: "
+              f"{', '.join(run.PLATFORMS)}.", file=sys.stderr)
         return 2
 
     # Setup runs before there is a config to load, which is the whole point:
@@ -385,7 +397,7 @@ def main(argv=None):
     if args.canary:
         from alb.canary import probe
         try:
-            rid = probe.run(api.Telegram(config["ALB_TOKEN"]), root)
+            rid = probe.run(run.make_sender(config), root)
         except probe.NoCanaryTarget as exc:
             print(f"alb: {exc}", file=sys.stderr)
             return 2
@@ -408,7 +420,7 @@ def main(argv=None):
 
     if (args.grant_create or args.grant_list or args.grant_disable
             or args.grant_limits):
-        return _grant_admin(args, state)
+        return _grant_admin(args, state, config)
 
     if args.send:
         return _send_initiated(args, config, root, mail, state)
@@ -419,7 +431,7 @@ def main(argv=None):
             return 2
         try:
             rid = _reply_or_resume(
-                api.Telegram(config["ALB_TOKEN"]), root / "inbox", root / "state",
+                run.make_sender(config), root / "inbox", root / "state",
                 root / "allowlist.json", args.reply_to, args.text or "",
                 # The SAME mailbox the poller writes to, including processed,
                 # because a letter is filed there before anyone replies. In
@@ -456,8 +468,7 @@ def main(argv=None):
         print(f"alb: sent {rid}")
         return 0
 
-    platform = api.Telegram(config["ALB_TOKEN"],
-                            offset_path=root / "state" / "offset.json")
+    platform = run.make_poller(config, root)
     # Selection is honoured, not merely accepted. load_config has already
     # refused any value that is not a transport we ship.
     if config.get("ALB_NOTIFIER", "cmux") == "tmux":
@@ -478,8 +489,14 @@ def main(argv=None):
         return 4
 
     with lock_guard(lock):
-        return _poll_forever(platform, transport, surface, root, args, config,
-                             generation=generation)
+        try:
+            return _poll_forever(platform, transport, surface, root, args,
+                                 config, generation=generation)
+        finally:
+            # A Slack bridge holds a live socket. Telegram has nothing to close.
+            close = getattr(platform, "close", None)
+            if close is not None:
+                close()
 
 
 class Console:
@@ -519,6 +536,8 @@ def _init(args):
             chat_id_reader=discover.read_chat_ids,
             panes=discover.list_all_panes(),
             token_file=args.token_file,
+            platform=args.platform or "telegram",
+            app_token_file=args.app_token_file,
         )
     except wizard.SetupError as exc:
         print(f"alb: {exc}", file=sys.stderr)
@@ -602,7 +621,7 @@ def _recorded_stand_down(root, since, generation):
         return False
 
 
-def _grant_admin(args, state):
+def _grant_admin(args, state, config):
     from alb.grant import store as grants
     from alb.initiate import destinations, ids
 
@@ -643,7 +662,8 @@ def _grant_admin(args, state):
                 print("alb: --grant-create needs --as and --chat-id", file=sys.stderr)
                 return 2
             ids.check_label(args.as_label)
-            rec = grants.create(state, args.platform, args.chat_id)
+            rec = grants.create(state, args.platform or run.platform_of(config),
+                                args.chat_id)
             destinations.bind(state, args.as_label, rec["grant_id"])
             print(f"alb: grant created as {args.as_label} {rec['grant_id']}")
             return 0
@@ -678,11 +698,11 @@ def _send_initiated(args, config, root, mail, state):
     try:
         grant_id = destinations.resolve(state, args.to_label)
         rec = grants.load(state, grant_id)
-        if rec.get("platform") != "telegram":
+        if rec.get("platform") != run.platform_of(config):
             print("alb: platform not supported", file=sys.stderr)
             return 1
         oid = initiate.send_initiated(
-            api.Telegram(config["ALB_TOKEN"]),
+            run.make_sender(config),
             state, mail / "outbox", root / "allowlist.json",
             label=args.to_label, intent_id=args.intent_id,
             text=args.text or "", reason=args.reason, seat=seat,
@@ -854,7 +874,8 @@ def _poll_forever(platform, transport, surface, root, args, config,
         try:
             published = run.run_once(
                 platform, transport, surface, root,
-                sender=config.get("ALB_FROM", "telegram-bridge"),
+                sender=config.get("ALB_FROM",
+                                  f"{run.platform_of(config)}-bridge"),
                 recipient=config.get("ALB_TO", "agent"),
                 mail_root=args.mail_root or config.get("ALB_MAIL_ROOT") or None,
                 bus_binary=config.get("ALB_BUS_BINARY") or None,

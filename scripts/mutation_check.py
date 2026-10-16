@@ -83,6 +83,19 @@ EXTRA = {
         "tests.test_slack_outbound",
         '    return {"thread": thread} if thread else {}',
         "    return {}"),
+    # --- Slack through the binary ----------------------------------------
+    "slack socket is closed when the bridge exits": (
+        ROOT / "src" / "alb" / "cli.py", "tests.test_slack_cli",
+        "            if close is not None:\n                close()",
+        "            if close is not None:\n                pass"),
+    "grant platform defaults to the bridge's own": (
+        ROOT / "src" / "alb" / "cli.py", "tests.test_slack_cli",
+        "            rec = grants.create(state, args.platform or run.platform_of(config),",
+        '            rec = grants.create(state, args.platform or "telegram",'),
+    "slack sender is built from the bot token only": (
+        ROOT / "src" / "alb" / "bridge" / "run.py", "tests.test_slack_cli",
+        '        return slack_out.Sender(config["ALB_TOKEN"])',
+        '        return slack_out.Sender(config["ALB_APP_TOKEN"])'),
     # --- Slack setup ----------------------------------------------------
     "slack setup reads nothing unless asked": (
         ROOT / "src" / "alb" / "setup" / "slack_wizard.py",
