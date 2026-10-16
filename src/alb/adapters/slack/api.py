@@ -99,6 +99,10 @@ class Slack:
         self._send_envelope_acks()
         self._advance_markers(acked)
         self._persist_markers()
+        for update_id in acked:
+            self._marks.pop(update_id, None)
+        self._dropped_marks.clear()
+        self._file_urls.clear()
 
     def close(self):
         self._close_socket()

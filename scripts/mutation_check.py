@@ -1103,6 +1103,13 @@ EXTRA = {
         "    if confirm is not None:\n"
         "        confirm()\n"
         "    published = loop.poll_once(\n"),
+    "slack bookkeeping is dropped after confirm": (
+        SLACK, "tests.test_slack_inbound",
+        "        for update_id in acked:\n"
+        "            self._marks.pop(update_id, None)\n"
+        "        self._dropped_marks.clear()\n"
+        "        self._file_urls.clear()\n",
+        ""),
     "unreadable slack response is transient": (
         SLACK, "tests.test_slack_inbound",
         "        except ValueError:\n"
