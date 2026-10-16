@@ -1326,11 +1326,12 @@ EXTRA = {
         "        if isinstance(self._ws, websocket.WebSocket):\n"
         "            return self._ws.recv(deadline, self._clock)\n",
         ""),
-    "a partial frame is not a silent socket": (
+    "a progressing partial frame is not a silent socket": (
         SLACK, "tests.test_slack_websocket",
-        "                if incomplete is not None and incomplete():\n"
+        "                        and received > received_at_start):\n"
         "                    self._saw_frame = True\n",
-        ""),
+        "                        and received > received_at_start):\n"
+        "                    pass\n"),
 }
 
 MUTATIONS = {
