@@ -1096,6 +1096,20 @@ EXTRA = {
         SLACK, "tests.test_slack_catchup",
         "            if conv in self._pending: continue\n",
         ""),
+    "unread conversations stay pending": (
+        SLACK, "tests.test_slack_catchup",
+        "        for conv in watched:\n"
+        "            self._pending.add(conv)\n"
+        "        for conv in watched:\n"
+        "            self._read_conversation(conv)\n",
+        "        for conv in watched:\n"
+        "            self._read_conversation(conv)\n"),
+    "catch-up rate limit still returns a live event": (
+        SLACK, "tests.test_slack_catchup",
+        "            except TransientFailure as exc:\n"
+        "                deferred = exc\n",
+        "            except TransientFailure as exc:\n"
+        "                raise\n"),
     "slack letter before ack": (
         BRIDGE, "tests.test_slack_poller",
         "    published = loop.poll_once(\n",
