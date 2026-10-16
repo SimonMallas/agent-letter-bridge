@@ -166,8 +166,12 @@ def correspondent_key(state, origin_chat, platform="telegram"):
         return key
 
 
-def origin_chat_for(state, correspondent):
-    """Private reverse: opaque correspondent -> telegram chat. None if unknown/ambiguous."""
+def origin_chat_for(state, correspondent, platform="telegram"):
+    """Private reverse: opaque correspondent -> chat on `platform`.
+
+    None if unknown, ambiguous, or recorded for another platform: a key made
+    for one platform never resolves to a destination on another.
+    """
     if not isinstance(correspondent, str) or not correspondent:
         return None
     state = pathlib.Path(state)
@@ -180,8 +184,8 @@ def origin_chat_for(state, correspondent):
     matches = [origin for origin, key in table.items() if key == correspondent]
     if len(matches) != 1:
         return None
-    platform, sep, chat = matches[0].partition(":")
-    if platform != "telegram" or not sep or not chat:
+    origin_platform, sep, chat = matches[0].partition(":")
+    if origin_platform != platform or not sep or not chat:
         return None
     return chat
 
@@ -205,7 +209,7 @@ def compose(outbox, state, source_id, origin_chat, sender, body,
 
     key = correspondent_key(state, origin_chat, platform)
     meta = letters.envelope(
-        sender=sender, recipient="telegram-bridge",
+        sender=sender, recipient=f"{platform}-bridge",
         extra={"correspondent": key},
     )
     meta["id"] = letter_id

@@ -46,6 +46,47 @@ POLLER = ROOT / "src" / "alb" / "poller" / "loop.py"
 
 # invariant -> (file, tests module, old, new)
 EXTRA = {
+    # --- Slack outbound -------------------------------------------------
+    "slack ambiguous outcome is never a refusal": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "outbound.py",
+        "tests.test_slack_outbound",
+        '        raise reply.AmbiguousOutcome(f"slack reported {error}")',
+        '        raise reply.DefiniteRefusal(f"slack reported {error}")'),
+    "slack text is escaped": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "outbound.py",
+        "tests.test_slack_outbound",
+        '                .replace("<", "&lt;")',
+        '                .replace("<", "<")'),
+    "slack refuses text it would truncate": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "outbound.py",
+        "tests.test_slack_outbound",
+        "    if len(body) > MAX_TEXT:",
+        "    if False:"),
+    "slack bytes go only to slack's file host": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "outbound.py",
+        "tests.test_slack_outbound",
+        "            or not upload_url.startswith(_UPLOAD_PREFIX)\n",
+        ""),
+    "slack failure before sharing is definite": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "outbound.py",
+        "tests.test_slack_outbound",
+        '        raise reply.DefiniteRefusal(f"upload not started: {exc}") from None',
+        "        raise"),
+    "correspondent resolves only for its own platform": (
+        ROOT / "src" / "alb" / "outbound" / "store.py",
+        "tests.test_slack_outbound",
+        "    if origin_platform != platform or not sep or not chat:",
+        "    if not sep or not chat:"),
+    "reply stays in the thread the letter names": (
+        ROOT / "src" / "alb" / "send" / "reply.py",
+        "tests.test_slack_outbound",
+        '    return {"thread": thread} if thread else {}',
+        "    return {}"),
+    "grant platform must match the sender": (
+        ROOT / "src" / "alb" / "initiate" / "send.py",
+        "tests.test_slack_outbound",
+        '    if grant.get("platform") != getattr(sender, "name", "telegram"):',
+        "    if False:"),
     "distribution rejects VCS members": (
         ROOT / "scripts" / "check_distribution.py", "tests.test_distribution",
         '        if any(p in (".git", ".hg", ".svn", ".venv", "__pycache__") for p in parts):',
@@ -96,8 +137,8 @@ EXTRA = {
         "    if False:"),
     "correspondent present but unresolved fails closed, never raw fallback": (
         SEND, "tests.test_send",
-        "        return outbound.origin_chat_for(state, key)",
-        "        chat = outbound.origin_chat_for(state, key)\n"
+        "        return outbound.origin_chat_for(state, key, platform)",
+        "        chat = outbound.origin_chat_for(state, key, platform)\n"
         "        if chat:\n            return chat"),
     "empty correspondent is present unresolved": (
         SEND, "tests.test_send",
@@ -113,7 +154,7 @@ EXTRA = {
         "    if not isinstance(rec, dict):\n        rec = {}"),
     "non-telegram origin does not route telegram": (
         OUTBOUND, "tests.test_send",
-        '    if platform != "telegram" or not sep or not chat:',
+        "    if origin_platform != platform or not sep or not chat:",
         "    if not sep or not chat:"),
     "retry only a proven pre-inject helper_timeout": (
         RING_OUTCOME, "tests.test_mail_root",
@@ -149,8 +190,8 @@ EXTRA = {
         "    if False:\n        return \"incompatible\", HUNG"),
     "resume destination uses private state": (
         SEND, "tests.test_send",
-        "    chat_id = destination(source.meta, state)",
-        "    chat_id = destination(source.meta)"),
+        "    chat_id = destination(source.meta, state, platform)",
+        "    chat_id = destination(source.meta, platform=platform)"),
     "empty media content is missing": (
         ROOT / "src" / "alb" / "media" / "store.py", "tests.test_media",
         "    if st.st_size == 0:\n        raise MediaError(\"asset missing\")",

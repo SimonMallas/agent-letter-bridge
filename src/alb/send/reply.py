@@ -92,12 +92,13 @@ class Throttled(Exception):
 DESTINATION_KEYS = ("telegram_chat_id", "chat_id")
 
 
-def destination(meta, state=None):
+def destination(meta, state=None, platform="telegram"):
     """The chat a reply goes to, named by the stored letter, never the agent.
 
     New letters carry an opaque correspondent; the chat is resolved from the
-    operator's private correspondents.json. Old letters still name a raw
-    telegram_chat_id / chat_id; that fallback is for pre-change mail only.
+    operator's private correspondents.json, and only for the platform asking.
+    Old letters still name a raw telegram_chat_id / chat_id; that fallback is
+    for pre-change Telegram mail only.
     """
     if "correspondent" in meta:
         key = meta.get("correspondent")
@@ -106,12 +107,29 @@ def destination(meta, state=None):
         if state is None:
             return None
         from alb.outbound import store as outbound
-        return outbound.origin_chat_for(state, key)
+        return outbound.origin_chat_for(state, key, platform)
+    if platform != "telegram":
+        return None
     for field in DESTINATION_KEYS:
         value = meta.get(field)
         if value:
             return value
     return None
+
+
+def _platform_of(sender):
+    """The platform a sender speaks for. Telegram unless it says otherwise."""
+    return getattr(sender, "name", "telegram")
+
+
+def _thread_of(meta):
+    """Keyword arguments placing a reply in the thread the letter names.
+
+    Empty for every letter without one - all Telegram mail - so those senders
+    are called exactly as before.
+    """
+    thread = meta.get("reply_thread", "")
+    return {"thread": thread} if thread else {}
 
 
 def _reply_id(letter_id, text):
@@ -212,7 +230,8 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
             continue
     if stored is None:
         raise store.NoSuchLetter(f"{letter_id}: no letter with this exact id")
-    chat_id = destination(stored.meta, state)
+    platform = _platform_of(sender)
+    chat_id = destination(stored.meta, state, platform)
 
     # Re-checked at send: the allowlist is enforced at BOTH ends.
     if not gate.allows(allowlist_path, chat_id):
@@ -245,7 +264,7 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
 
     out_id = outbound.compose(pathlib.Path(outbox), pathlib.Path(state),
                               source_id=letter_id, origin_chat=chat_id,
-                              sender=agent, body=text,
+                              sender=agent, body=text, platform=platform,
                               thread=stored.meta.get("thread", ""))
     if photo_bytes is not None:
         from alb.media import store as media_store
@@ -253,9 +272,10 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
     outbound.record_event(state, out_id, "sending")
     try:
         if photo_bytes is not None:
-            platform_id = sender.send_photo(chat_id, photo_bytes, caption=text)
+            platform_id = sender.send_photo(chat_id, photo_bytes, caption=text,
+                                            **_thread_of(stored.meta))
         else:
-            platform_id = sender.send(chat_id, text)
+            platform_id = sender.send(chat_id, text, **_thread_of(stored.meta))
     except AmbiguousOutcome as exc:
         outbound.record_event(state, out_id, "ambiguous", detail=str(exc))
         _dead_letter(state, out_id, letter_id, str(exc))
@@ -288,7 +308,7 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
     # Both directions in the index: a phone reply to the bot's own message
     # must resolve to the outbound letter it answers.
     from alb import msgindex
-    msgindex.record(state, "telegram", chat_id, str(platform_id), out_id)
+    msgindex.record(state, platform, chat_id, str(platform_id), out_id)
     return out_id
 
 
@@ -365,7 +385,8 @@ def _resume_locked(sender, inbox, state, allowlist_path, out_id, outbox,
             f"immutable, so this would send the original text under your new "
             f"instruction. Resume with the original words, or wait for this "
             f"one to reach a terminal state before composing another.")
-    chat_id = destination(source.meta, state)
+    platform = _platform_of(sender)
+    chat_id = destination(source.meta, state, platform)
     if not chat_id:
         raise NotPermitted(f"{source_id}: the letter names no destination")
     # Gated again, deliberately: an allowlist can change between the first
@@ -378,9 +399,11 @@ def _resume_locked(sender, inbox, state, allowlist_path, out_id, outbox,
     staged = media_store.load_outbound(state, out_id)
     try:
         if staged is not None:
-            platform_id = sender.send_photo(chat_id, staged, caption=letter.body)
+            platform_id = sender.send_photo(chat_id, staged, caption=letter.body,
+                                            **_thread_of(source.meta))
         else:
-            platform_id = sender.send(chat_id, letter.body)
+            platform_id = sender.send(chat_id, letter.body,
+                                      **_thread_of(source.meta))
     except AmbiguousOutcome as exc:
         outbound.record_event(state, out_id, "ambiguous", detail=str(exc))
         # The SOURCE id, not the outbound id twice: an operator chasing a
@@ -403,7 +426,7 @@ def _resume_locked(sender, inbox, state, allowlist_path, out_id, outbox,
     outbound.record_event(state, out_id, "sent",
                           platform_message_id=str(platform_id))
     from alb import msgindex
-    msgindex.record(state, "telegram", chat_id, str(platform_id), out_id)
+    msgindex.record(state, platform, chat_id, str(platform_id), out_id)
     return out_id
 
 
