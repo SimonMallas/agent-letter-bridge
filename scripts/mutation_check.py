@@ -31,6 +31,7 @@ OUTBOUND = ROOT / "src" / "alb" / "outbound" / "store.py"
 ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
 TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
 SLACK = ROOT / "src" / "alb" / "adapters" / "slack" / "api.py"
+SOCKET = ROOT / "src" / "alb" / "adapters" / "slack" / "websocket.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
 HERDR = ROOT / "src" / "alb" / "adapters" / "herdr" / "transport.py"
 BRIDGE = ROOT / "src" / "alb" / "bridge" / "run.py"
@@ -1101,6 +1102,17 @@ EXTRA = {
         "    if confirm is not None:\n"
         "        confirm()\n"
         "    published = loop.poll_once(\n"),
+    "partial frame timeout is not retried": (
+        SOCKET, "tests.test_slack_websocket",
+        "            chunk = self.sock.recv(count - len(self.buf))\n"
+        "            if not chunk:\n",
+        "            try:\n"
+        "                chunk = self.sock.recv(count - len(self.buf))\n"
+        "            except socket.timeout:\n"
+        "                if self.buf:\n"
+        "                    continue\n"
+        "                raise\n"
+        "            if not chunk:\n"),
 }
 
 MUTATIONS = {

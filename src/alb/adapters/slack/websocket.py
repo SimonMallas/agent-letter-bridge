@@ -129,14 +129,13 @@ class WebSocket:
         self.sock.sendall(header + mask + masked)
 
     def _fill(self, count):
-        """Buffer at least count bytes. A timeout keeps a partial frame intact."""
+        """Buffer at least count bytes.
+
+        A timeout propagates. The bytes stay in buf because a frame is sliced
+        off only after it has been filled, so the next recv resumes it.
+        """
         while len(self.buf) < count:
-            try:
-                chunk = self.sock.recv(count - len(self.buf))
-            except socket.timeout:
-                if self.buf:
-                    continue
-                raise
+            chunk = self.sock.recv(count - len(self.buf))
             if not chunk:
                 raise WebSocketError("socket closed")
             self.buf += chunk
