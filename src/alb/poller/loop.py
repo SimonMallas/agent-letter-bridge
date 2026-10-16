@@ -206,6 +206,9 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
     # live in private state. Derived from the ledger's home when not given,
     # so existing callers keep working and everything private stays together.
     state = pathlib.Path(state) if state else pathlib.Path(ledger).parent
+    # A platform that does not name itself is the Telegram bridge. Slack sets
+    # name, and that name is what the index and the correspondent key use.
+    name = getattr(platform, "name", "telegram")
 
     result = Cycle()
     for item in platform.fetch(offset=None):
@@ -223,16 +226,24 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
         if gate.allows(allowlist_path, chat_id):
             text, extra_media = _inbound_text_and_media(platform, state, item)
             message_id = str(item.get("message_id", "") or "")
+            # Telegram letters start from this dict. A platform that brought
+            # its own provenance replaces it, so those letters do not gain
+            # telegram fields.
             extra = {
                 "telegram_update_id": item["update_id"],
             }
+            if "provenance" in item:
+                extra = dict(item["provenance"])
+                reply_thread = item.get("reply_thread") or ""
+                if reply_thread:
+                    extra["reply_thread"] = reply_thread
             extra.update(extra_media)
-            if message_id:
+            if "provenance" not in item and message_id:
                 extra["telegram_message_id"] = message_id
             # Gate 0: the external principal is provenance, never a routable
             # participant. Stable opaque key, derived once, store-authoritative.
             extra["correspondent"] = outbound_store.correspondent_key(
-                state, chat_id)
+                state, chat_id, platform=name)
 
             # Platform reply-to resolves through the exact-triple index only.
             # A hit fills re: and joins THAT letter's thread; a miss changes
@@ -240,7 +251,7 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
             reply_target = ""
             rt_mid = str(item.get("reply_to_message_id", "") or "")
             if rt_mid:
-                reply_target = msgindex.lookup(state, "telegram", chat_id,
+                reply_target = msgindex.lookup(state, name, chat_id,
                                                rt_mid) or ""
             if reply_target:
                 extra["re"] = reply_target
@@ -268,7 +279,7 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
                     except (media_store.MediaError, OSError):
                         pass
                 if message_id:
-                    msgindex.record(state, "telegram", chat_id, message_id,
+                    msgindex.record(state, name, chat_id, message_id,
                                     letter_id)
                 if not reply_target:
                     # One open thread per correspondent, cut ONLY by /new at

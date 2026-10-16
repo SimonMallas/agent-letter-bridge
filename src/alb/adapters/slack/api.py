@@ -12,6 +12,7 @@ import time
 
 from alb.adapters.errors import FetchFailed, TransientFailure
 from alb.adapters.slack import events, web, websocket
+from alb.media import inspect as media_inspect
 
 # ok:false values that mean this token will not start working if we wait.
 _REFUSED = frozenset({
@@ -55,6 +56,7 @@ class Slack:
         self._pending = set()
         self._markers = None
         self._saw_frame = False
+        self._file_urls = {}
 
     def __repr__(self):
         return "<Slack app>"
@@ -98,6 +100,56 @@ class Slack:
 
     def close(self):
         self._close_socket()
+
+    def download_photo(self, file_id):
+        """Bytes of one inbound image, or a failure the poller already handles.
+
+        The URL came with the event. files.info is only the fallback. A
+        rate limit or a dead network is worth retrying; anything else becomes
+        the letter's "[photo unavailable]" marker.
+        """
+        url = self._file_urls.get(file_id) or self._lookup_file_url(file_id)
+        try:
+            data = web.get_bytes(url, self._bot, media_inspect.MAX_BYTES)
+        except web.HttpError as exc:
+            if exc.status == 429 or exc.status >= 500:
+                raise TransientFailure(
+                    f"slack deferred: HTTP {exc.status}", exc.retry_after,
+                ) from None
+            raise FetchFailed("photo download refused") from None
+        except OSError:
+            raise TransientFailure("network: slack file") from None
+        except ValueError:
+            raise FetchFailed("photo download refused") from None
+        try:
+            media_inspect.detect(data)
+        except media_inspect.MediaError:
+            raise FetchFailed("photo download refused") from None
+        return data
+
+    def _lookup_file_url(self, file_id):
+        try:
+            body = self._call("files.info", self._bot, {"file": file_id})
+        except web.HttpError as exc:
+            if exc.status == 429 or exc.status >= 500:
+                raise TransientFailure(
+                    f"slack deferred: HTTP {exc.status}", exc.retry_after,
+                ) from None
+            raise FetchFailed("photo download refused") from None
+        except OSError:
+            raise TransientFailure("network: slack file") from None
+        if not isinstance(body, dict) or body.get("ok") is False:
+            error = str(body.get("error") or "") if isinstance(body, dict) else ""
+            if error in _REFUSED:
+                raise FetchFailed(f"slack refused: {error}")
+            raise FetchFailed("photo download refused")
+        info = body.get("file")
+        if isinstance(info, dict):
+            for key in ("url_private_download", "url_private", "url"):
+                candidate = info.get(key)
+                if isinstance(candidate, str) and candidate:
+                    return candidate
+        raise FetchFailed("photo download refused")
 
     def _queued(self):
         items = list(self._queue)
@@ -233,6 +285,7 @@ class Slack:
                 self._dropped_marks.append(mark)
             return
         update_id = item["update_id"]
+        self._stash_files(item)
         if mark is not None:
             self._marks[update_id] = mark
         if envelope:
@@ -240,6 +293,18 @@ class Slack:
         if update_id not in self._seen:
             self._seen.add(update_id)
             self._queue.append(item)
+
+    def _stash_files(self, item):
+        files = item.get("files")
+        if not isinstance(files, list):
+            return
+        for entry in files:
+            if not isinstance(entry, dict):
+                continue
+            file_id = entry.get("id")
+            url = entry.get("url")
+            if isinstance(file_id, str) and file_id and isinstance(url, str) and url:
+                self._file_urls[file_id] = url
 
     def _retry_pending(self):
         """A conversation that failed last time is read again on the next fetch."""

@@ -1094,6 +1094,13 @@ EXTRA = {
         SLACK, "tests.test_slack_catchup",
         "            if conv in self._pending: continue\n",
         ""),
+    "slack letter before ack": (
+        BRIDGE, "tests.test_slack_poller",
+        "    published = loop.poll_once(\n",
+        "    confirm = getattr(platform, \"confirm\", None)\n"
+        "    if confirm is not None:\n"
+        "        confirm()\n"
+        "    published = loop.poll_once(\n"),
 }
 
 MUTATIONS = {
