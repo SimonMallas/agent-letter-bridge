@@ -27,12 +27,17 @@ REQUIRED = ("ALB_TOKEN",)
 # did not exist, and their deployment diverged from their config in silence. A
 # key that looks like it did something is worse than one that errors.
 KNOWN = ("ALB_TOKEN", "ALB_SURFACE", "ALB_FROM", "ALB_TO", "ALB_NOTIFIER",
-         "ALB_MAIL_ROOT", "ALB_BUS_BINARY", "ALB_HERDR_SOCKET")
+         "ALB_MAIL_ROOT", "ALB_PLATFORM", "ALB_APP_TOKEN",
+         "ALB_BUS_BINARY", "ALB_HERDR_SOCKET")
 
 # Transports that exist. Naming one that does not is refused rather than
 # defaulted, because defaulting is what let a deployment believe it had
 # selected tmux for days while nothing read the setting.
 NOTIFIERS = ("cmux", "tmux", "herdr")
+
+# Platforms that exist. Absent means telegram, the only one this file used to
+# know. Naming one that does not is refused rather than defaulted.
+PLATFORMS = ("telegram", "slack")
 
 # Surface values that are an unfinished edit rather than a pane. This build ran
 # for days on ALB_SURFACE=PLACEHOLDER: every ring failed, and because ring
@@ -116,7 +121,45 @@ def load_config(path):
             f"Refusing rather than ignoring them, so a setting never appears to "
             f"take effect when nothing read it."
         )
+    _check_platform(config)
     return config
+
+
+def platform_of(config):
+    """Which platform this bridge talks to. Absent means telegram."""
+    return config.get("ALB_PLATFORM", "telegram")
+
+
+def _check_platform(config):
+    """Refuse a platform the process would not actually run.
+
+    An app token on a telegram bridge is the same failure as an unknown key:
+    nothing would read it, and the operator would believe it had taken effect.
+    Slack prefixes are checked here so a swapped pair of tokens fails at
+    startup. The message names the key and the expected prefix, never the value.
+    """
+    platform = platform_of(config)
+    if platform not in PLATFORMS:
+        raise ConfigError(
+            f"unsupported ALB_PLATFORM {platform!r}. Available: "
+            f"{', '.join(PLATFORMS)}."
+        )
+    app_token = config.get("ALB_APP_TOKEN", "")
+    if platform != "slack":
+        if app_token:
+            raise ConfigError(
+                "ALB_APP_TOKEN is set on a telegram bridge, where nothing "
+                "reads it. Remove it, or set ALB_PLATFORM=slack."
+            )
+        return
+    if not app_token:
+        raise ConfigError("missing required settings: ALB_APP_TOKEN")
+    if not str(config.get("ALB_TOKEN", "")).startswith("xoxb-"):
+        raise ConfigError("ALB_TOKEN on a slack bridge must start with xoxb-.")
+    if not str(app_token).startswith("xapp-"):
+        raise ConfigError(
+            "ALB_APP_TOKEN on a slack bridge must start with xapp-."
+        )
 
 
 # Private by default, not private if the operator remembers. The state

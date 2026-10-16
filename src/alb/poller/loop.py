@@ -172,7 +172,7 @@ def _inbound_text_and_media(platform, state, item):
             data = downloader(file_id)
             asset = media_store.stage_inbound(state, item["update_id"], data)
         except Exception as exc:  # noqa: BLE001
-            from alb.adapters.telegram.api import TransientFailure
+            from alb.adapters.errors import TransientFailure
             if isinstance(exc, TransientFailure):
                 raise
             extra["media_status"] = "fetch-failed"
