@@ -321,6 +321,61 @@ class WebSocketClient(unittest.TestCase):
         self.assertEqual(bridge._ws.recv(clock() + 5, clock), ("text", "{}"))
 
 
+class StalePartialFrame(unittest.TestCase):
+    """One header byte, then silence for good: a stalled connection.
+
+    Bytes that arrived in an earlier poll are not news. Counting an unchanged
+    partial buffer as activity let a connection that stopped mid-frame report
+    a healthy cycle on every poll while nothing could ever arrive.
+    """
+
+    def test_one_stale_byte_then_silence_is_not_liveness(self):
+        from alb.adapters.errors import TransientFailure
+        from alb.adapters.slack.api import Slack
+        clock = _Clock()
+        sock = _OneByteThenSilence(clock)
+        bridge = Slack("xoxb-" + "fixture", poll_timeout=1, clock=clock)
+        bridge._ws = websocket.WebSocket(sock)
+        bridge._team = "T0000001"
+        bridge._bot_user = "U0000009"
+        # The byte arrives during this poll: that much is progress.
+        self.assertEqual(bridge.fetch(), [])
+        # Nothing new since. A silent socket must be challenged and dropped,
+        # not reported as a completed cycle.
+        with self.assertRaises(TransientFailure) as cm:
+            bridge.fetch()
+        self.assertIn("silent", str(cm.exception))
+        self.assertTrue(sock.pinged, "the stalled socket was never challenged")
+        self.assertTrue(sock.closed)
+        self.assertIsNone(bridge._ws)
+
+
+class _OneByteThenSilence:
+    def __init__(self, clock):
+        self.clock = clock
+        self.timeout = 30
+        self.sent_first = False
+        self.pinged = False
+        self.closed = False
+
+    def settimeout(self, seconds):
+        self.timeout = seconds
+
+    def recv(self, size):
+        if not self.sent_first:
+            self.sent_first = True
+            return b"\x81"
+        self.clock.advance(self.timeout)
+        raise socket.timeout("quiet")
+
+    def sendall(self, data):
+        if data and data[0] == 0x89:
+            self.pinged = True
+
+    def close(self):
+        self.closed = True
+
+
 class _Clock:
     def __init__(self):
         self.now = 1700000000.0

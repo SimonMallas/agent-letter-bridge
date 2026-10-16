@@ -148,6 +148,11 @@ EXTRA = {
         "tests.test_slack_recovery",
         '            if mark["conv"] in self._pending:\n                held.append(mark)',
         "            if False:\n                held.append(mark)"),
+    "a stale partial frame is not liveness": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "api.py",
+        "tests.test_slack_websocket",
+        "                        and received > received_at_start):",
+        "                        and received >= received_at_start):"),
     # --- Slack setup ----------------------------------------------------
     "slack setup reads nothing unless asked": (
         ROOT / "src" / "alb" / "setup" / "slack_wizard.py",

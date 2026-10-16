@@ -262,6 +262,7 @@ class Slack:
 
     def _read_live(self):
         self._saw_frame = False
+        received_at_start = getattr(self._ws, "received", None)
         deadline = self._clock() + self._poll_timeout
         while self._clock() < deadline:
             if self._ws is None:
@@ -275,11 +276,15 @@ class Slack:
             try:
                 kind, data = self._recv_until(self._clock() + remaining)
             except socket.timeout:
-                # Bytes already in hand mean the peer is slow, not gone.
-                # Leave them buffered and do not spend the pong wait finishing
-                # a frame that already missed this poll.
-                incomplete = getattr(self._ws, "_incomplete", None)
-                if incomplete is not None and incomplete():
+                # New bytes during THIS poll mean the peer is slow, not gone:
+                # they stay buffered and the frame finishes on a later poll.
+                # Bytes from an earlier poll are not news. Counting an
+                # unchanged partial buffer as activity let a connection that
+                # stalled mid-frame report a healthy cycle forever; without
+                # progress the pong check runs and a silent socket is dropped.
+                received = getattr(self._ws, "received", None)
+                if (received_at_start is not None and received is not None
+                        and received > received_at_start):
                     self._saw_frame = True
                 return
             self._saw_frame = True

@@ -34,6 +34,9 @@ class WebSocket:
         self._parts = []
         self._deadline = None
         self._clock = None
+        # Bytes taken off the socket since it opened. A caller compares two
+        # readings to tell a slow peer (it grew) from a stalled one (it did not).
+        self.received = 0
 
     def handshake(self, host, path):
         key = base64.b64encode(os.urandom(16)).decode("ascii")
@@ -121,9 +124,6 @@ class WebSocket:
             self._parts = []
             return "text", text
 
-    def _incomplete(self):
-        return bool(self.buf or self._parts)
-
     def settimeout(self, seconds):
         self.sock.settimeout(seconds)
 
@@ -164,6 +164,7 @@ class WebSocket:
             chunk = self.sock.recv(count - len(self.buf))
             if not chunk:
                 raise WebSocketError("socket closed")
+            self.received += len(chunk)
             self.buf += chunk
 
     def _honor_deadline(self):
