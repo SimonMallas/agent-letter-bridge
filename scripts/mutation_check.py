@@ -96,6 +96,21 @@ EXTRA = {
         ROOT / "src" / "alb" / "bridge" / "run.py", "tests.test_slack_cli",
         '        return slack_out.Sender(config["ALB_TOKEN"])',
         '        return slack_out.Sender(config["ALB_APP_TOKEN"])'),
+    # --- Slack in doctor, status and check -------------------------------
+    "doctor makes no Slack call": (
+        ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_slack_ops",
+        '        app = slack_app_id(config.get("ALB_APP_TOKEN", ""))',
+        '        app = __import__("urllib.request").request.urlopen(\n'
+        '            "https://slack.com/api/auth.test") and slack_app_id(\n'
+        '            config.get("ALB_APP_TOKEN", ""))'),
+    "bare Slack ids are flagged": (
+        ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_slack_ops",
+        "            if isinstance(c, str) and _BARE_SLACK_ID.fullmatch(c)]",
+        "            if False]"),
+    "a second connection on the app is reported": (
+        ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_slack_ops",
+        "    if count > 1:",
+        "    if count > 99:"),
     # --- Slack setup ----------------------------------------------------
     "slack setup reads nothing unless asked": (
         ROOT / "src" / "alb" / "setup" / "slack_wizard.py",

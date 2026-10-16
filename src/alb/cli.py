@@ -275,6 +275,9 @@ def main(argv=None):
         ring = health.ring_report(
             pathlib.Path(args.root) / "state" / "ring-health.json")
         print(f"ring: {ring}")
+        from alb.doctor import checks as _checks
+        for line in _checks.slack_advisories(pathlib.Path(args.root)):
+            print(f"slack: {line}")
         if v.action == "restart":
             # Names only what exists today. The first version of this line
             # recommended an alb flag that had not been built, so obeying the
@@ -314,6 +317,8 @@ def main(argv=None):
             print("canary : never run - the send path is unproven")
 
         print(f"ring   : {health.ring_report(state / 'ring-health.json')}")
+        for line in _checks.slack_advisories(pathlib.Path(args.root)):
+            print(f"slack  : {line}")
         # A bridge that cannot deliver is not ok, however fresh its heartbeat.
         return 0 if (bridge.state == "ok" and delivery["can_deliver"]) else 1
 
