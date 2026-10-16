@@ -1103,6 +1103,18 @@ EXTRA = {
         "    if confirm is not None:\n"
         "        confirm()\n"
         "    published = loop.poll_once(\n"),
+    "unreadable slack response is transient": (
+        SLACK, "tests.test_slack_inbound",
+        "        except ValueError:\n"
+        "            raise TransientFailure(\"network: slack unreadable response\") from None\n"
+        "        except web.HttpError as exc:\n",
+        "        except web.HttpError as exc:\n"),
+    "unreadable files.info is transient": (
+        SLACK, "tests.test_slack_inbound",
+        "        except ValueError:\n"
+        "            raise TransientFailure(\"network: slack unreadable response\") from None\n"
+        "        if not isinstance(body, dict) or body.get(\"ok\") is False:\n",
+        "        if not isinstance(body, dict) or body.get(\"ok\") is False:\n"),
     "file download stops at the size limit": (
         SLACK_WEB, "tests.test_slack_web",
         "min(64 * 1024, max_bytes + 1 - total)",

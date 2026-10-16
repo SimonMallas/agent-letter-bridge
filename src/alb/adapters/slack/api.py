@@ -74,6 +74,8 @@ class Slack:
             raise
         except TransientFailure:
             raise
+        except ValueError:
+            raise TransientFailure("network: slack unreadable response") from None
         except web.HttpError as exc:
             if exc.status == 429 or exc.status >= 500:
                 raise TransientFailure(
@@ -138,6 +140,8 @@ class Slack:
             raise FetchFailed("photo download refused") from None
         except OSError:
             raise TransientFailure("network: slack file") from None
+        except ValueError:
+            raise TransientFailure("network: slack unreadable response") from None
         if not isinstance(body, dict) or body.get("ok") is False:
             error = str(body.get("error") or "") if isinstance(body, dict) else ""
             if error in _REFUSED:
