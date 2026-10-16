@@ -245,6 +245,37 @@ class CatchUp(unittest.TestCase):
         self.assertEqual([item["text"] for item in items], ["from history"])
         self.assertEqual(items[0]["chat_id"], f"{CHANNEL}/{HUMAN}")
 
+    def test_rate_limit_on_one_dm_does_not_let_the_other_skip_ahead(self):
+        other = "D0000002"
+        person = "U0000002"
+        missed_a = "1700000000.000100"
+        missed_b = "1700000000.000110"
+        live_ts = "1700000000.000200"
+        self.allow.write_text(json.dumps({
+            "chats": [f"{DM}/{HUMAN}", f"{other}/{person}"],
+        }))
+        self.fail_history[DM] = web.HttpError("conversations.history", 429, 3)
+        self.history[DM] = [{"ok": True, "messages": [
+            {"type": "message", "user": HUMAN, "text": "first room", "ts": missed_a},
+        ]}]
+        self.history[other] = [{"ok": True, "messages": [
+            {"type": "message", "user": person, "text": "second room", "ts": missed_b},
+        ]}]
+        bridge, _sock = self.bridge([
+            hello(), live(live_ts, "now", channel=other, user=person),
+        ])
+        items = bridge.fetch()
+        self.assertEqual([item["message_id"] for item in items], [live_ts])
+        bridge.ack(items[0]["update_id"])
+        bridge.confirm()
+        conversations = (self.markers() or {}).get("conversations") or {}
+        self.assertNotIn(other, conversations)
+        self.assertNotIn(DM, conversations)
+        caught = bridge.fetch()
+        self.assertCountEqual(
+            [item["message_id"] for item in caught], [missed_a, missed_b],
+        )
+
     def test_live_and_catchup_copies_of_one_message_share_an_update_id(self):
         self.history[DM] = [{"ok": True, "messages": [
             {"type": "message", "user": HUMAN, "text": "same", "ts": OLD},

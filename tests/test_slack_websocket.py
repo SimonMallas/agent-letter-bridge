@@ -52,12 +52,8 @@ class ScriptSocket:
         self.chunks = list(chunks)
         self.pos = 0
         self.sent = bytearray()
-        self._pause = False
 
     def recv(self, size):
-        if self._pause:
-            self._pause = False
-            raise socket.timeout("between chunks")
         if self.pos >= len(self.data):
             raise socket.timeout("quiet")
         take = self.chunks[0] if self.chunks else size
@@ -66,11 +62,6 @@ class ScriptSocket:
         take = min(take, size, len(self.data) - self.pos)
         out = self.data[self.pos:self.pos + take]
         self.pos += len(out)
-        # A short read stands between two pieces of one frame. A read that
-        # satisfied the caller is a frame boundary, and the next read must
-        # be allowed to start.
-        if len(out) < size and self.pos < len(self.data):
-            self._pause = True
         return out
 
     def sendall(self, data):
@@ -185,3 +176,45 @@ class WebSocketClient(unittest.TestCase):
         sock = ScriptSocket(server_frame(0x8, b"\x03\xe8"), [4])
         client = websocket.WebSocket(sock)
         self.assertEqual(client.recv(), ("close", b"\x03\xe8"))
+
+    def test_partial_frame_timeout_propagates_and_resumes(self):
+        """A half-open socket must not spin inside one recv.
+
+        The bytes already read stay buffered, so the next recv finishes the
+        same frame.
+        """
+        frame = server_frame(0x1, b"hello")
+
+        class HalfOpen:
+            def __init__(self):
+                self.pos = 0
+                self.timeouts = 0
+                self.release = False
+                self.sent = bytearray()
+
+            def recv(self, size):
+                if self.release:
+                    out = frame[self.pos:self.pos + size]
+                    self.pos += len(out)
+                    return out
+                if self.pos == 0:
+                    self.pos = 1
+                    return frame[:1]
+                self.timeouts += 1
+                if self.timeouts > 2:
+                    raise AssertionError("partial frame retried a timeout")
+                raise socket.timeout("half open")
+
+            def sendall(self, data):
+                self.sent += data
+
+            def settimeout(self, seconds):
+                pass
+
+        sock = HalfOpen()
+        client = websocket.WebSocket(sock)
+        with self.assertRaises(socket.timeout):
+            client.recv()
+        self.assertEqual(sock.timeouts, 1)
+        sock.release = True
+        self.assertEqual(client.recv(), ("text", "hello"))

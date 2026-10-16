@@ -63,10 +63,20 @@ class Slack:
 
     def fetch(self, offset=None):
         self._seen.clear()
+        # Catch-up can raise while a live frame is already on the socket.
+        # Hold that error, read the socket, and re-raise only when nothing
+        # arrived. A queued live event still has to be confirmed, with the
+        # unread conversations left pending so their markers stay put.
+        deferred = None
         try:
-            self._retry_pending()
-            self._ensure_connection()
+            try:
+                self._retry_pending()
+                self._ensure_connection()
+            except TransientFailure as exc:
+                deferred = exc
             self._read_live()
+            if deferred is not None and not self._queue:
+                raise deferred
             if not self._queue and not self._saw_frame:
                 self._require_pong()
             return self._queued()
@@ -74,6 +84,8 @@ class Slack:
             raise
         except TransientFailure:
             raise
+        except ValueError:
+            raise TransientFailure("network: slack unreadable response") from None
         except web.HttpError as exc:
             if exc.status == 429 or exc.status >= 500:
                 raise TransientFailure(
@@ -97,6 +109,10 @@ class Slack:
         self._send_envelope_acks()
         self._advance_markers(acked)
         self._persist_markers()
+        for update_id in acked:
+            self._marks.pop(update_id, None)
+        self._dropped_marks.clear()
+        self._file_urls.clear()
 
     def close(self):
         self._close_socket()
@@ -138,6 +154,8 @@ class Slack:
             raise FetchFailed("photo download refused") from None
         except OSError:
             raise TransientFailure("network: slack file") from None
+        except ValueError:
+            raise TransientFailure("network: slack unreadable response") from None
         if not isinstance(body, dict) or body.get("ok") is False:
             error = str(body.get("error") or "") if isinstance(body, dict) else ""
             if error in _REFUSED:
@@ -311,18 +329,43 @@ class Slack:
         if self._team is None:
             return
         for conv in list(self._pending):
-            self._ingest_history(conv)
+            self._read_conversation(conv)
 
     def _catch_up(self):
         self._load_markers()
-        for conv in self._watched_conversations():
-            self._ingest_history(conv)
-        threads = (self._markers or {}).get("threads") or {}
-        for conv, mapping in list(threads.items()):
-            if not isinstance(mapping, dict) or conv in self._pending:
+        watched = self._watched_conversations()
+        # Mark every conversation before reading. A raise never reaches the
+        # rest, and confirm must not move a marker we did not catch up.
+        for conv in watched:
+            self._pending.add(conv)
+        for conv in watched:
+            self._read_conversation(conv)
+
+    def _read_conversation(self, conv):
+        """History and known threads. Pending until both have been read."""
+        self._pending.add(conv)
+        history = self._all_pages(
+            "conversations.history", conv, self._oldest_conversation(conv),
+        )
+        if history == "skip":
+            self._pending.discard(conv)
+            return
+        if history is None:
+            return
+        self._queue_history(conv, history)
+        threads = ((self._markers or {}).get("threads") or {}).get(conv) or {}
+        if not isinstance(threads, dict):
+            threads = {}
+        for thread_ts, marker in list(threads.items()):
+            replies = self._all_pages(
+                "conversations.replies", conv, marker, {"ts": thread_ts},
+            )
+            if replies == "skip":
                 continue
-            for thread_ts, marker in list(mapping.items()):
-                self._ingest_replies(conv, thread_ts, marker)
+            if replies is None:
+                return
+            self._queue_history(conv, replies)
+        self._pending.discard(conv)
 
     def _watched_conversations(self):
         found = []
@@ -346,22 +389,6 @@ class Slack:
         if not isinstance(chats, list):
             return []
         return [entry for entry in chats if isinstance(entry, str) and "/" in entry]
-
-    def _ingest_history(self, conv):
-        got = self._all_pages("conversations.history", conv, self._oldest_conversation(conv))
-        if got is None or got == "skip":
-            return
-        self._pending.discard(conv)
-        self._queue_history(conv, got)
-
-    def _ingest_replies(self, conv, thread_ts, marker):
-        got = self._all_pages(
-            "conversations.replies", conv, marker, {"ts": thread_ts},
-        )
-        if got is None or got == "skip":
-            return
-        self._pending.discard(conv)
-        self._queue_history(conv, got)
 
     def _queue_history(self, conv, messages):
         rows = []

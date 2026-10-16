@@ -245,6 +245,63 @@ class SlackInbound(unittest.TestCase):
         self.assertEqual(json.loads(path.read_text())["connections"], 2)
         self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
+    def test_confirm_drops_bookkeeping_after_each_cycle(self):
+        sock = FakeSocket(self.clock, [hello()])
+        bridge = self.bridge(sock)
+        for number in range(4):
+            bot_ts = f"1700000000.{number:06d}"
+            human_ts = f"1700000001.{number:06d}"
+            sock.frames.append(("text", json.dumps({
+                "type": "events_api", "envelope_id": "bot-" + bot_ts,
+                "payload": {"event": {
+                    "type": "message", "bot_id": "B0000001", "user": "U0000009",
+                    "channel": "D0000001", "channel_type": "im",
+                    "ts": bot_ts, "text": "echo",
+                }},
+            })))
+            sock.frames.append(("text", json.dumps({
+                "type": "events_api", "envelope_id": "hum-" + human_ts,
+                "payload": {"event": {
+                    "type": "message", "user": "U0000001",
+                    "channel": "D0000001", "channel_type": "im",
+                    "ts": human_ts, "text": "pic",
+                    "files": [{
+                        "id": "F" + str(number),
+                        "mimetype": "image/png",
+                        "url_private_download": "https://files.slack.com/files-pri/T0000001/a.png",
+                    }],
+                }},
+            })))
+            items = bridge.fetch()
+            self.assertEqual(len(items), 1)
+            bridge.ack(items[0]["update_id"])
+            bridge.confirm()
+            self.assertEqual(bridge._marks, {})
+            self.assertEqual(bridge._dropped_marks, [])
+            self.assertEqual(bridge._file_urls, {})
+
+    def test_unreadable_api_body_is_transient(self):
+        def call(method, token, params=None):
+            raise ValueError("Expecting value")
+
+        bridge = Slack(BOT, APP, call=call, connect=self._connect, clock=self.clock)
+        with self.assertRaises(TransientFailure) as caught:
+            bridge.fetch()
+        self.assertEqual(str(caught.exception), "network: slack unreadable response")
+        self.assertNotIn(BOT, str(caught.exception))
+
+    def test_unreadable_files_info_is_transient(self):
+        def call(method, token, params=None):
+            if method == "files.info":
+                raise ValueError("Expecting value")
+            raise AssertionError(method)
+
+        bridge = Slack(BOT, APP, call=call, connect=self._connect, clock=self.clock)
+        with self.assertRaises(TransientFailure) as caught:
+            bridge.download_photo("F0000001")
+        self.assertEqual(str(caught.exception), "network: slack unreadable response")
+        self.assertNotIn(BOT, str(caught.exception))
+
     def test_repr_and_errors_never_contain_tokens(self):
         bridge = Slack(BOT, APP, call=self._call, clock=self.clock)
         self.assertEqual(repr(bridge), "<Slack app>")

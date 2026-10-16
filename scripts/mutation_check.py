@@ -31,6 +31,8 @@ OUTBOUND = ROOT / "src" / "alb" / "outbound" / "store.py"
 ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
 TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
 SLACK = ROOT / "src" / "alb" / "adapters" / "slack" / "api.py"
+SOCKET = ROOT / "src" / "alb" / "adapters" / "slack" / "websocket.py"
+SLACK_WEB = ROOT / "src" / "alb" / "adapters" / "slack" / "web.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
 HERDR = ROOT / "src" / "alb" / "adapters" / "herdr" / "transport.py"
 BRIDGE = ROOT / "src" / "alb" / "bridge" / "run.py"
@@ -1188,6 +1190,20 @@ EXTRA = {
         SLACK, "tests.test_slack_catchup",
         "            if conv in self._pending: continue\n",
         ""),
+    "unread conversations stay pending": (
+        SLACK, "tests.test_slack_catchup",
+        "        for conv in watched:\n"
+        "            self._pending.add(conv)\n"
+        "        for conv in watched:\n"
+        "            self._read_conversation(conv)\n",
+        "        for conv in watched:\n"
+        "            self._read_conversation(conv)\n"),
+    "catch-up rate limit still returns a live event": (
+        SLACK, "tests.test_slack_catchup",
+        "            except TransientFailure as exc:\n"
+        "                deferred = exc\n",
+        "            except TransientFailure as exc:\n"
+        "                raise\n"),
     "slack letter before ack": (
         BRIDGE, "tests.test_slack_poller",
         "    published = loop.poll_once(\n",
@@ -1195,6 +1211,40 @@ EXTRA = {
         "    if confirm is not None:\n"
         "        confirm()\n"
         "    published = loop.poll_once(\n"),
+    "slack bookkeeping is dropped after confirm": (
+        SLACK, "tests.test_slack_inbound",
+        "        for update_id in acked:\n"
+        "            self._marks.pop(update_id, None)\n"
+        "        self._dropped_marks.clear()\n"
+        "        self._file_urls.clear()\n",
+        ""),
+    "unreadable slack response is transient": (
+        SLACK, "tests.test_slack_inbound",
+        "        except ValueError:\n"
+        "            raise TransientFailure(\"network: slack unreadable response\") from None\n"
+        "        except web.HttpError as exc:\n",
+        "        except web.HttpError as exc:\n"),
+    "unreadable files.info is transient": (
+        SLACK, "tests.test_slack_inbound",
+        "        except ValueError:\n"
+        "            raise TransientFailure(\"network: slack unreadable response\") from None\n"
+        "        if not isinstance(body, dict) or body.get(\"ok\") is False:\n",
+        "        if not isinstance(body, dict) or body.get(\"ok\") is False:\n"),
+    "file download stops at the size limit": (
+        SLACK_WEB, "tests.test_slack_web",
+        "min(64 * 1024, max_bytes + 1 - total)",
+        "min(64 * 1024, max_bytes + 10 ** 9 - total)"),
+    "partial frame timeout is not retried": (
+        SOCKET, "tests.test_slack_websocket",
+        "            chunk = self.sock.recv(count - len(self.buf))\n"
+        "            if not chunk:\n",
+        "            try:\n"
+        "                chunk = self.sock.recv(count - len(self.buf))\n"
+        "            except socket.timeout:\n"
+        "                if self.buf:\n"
+        "                    continue\n"
+        "                raise\n"
+        "            if not chunk:\n"),
 }
 
 MUTATIONS = {
