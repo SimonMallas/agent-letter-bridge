@@ -15,6 +15,10 @@ import urllib.parse
 # is the WebSocket handshake constant, and the case is part of the hash.
 GUID = "258EAFA5-" "E914-" "47DA-" "95CA-" "C5AB0DC85B11"
 MAX_FRAME = 4 * 1024 * 1024
+# One frame is already the largest message we will reassemble. A few dozen
+# fragments is enough for a real event and stops a fragment-per-byte peer.
+MAX_MESSAGE = MAX_FRAME
+MAX_FRAGMENTS = 32
 
 
 class WebSocketError(OSError):
@@ -28,6 +32,8 @@ class WebSocket:
         self.sock = sock
         self.buf = b""
         self._parts = []
+        self._deadline = None
+        self._clock = None
 
     def handshake(self, host, path):
         key = base64.b64encode(os.urandom(16)).decode("ascii")
@@ -70,7 +76,7 @@ class WebSocket:
     def ping(self, payload=b""):
         self._send(0x9, payload)
 
-    def recv(self):
+    def recv(self, deadline=None, clock=None):
         """Return the next frame: ("text", str), ("ping", bytes), ("pong", b"")
         or ("close", bytes).
 
@@ -78,7 +84,13 @@ class WebSocket:
         caller owns the deadline: Slack pings about every ten seconds, so a
         recv that answered pings and kept reading would never reach a timeout
         longer than that, and a fetch would never get control back.
+
+        deadline is an absolute clock() time. A read past it raises
+        socket.timeout and leaves the bytes already taken in buf.
         """
+        self._deadline = deadline
+        if clock is not None:
+            self._clock = clock
         while True:
             opcode, data, fin = self._read_frame()
             if opcode == 0x9:
@@ -88,18 +100,29 @@ class WebSocket:
                 return "pong", b""
             if opcode == 0x8:
                 return "close", data
-            if opcode == 0x1 or (opcode == 0x0 and self._parts):
-                self._parts.append(data)
-                if not fin:
-                    continue
-                try:
-                    text = b"".join(self._parts).decode("utf-8")
-                except UnicodeDecodeError as exc:
-                    self._parts = []
-                    raise WebSocketError("text frame is not utf-8") from exc
+            if opcode in (0x1, 0x2) and self._parts:
                 self._parts = []
-                return "text", text
-            raise WebSocketError("unsupported frame")
+                raise WebSocketError("message already started")
+            if opcode == 0x0 and not self._parts:
+                raise WebSocketError("continuation without a message")
+            if opcode != 0x1 and opcode != 0x0:
+                raise WebSocketError("unsupported frame")
+            self._parts.append(data)
+            if len(self._parts) > MAX_FRAGMENTS:
+                self._parts = []
+                raise WebSocketError("too many fragments")
+            if not fin:
+                continue
+            try:
+                text = b"".join(self._parts).decode("utf-8")
+            except UnicodeDecodeError as exc:
+                self._parts = []
+                raise WebSocketError("text frame is not utf-8") from exc
+            self._parts = []
+            return "text", text
+
+    def _incomplete(self):
+        return bool(self.buf or self._parts)
 
     def settimeout(self, seconds):
         self.sock.settimeout(seconds)
@@ -133,16 +156,32 @@ class WebSocket:
 
         A timeout propagates. The bytes stay in buf because a frame is sliced
         off only after it has been filled, so the next recv resumes it.
+        The caller's deadline is checked before every read, so one slow frame
+        cannot outlive the poll that asked for it.
         """
         while len(self.buf) < count:
+            self._honor_deadline()
             chunk = self.sock.recv(count - len(self.buf))
             if not chunk:
                 raise WebSocketError("socket closed")
             self.buf += chunk
 
+    def _honor_deadline(self):
+        deadline = self._deadline
+        if deadline is None:
+            return
+        remaining = deadline - self._clock()
+        if remaining <= 0:
+            raise socket.timeout("deadline")
+        self.sock.settimeout(remaining)
+
     def _read_frame(self):
         self._fill(2)
         first, second = self.buf[0], self.buf[1]
+        if first & 0x70:
+            raise WebSocketError("reserved bits set")
+        if second & 0x80:
+            raise WebSocketError("server frame is masked")
         size, offset = second & 0x7F, 2
         if size == 126:
             self._fill(4)
@@ -154,16 +193,19 @@ class WebSocket:
             offset = 10
         if size > MAX_FRAME:
             raise WebSocketError("frame too large")
-        if second & 0x80:
-            self._fill(offset + 4)
-            offset += 4
+        opcode = first & 0x0F
+        fin = bool(first & 0x80)
+        if opcode >= 0x8 and (not fin or size > 125):
+            raise WebSocketError("control frame refused")
+        if opcode in (0x1, 0x0):
+            pending = sum(len(part) for part in self._parts)
+            if pending + size > MAX_MESSAGE:
+                self._parts = []
+                raise WebSocketError("message too large")
         self._fill(offset + size)
-        mask = self.buf[offset - 4:offset] if second & 0x80 else None
         data = self.buf[offset:offset + size]
         self.buf = self.buf[offset + size:]
-        if mask is not None:
-            data = bytes(byte ^ mask[index % 4] for index, byte in enumerate(data))
-        return first & 0x0F, data, bool(first & 0x80)
+        return opcode, data, fin
 
 
 def connect(url, timeout=30):

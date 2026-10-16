@@ -1278,6 +1278,54 @@ EXTRA = {
         "                    continue\n"
         "                raise\n"
         "            if not chunk:\n"),
+    "reassembled message stays within one frame": (
+        SOCKET, "tests.test_slack_websocket",
+        "            if pending + size > MAX_MESSAGE:\n",
+        "            if pending + size > MAX_MESSAGE + MAX_MESSAGE:\n"),
+    "fragment count is bounded": (
+        SOCKET, "tests.test_slack_websocket",
+        "            if len(self._parts) > MAX_FRAGMENTS:\n",
+        "            if len(self._parts) > MAX_FRAGMENTS + 10 ** 9:\n"),
+    "control frames are final and small": (
+        SOCKET, "tests.test_slack_websocket",
+        "        if opcode >= 0x8 and (not fin or size > 125):\n"
+        "            raise WebSocketError(\"control frame refused\")\n",
+        ""),
+    "reserved bits are refused": (
+        SOCKET, "tests.test_slack_websocket",
+        "        if first & 0x70:\n"
+        "            raise WebSocketError(\"reserved bits set\")\n",
+        ""),
+    "a server frame is unmasked": (
+        SOCKET, "tests.test_slack_websocket",
+        "        if second & 0x80:\n"
+        "            raise WebSocketError(\"server frame is masked\")\n",
+        ""),
+    "a data frame cannot interrupt a message": (
+        SOCKET, "tests.test_slack_websocket",
+        "            if opcode in (0x1, 0x2) and self._parts:\n"
+        "                self._parts = []\n"
+        "                raise WebSocketError(\"message already started\")\n",
+        ""),
+    "a continuation needs a message": (
+        SOCKET, "tests.test_slack_websocket",
+        "            if opcode == 0x0 and not self._parts:\n"
+        "                raise WebSocketError(\"continuation without a message\")\n",
+        ""),
+    "a slow frame cannot outlive its deadline": (
+        SOCKET, "tests.test_slack_websocket",
+        "            self._honor_deadline()\n",
+        ""),
+    "the poll passes its deadline to recv": (
+        SLACK, "tests.test_slack_websocket",
+        "        if isinstance(self._ws, websocket.WebSocket):\n"
+        "            return self._ws.recv(deadline, self._clock)\n",
+        ""),
+    "a partial frame is not a silent socket": (
+        SLACK, "tests.test_slack_websocket",
+        "                if incomplete is not None and incomplete():\n"
+        "                    self._saw_frame = True\n",
+        ""),
 }
 
 MUTATIONS = {
