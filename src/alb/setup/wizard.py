@@ -134,7 +134,8 @@ def _consume_token_file(path):
 
 def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
          cmux_born=None, bridge_running=None, start_pane=None,
-         resident_command=_UNSET, token_file=None):
+         resident_command=_UNSET, token_file=None, platform="telegram",
+         app_token_file=None, slack_call=None):
     """Create the boilerplate under `root`, asking for what cannot be derived.
 
     `console` supplies say / ask / ask_secret, so the questions are testable
@@ -241,22 +242,16 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
                 console.say("as failing/unparseable until that helper ships.")
 
     # 3. The token. Never echoed, never an argument, never printed back.
-    console.say()
-    console.say("Bot token from @BotFather. It is written to a mode-600 file and")
-    console.say("not shown again. If this bot existed before, revoke and re-issue")
-    console.say("the token first - one consumer per token is enforced by the")
-    console.say("platform, and an old token cannot be proven unused.")
-    if token_file:
-        token = _consume_token_file(token_file)
-        console.say("  token read from file and the file was removed.")
+    app_token = ""
+    if platform == "slack":
+        from alb.setup import slack_wizard
+        slack_wizard.explain(console)
+        console.say()
+        token, app_token = slack_wizard.tokens(
+            console, _consume_token_file, bot_token_file=token_file,
+            app_token_file=app_token_file)
     else:
-        token = console.ask_secret("  token (not echoed): ").strip()
-    if not token:
-        # Say it NOW, not at first run. The file is still written - the rest of
-        # the boilerplate is real either way - but the operator leaves knowing
-        # exactly what is missing rather than discovering it at 3am.
-        console.say("  no token entered. The file is written without one, and the")
-        console.say("  bridge will refuse to start until ALB_TOKEN is filled in.")
+        token = _telegram_token(console, token_file)
 
     env_path = root / "bridge.env"
     env_path_existed = env_path.exists()
@@ -267,6 +262,9 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
         console.say(f"  kept {env_path} - it already exists, nothing was changed")
     else:
         lines = [f"ALB_TOKEN={token}\n"]
+        if platform == "slack":
+            lines = ["ALB_PLATFORM=slack\n", f"ALB_TOKEN={token}\n",
+                     f"ALB_APP_TOKEN={app_token}\n"]
         if mailbox:
             lines.append(f"ALB_MAIL_ROOT={mailbox}\n")
         if recipient:
@@ -302,7 +300,10 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     # 4. The allowlist. Written deny-all whatever else happens; an entry is
     #    added only from a value the operator supplied or explicitly asked us
     #    to read.
-    chats = _chat_ids(console, token, chat_id_reader)
+    if platform == "slack":
+        chats = slack_wizard.pairs(console, token, app_token, slack_call)
+    else:
+        chats = _chat_ids(console, token, chat_id_reader)
 
     allow_path = root / "allowlist.json"
     if allow_path.exists():
@@ -366,6 +367,26 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
 
     _closing(console, root, summary)
     return summary
+
+
+def _telegram_token(console, token_file):
+    console.say()
+    console.say("Bot token from @BotFather. It is written to a mode-600 file and")
+    console.say("not shown again. If this bot existed before, revoke and re-issue")
+    console.say("the token first - one consumer per token is enforced by the")
+    console.say("platform, and an old token cannot be proven unused.")
+    if token_file:
+        token = _consume_token_file(token_file)
+        console.say("  token read from file and the file was removed.")
+    else:
+        token = console.ask_secret("  token (not echoed): ").strip()
+    if not token:
+        # Say it NOW, not at first run. The file is still written - the rest of
+        # the boilerplate is real either way - but the operator leaves knowing
+        # exactly what is missing rather than discovering it at 3am.
+        console.say("  no token entered. The file is written without one, and the")
+        console.say("  bridge will refuse to start until ALB_TOKEN is filled in.")
+    return token
 
 
 def _cmux_born():

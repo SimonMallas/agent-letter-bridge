@@ -82,6 +82,27 @@ EXTRA = {
         "tests.test_slack_outbound",
         '    return {"thread": thread} if thread else {}',
         "    return {}"),
+    # --- Slack setup ----------------------------------------------------
+    "slack setup reads nothing unless asked": (
+        ROOT / "src" / "alb" / "setup" / "slack_wizard.py",
+        "tests.test_slack_setup",
+        '    if choice != "read" or not (bot and app):',
+        "    if not (bot and app):"),
+    "slack token prefixes are checked": (
+        ROOT / "src" / "alb" / "setup" / "slack_wizard.py",
+        "tests.test_slack_setup",
+        "    if token and not token.startswith(prefix):",
+        "    if False:"),
+    "slack allowlist only from an understood choice": (
+        ROOT / "src" / "alb" / "setup" / "slack_wizard.py",
+        "tests.test_slack_setup",
+        "    if not picked.isdigit() or not 1 <= int(picked) <= len(found):",
+        "    if not picked.isdigit():"),
+    "slack bot is not shown online while stopped": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "manifest.py",
+        "tests.test_slack_setup",
+        '            "display_name": "letterbox",\n',
+        '            "display_name": "letterbox",\n            "always_online": True,\n'),
     "grant platform must match the sender": (
         ROOT / "src" / "alb" / "initiate" / "send.py",
         "tests.test_slack_outbound",
