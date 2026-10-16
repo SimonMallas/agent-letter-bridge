@@ -229,3 +229,138 @@ class WebSocketClient(unittest.TestCase):
         self.assertEqual(sock.timeouts, 1)
         sock.release = True
         self.assertEqual(client.recv(), ("text", "hello"))
+
+    def test_reassembled_message_cannot_exceed_the_frame_limit(self):
+        """Two legal max-size fragments are one illegal message."""
+        size = websocket.MAX_FRAME
+        blob = server_frame(0x1, b"x" * size, fin=False) + server_frame(0x0, b"y" * size, fin=True)
+        sock = ScriptSocket(blob, [65536])
+        client = websocket.WebSocket(sock)
+        with self.assertRaises(websocket.WebSocketError):
+            client.recv()
+        self.assertLess(sock.pos, len(blob))
+
+    def test_fragment_count_is_bounded(self):
+        limit = websocket.MAX_FRAGMENTS
+        self.assertEqual(self._fragmented(limit).recv(), ("text", "a" * limit))
+        with self.assertRaises(websocket.WebSocketError):
+            self._fragmented(limit + 1).recv()
+
+    def _fragmented(self, count):
+        frames = [server_frame(0x1, b"a", fin=False)]
+        for _ in range(count - 2):
+            frames.append(server_frame(0x0, b"a", fin=False))
+        frames.append(server_frame(0x0, b"a", fin=True))
+        blob = b"".join(frames)
+        return websocket.WebSocket(ScriptSocket(blob, [len(blob)]))
+
+    def test_control_frames_must_be_final_and_small(self):
+        for label, frame in (
+            ("fragmented ping", server_frame(0x9, b"x", fin=False)),
+            ("oversized ping", server_frame(0x9, b"x" * 126)),
+            ("fragmented close", server_frame(0x8, b"\x03\xe8", fin=False)),
+        ):
+            with self.subTest(label):
+                client = websocket.WebSocket(ScriptSocket(frame, [len(frame)]))
+                with self.assertRaises(websocket.WebSocketError):
+                    client.recv()
+
+    def test_reserved_bits_are_refused(self):
+        frame = bytes((0xC1, 1)) + b"x"
+        client = websocket.WebSocket(ScriptSocket(frame, [len(frame)]))
+        with self.assertRaises(websocket.WebSocketError):
+            client.recv()
+
+    def test_a_new_data_frame_cannot_interrupt_a_message(self):
+        for opcode, payload in ((0x1, b"b"), (0x2, b"b")):
+            blob = server_frame(0x1, b"a", fin=False) + server_frame(opcode, payload, fin=True)
+            client = websocket.WebSocket(ScriptSocket(blob, [len(blob)]))
+            with self.assertRaises(websocket.WebSocketError):
+                client.recv()
+
+    def test_a_continuation_needs_a_message(self):
+        frame = server_frame(0x0, b"orphan", fin=True)
+        client = websocket.WebSocket(ScriptSocket(frame, [len(frame)]))
+        with self.assertRaises(websocket.WebSocketError):
+            client.recv()
+
+    def test_a_masked_server_frame_is_refused(self):
+        frame = bytes((0x81, 0x81)) + b"\x00\x00\x00\x00" + b"Z"
+        client = websocket.WebSocket(ScriptSocket(frame, [len(frame)]))
+        with self.assertRaises(websocket.WebSocketError):
+            client.recv()
+
+    def test_deadline_timeout_leaves_the_partial_frame_readable(self):
+        frame = server_frame(0x1, b"hello")
+        clock = _Clock()
+        sock = _Dribble(clock, frame)
+        client = websocket.WebSocket(sock)
+        start = clock()
+        with self.assertRaises(socket.timeout):
+            client.recv(start + 1, clock)
+        self.assertLess(clock() - start, 1.5)
+        self.assertGreater(len(client.buf), 0)
+        self.assertLess(len(client.buf), len(frame))
+        sock.fast = True
+        self.assertEqual(client.recv(clock() + 5, clock), ("text", "hello"))
+
+    def test_a_dribbling_peer_cannot_hold_the_poll(self):
+        """One byte per 0.9s must not turn a 1s poll into a 3.6s read."""
+        from alb.adapters.slack.api import Slack
+        frame = server_frame(0x1, b"{}")
+        clock = _Clock()
+        sock = _Dribble(clock, frame)
+        bridge = Slack("xoxb-" + "fixture", poll_timeout=1, clock=clock)
+        bridge._ws = websocket.WebSocket(sock)
+        bridge._team = "T0000001"
+        bridge._bot_user = "U0000009"
+        start = clock()
+        self.assertEqual(bridge.fetch(), [])
+        self.assertLess(clock() - start, 1.5)
+        sock.fast = True
+        self.assertEqual(bridge._ws.recv(clock() + 5, clock), ("text", "{}"))
+
+
+class _Clock:
+    def __init__(self):
+        self.now = 1700000000.0
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += float(seconds)
+
+
+class _Dribble:
+    """One byte every 0.9s, unless the socket timeout arrives first."""
+
+    def __init__(self, clock, payload):
+        self.clock = clock
+        self.data = bytearray(payload)
+        self.timeout = 30
+        self.fast = False
+
+    def settimeout(self, seconds):
+        self.timeout = seconds
+
+    def recv(self, size):
+        if self.fast:
+            take = min(size, len(self.data))
+            out = bytes(self.data[:take])
+            del self.data[:take]
+            return out
+        if not self.data:
+            self.clock.advance(self.timeout)
+            raise socket.timeout("quiet")
+        if self.timeout <= 0.9:
+            self.clock.advance(self.timeout)
+            raise socket.timeout("slow")
+        self.clock.advance(0.9)
+        return bytes([self.data.pop(0)])
+
+    def sendall(self, data):
+        return None
+
+    def close(self):
+        return None

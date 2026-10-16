@@ -204,6 +204,13 @@ class Slack:
             raise TransientFailure(f"network: slack {error}")
         return body if isinstance(body, dict) else {}
 
+    def _recv_until(self, deadline):
+        # The test doubles speak frames already. A real socket has to hear
+        # the same absolute deadline _fill rechecks between bytes.
+        if isinstance(self._ws, websocket.WebSocket):
+            return self._ws.recv(deadline, self._clock)
+        return self._ws.recv()
+
     def _await_hello(self):
         deadline = self._clock() + self.HELLO_TIMEOUT
         while self._clock() < deadline:
@@ -212,7 +219,7 @@ class Slack:
                 break
             self._ws.settimeout(remaining)
             try:
-                kind, data = self._ws.recv()
+                kind, data = self._recv_until(self._clock() + remaining)
             except socket.timeout:
                 break
             if kind != "text":
@@ -237,8 +244,14 @@ class Slack:
                 return
             self._ws.settimeout(remaining)
             try:
-                kind, data = self._ws.recv()
+                kind, data = self._recv_until(self._clock() + remaining)
             except socket.timeout:
+                # Bytes already in hand mean the peer is slow, not gone.
+                # Leave them buffered and do not spend the pong wait finishing
+                # a frame that already missed this poll.
+                incomplete = getattr(self._ws, "_incomplete", None)
+                if incomplete is not None and incomplete():
+                    self._saw_frame = True
                 return
             self._saw_frame = True
             if kind in ("pong", "ping"):
@@ -258,7 +271,7 @@ class Slack:
                 break
             self._ws.settimeout(remaining)
             try:
-                kind, data = self._ws.recv()
+                kind, data = self._recv_until(self._clock() + remaining)
             except socket.timeout:
                 continue
             if kind in ("pong", "ping"):
