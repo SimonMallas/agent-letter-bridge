@@ -89,6 +89,37 @@ EXTRA = {
         "tests.test_slack_outbound",
         '    return {"thread": thread} if thread else {}',
         "    return {}"),
+    # --- Discord outbound -----------------------------------------------
+    "discord agent text pings nobody": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        '        "allowed_mentions": {"parse": []},',
+        '        "allowed_mentions": {"parse": ["everyone", "users", "roles"]},'),
+    "discord refuses text over its limit": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        '    if len(text.encode("utf-16-le")) // 2 > MAX_TEXT:',
+        "    if len(text) > MAX_TEXT + 1000:"),
+    "discord 429 is throttled, not ambiguous": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        "        if status == 429:",
+        "        if status == 4290:"),
+    "discord server error is ambiguous": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        '            raise reply.AmbiguousOutcome(f"server error HTTP {status}") from None',
+        '            raise reply.DefiniteRefusal(f"server error HTTP {status}") from None'),
+    "discord reply goes where the letter was written": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        "    return post_in, message",
+        "    return channel, message"),
+    "discord destination must be a pair": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        "            or not _SNOWFLAKE.fullmatch(user)):",
+        "            or False):"),
     # --- Slack through the binary ----------------------------------------
     "slack socket is closed when the bridge exits": (
         ROOT / "src" / "alb" / "cli.py", "tests.test_slack_cli",
@@ -157,6 +188,27 @@ EXTRA = {
         "tests.test_slack_websocket",
         "                        and received > received_at_start):",
         "                        and received >= received_at_start):"),
+    # --- Discord setup --------------------------------------------------
+    "discord setup reads nothing unless asked": (
+        ROOT / "src" / "alb" / "setup" / "discord_wizard.py",
+        "tests.test_discord_setup",
+        '    if choice != "read" or not bot_token:',
+        "    if not bot_token:"),
+    "discord allowlist only from an understood user id": (
+        ROOT / "src" / "alb" / "setup" / "discord_wizard.py",
+        "tests.test_discord_setup",
+        "    if not _SNOWFLAKE.fullmatch(user):",
+        "    if not user:"),
+    "discord token shape is checked": (
+        ROOT / "src" / "alb" / "setup" / "discord_wizard.py",
+        "tests.test_discord_setup",
+        "    if value and not invite.looks_like_a_token(value):",
+        "    if False:"),
+    "discord invite asks only for named permissions": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "invite.py",
+        "tests.test_discord_setup",
+        "               | READ_MESSAGE_HISTORY | SEND_MESSAGES_IN_THREADS)",
+        "               | READ_MESSAGE_HISTORY | SEND_MESSAGES_IN_THREADS | 8)"),
     # --- Slack setup ----------------------------------------------------
     "slack setup reads nothing unless asked": (
         ROOT / "src" / "alb" / "setup" / "slack_wizard.py",
