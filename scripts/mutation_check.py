@@ -1414,6 +1414,10 @@ EXTRA = {
         DISCORD_API, "tests.test_discord_fixes",
         "        stamped[\"guild_id\"] = guild\n",
         "        stamped[\"guild_id\"] = \"\"\n"),
+    "only thread types have a thread parent": (
+        DISCORD_API, "tests.test_discord_fixes",
+        "        if record.get(\"type\") not in (10, 11, 12):\n",
+        "        if False and record.get(\"type\") not in (10, 11, 12):\n"),
 }
 
 MUTATIONS = {

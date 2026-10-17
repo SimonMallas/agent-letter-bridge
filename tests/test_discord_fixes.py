@@ -114,6 +114,39 @@ class Fixes(unittest.TestCase):
             [f"/channels/{CHANNEL}"],
         )
 
+    def test_a_category_parent_is_not_a_thread(self):
+        other = "100000000000000077"
+        category = "100000000000000088"
+        message_id = "100000000000000123"
+        self.channels[other] = {
+            "id": other, "type": 0, "guild_id": GUILD, "parent_id": category,
+        }
+        allow = self.root / "allowlist.json"
+        allow.write_text(json.dumps({"chats": [f"{CHANNEL}/{USER}"]}), encoding="utf-8")
+        bridge = Discord(
+            TOKEN, state=self.root / "state", allowlist_path=allow,
+            poll_timeout=1, call=self.call,
+            connect=Connect(self.clock, [hello(), ready(), message_create(
+                message_id, f"<@{BOT}> hi", channel=other, guild=GUILD,
+                mentions=[{"id": BOT}],
+            )]),
+            clock=self.clock, monotonic=self.clock,
+        )
+        items = bridge.fetch()
+        self.assertEqual([item["chat_id"] for item in items], [f"{other}/{USER}"])
+        for item in items:
+            bridge.ack(item["update_id"])
+        bridge.confirm()
+        saved = json.loads(
+            (self.root / "state" / "discord-markers.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(saved.get("threads") or {}, {})
+        self.assertNotIn(other, saved.get("parents") or {})
+        self.calls.clear()
+        bridge.fetch()
+        history = [path for _method, path in self.calls if "/messages" in path]
+        self.assertFalse(any(other in path or category in path for path in history))
+
 
 if __name__ == "__main__":
     unittest.main()

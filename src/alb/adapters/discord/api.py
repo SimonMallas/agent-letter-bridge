@@ -669,29 +669,16 @@ class Discord:
         if channel in self._allowlist_channels():
             return None
         self._load_markers()
-        cached = (self._markers.get("parents") or {}).get(channel)
-        if isinstance(cached, str) and cached:
-            return cached
         if events.normalise(message, bot_user=self._bot_user, parent=channel) is None:
             return None
-        self._beat_if_due()
-        try:
-            body = self._call("GET", f"/channels/{channel}", self._token)
-        except rest.HttpError as exc:
-            if exc.status == 429 or exc.status >= 500:
-                raise TransientFailure(
-                    f"discord deferred: HTTP {exc.status}", exc.retry_after,
-                ) from None
-            if exc.status in (403, 404):
-                return None
-            raise FetchFailed(f"discord refused: HTTP {exc.status}") from None
-        except OSError:
-            raise TransientFailure("network: discord channel") from None
-        except ValueError:
-            raise TransientFailure("network: discord unreadable response") from None
-        if not isinstance(body, dict):
+        record = self._channel_record(channel)
+        if not isinstance(record, dict):
             return None
-        parent = body.get("parent_id")
+        # 10 announcement thread, 11 public thread, 12 private thread.
+        # A category is also a parent_id, and it is not a thread.
+        if record.get("type") not in (10, 11, 12):
+            return None
+        parent = record.get("parent_id")
         if not isinstance(parent, str) or not parent:
             return None
         self._markers.setdefault("parents", {})[channel] = parent
