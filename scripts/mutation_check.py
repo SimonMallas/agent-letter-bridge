@@ -35,6 +35,7 @@ SOCKET = ROOT / "src" / "alb" / "adapters" / "websocket.py"
 DISCORD_REST = ROOT / "src" / "alb" / "adapters" / "discord" / "rest.py"
 DISCORD_EVENTS = ROOT / "src" / "alb" / "adapters" / "discord" / "events.py"
 DISCORD_API = ROOT / "src" / "alb" / "adapters" / "discord" / "api.py"
+MEDIA = ROOT / "src" / "alb" / "media" / "store.py"
 SLACK_WEB = ROOT / "src" / "alb" / "adapters" / "slack" / "web.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
 HERDR = ROOT / "src" / "alb" / "adapters" / "herdr" / "transport.py"
@@ -1401,6 +1402,10 @@ EXTRA = {
         DISCORD_API, "tests.test_discord_catchup",
         "self._clock() - self.FIRST_RUN_WINDOW",
         "self._clock() - 0"),
+    "discord update ids can be staged": (
+        MEDIA, "tests.test_discord_poller",
+        "^discord:[0-9]+:[0-9]+$",
+        "^discord:refused$"),
 }
 
 MUTATIONS = {
