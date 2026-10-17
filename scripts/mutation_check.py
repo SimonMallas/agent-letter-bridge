@@ -32,6 +32,7 @@ ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
 TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
 SLACK = ROOT / "src" / "alb" / "adapters" / "slack" / "api.py"
 SOCKET = ROOT / "src" / "alb" / "adapters" / "websocket.py"
+DISCORD_REST = ROOT / "src" / "alb" / "adapters" / "discord" / "rest.py"
 SLACK_WEB = ROOT / "src" / "alb" / "adapters" / "slack" / "web.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
 HERDR = ROOT / "src" / "alb" / "adapters" / "herdr" / "transport.py"
@@ -1351,6 +1352,21 @@ EXTRA = {
         SOCKET, "tests.test_discord_config",
         "        self._clock = time.monotonic if clock is None else clock\n",
         "        self._clock = clock\n"),
+    "discord redirects are refused": (
+        DISCORD_REST, "tests.test_discord_rest",
+        "    if status in (301, 302, 303, 307, 308):\n"
+        "        raise ValueError(\"redirect refused\")\n",
+        "    if False:\n"
+        "        raise ValueError(\"redirect refused\")\n"),
+    "discord cdn gets no authorization": (
+        DISCORD_REST, "tests.test_discord_rest",
+        "    request = urllib.request.Request(url, method=\"GET\")\n",
+        "    request = urllib.request.Request(url, method=\"GET\")\n"
+        "    request.add_header(\"Authorization\", \"Bot injected\")\n"),
+    "discord errors omit the response body": (
+        DISCORD_REST, "tests.test_discord_rest",
+        "        raise ValueError(\"discord response is not json\") from None\n",
+        "        raise ValueError(bytes(payload).decode(\"utf-8\", \"replace\")) from None\n"),
 }
 
 MUTATIONS = {
