@@ -1499,6 +1499,26 @@ EXTRA = {
         DISCORD_API, "tests.test_discord_fixes",
         "        if not full:\n",
         "        if False:\n"),
+    "unresolved thread lookup is not a denial": (
+        DISCORD_API, "tests.test_discord_hold",
+        "            if self._remember_unresolved(channel, message_id):\n",
+        "            if False and self._remember_unresolved(channel, message_id):\n"),
+    "a rate limit holds channels not yet read": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        self._pending.update(channels)\n",
+        "        self._pending.clear()\n"),
+    "gateway identifies share one attempt budget": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        if self._connect_attempts > self.CONNECT_ATTEMPTS:\n",
+        "        if False and self._connect_attempts > self.CONNECT_ATTEMPTS:\n"),
+    "a spent session budget does not identify": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        raise TransientFailure(\"discord deferred: session start limit\", retry)\n",
+        "        return\n"),
+    "a lapsed heartbeat is not a live cycle": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        return self._monotonic() > self._heartbeat_due + self._heartbeat_interval\n",
+        "        return False\n"),
 }
 
 MUTATIONS = {

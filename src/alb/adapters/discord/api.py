@@ -20,6 +20,8 @@ from alb.media import inspect as media_inspect
 # GUILD_MESSAGES (1 << 9) and DIRECT_MESSAGES (1 << 12). No privileged bit.
 INTENTS = (1 << 9) | (1 << 12)
 _DISCORD_EPOCH_MS = 1420070400000
+# A parent lookup that did not finish. Not a channel, and not a denial.
+_UNRESOLVED = object()
 
 _FATAL = {
     4004: "authentication failed",
@@ -42,6 +44,7 @@ class Discord:
     FIRST_RUN_WINDOW = 86400
     MAX_PAGES = 10
     MAX_THREADS = 200
+    CONNECT_ATTEMPTS = 3
 
     def __init__(self, token, *, state=None, allowlist_path=None, poll_timeout=25,
                  call=rest.call, connect=websocket.connect, clock=time.time,
@@ -77,6 +80,7 @@ class Discord:
         self._last_ack = None
         self._dispatch = None
         self._control = None
+        self._connect_attempts = 0
 
     def __repr__(self):
         return "<Discord bot>"
@@ -84,6 +88,11 @@ class Discord:
     def fetch(self, offset=None):
         self._seen.clear()
         self._requeue_inflight()
+        self._connect_attempts = 0
+        if self._ws is not None and self.heartbeat_expired():
+            # This cycle outran the gateway heartbeat. The socket may be
+            # dead. 4000 keeps the session resumable.
+            self._close_socket(4000)
         deferred = None
         try:
             try:
@@ -166,14 +175,23 @@ class Discord:
         # when a channel is still pending or mid-page. Not on every poll.
         self._load_markers()
         channels, threads = self._watched()
+        unresolved = list((self._markers.get("unresolved") or {}).keys())
         if not full:
-            wanted = set(self._pending) | set(self._resume_after)
+            wanted = set(self._pending) | set(self._resume_after) | set(unresolved)
+            if not wanted:
+                return
             channels = [channel for channel in channels if channel in wanted]
             threads = [item for item in threads if item[1] in wanted]
+        # Pending before the first read. A 429 must not let a channel we
+        # have not reached advance its marker from a live message.
+        self._pending.update(channels)
+        self._pending.update(thread for _parent, thread in threads)
+        self._pending.update(unresolved)
         for channel in channels:
             self._read_history(channel, None)
         for parent, thread in threads:
             self._read_history(thread, parent)
+        self._retry_unresolved()
 
     def _watched(self):
         channels = self._allowlist_channels()
@@ -362,6 +380,8 @@ class Discord:
 
     def _open_identify(self):
         info = self._call("GET", "/gateway/bot", self._token)
+        self._refuse_session_start(info)
+        self._spend_attempt()
         url = info.get("url") if isinstance(info, dict) else None
         if not isinstance(url, str) or not url.startswith("wss://"):
             raise TransientFailure("network: discord missing gateway")
@@ -376,6 +396,7 @@ class Discord:
         self._until(("READY",))
 
     def _open_resume(self, session):
+        self._spend_attempt()
         self._ws = self._connect(self._gateway_url(session["resume_gateway_url"]))
         self._dispatch = None
         self._finish_hello()
@@ -385,6 +406,26 @@ class Discord:
             "seq": session.get("seq"),
         }})
         self._until(("READY", "RESUMED"))
+
+    def _spend_attempt(self):
+        """One Identify or Resume. The budget is shared by the whole fetch."""
+        self._connect_attempts += 1
+        if self._connect_attempts > self.CONNECT_ATTEMPTS:
+            raise TransientFailure("network: discord gateway")
+
+    def _refuse_session_start(self, info):
+        """remaining 0 means do not Identify. Resume is decided elsewhere."""
+        limit = info.get("session_start_limit") if isinstance(info, dict) else None
+        if not isinstance(limit, dict):
+            return
+        remaining = limit.get("remaining")
+        if not isinstance(remaining, int) or isinstance(remaining, bool) or remaining != 0:
+            return
+        reset = limit.get("reset_after")
+        retry = None
+        if isinstance(reset, (int, float)) and not isinstance(reset, bool) and reset >= 0:
+            retry = float(reset) / 1000.0
+        raise TransientFailure("discord deferred: session start limit", retry)
 
     def _gateway_url(self, base):
         parsed = urllib.parse.urlsplit(base)
@@ -584,6 +625,12 @@ class Discord:
         self._awaiting_ack = True
         self._heartbeat_due = now + self._heartbeat_interval
 
+    def heartbeat_expired(self):
+        """A beat late by more than one interval is not a live cycle."""
+        if not self._heartbeat_interval or self._heartbeat_due is None:
+            return False
+        return self._monotonic() > self._heartbeat_due + self._heartbeat_interval
+
     def _ack_is_fresh(self):
         if self._last_ack is None or not self._heartbeat_interval:
             return False
@@ -647,6 +694,10 @@ class Discord:
             return
         if parent is None:
             parent = self._thread_parent(message)
+        if parent is _UNRESOLVED:
+            # The gateway will not redeliver this. The floor in the markers
+            # is what brings it back, after the lookup succeeds.
+            return
         item = events.normalise(message, bot_user=self._bot_user, parent=parent)
         channel = message.get("channel_id")
         message_id = message.get("id")
@@ -678,7 +729,28 @@ class Discord:
         self._load_markers()
         if events.normalise(message, bot_user=self._bot_user, parent=channel) is None:
             return None
-        record = self._channel_record(channel)
+        record = self._thread_record(channel, message.get("id"))
+        if record is _UNRESOLVED:
+            return _UNRESOLVED
+        parent = self._resolved_parent(record)
+        if parent is None:
+            return None
+        self._markers.setdefault("parents", {})[channel] = parent
+        return parent
+
+    def _thread_record(self, channel, message_id):
+        """The channel object, or UNRESOLVED when the lookup itself failed."""
+        try:
+            record = self._channel_record(channel)
+        except TransientFailure:
+            record = None
+        if record is None:
+            if self._remember_unresolved(channel, message_id):
+                return _UNRESOLVED
+            return None
+        return record
+
+    def _resolved_parent(self, record):
         if not isinstance(record, dict):
             return None
         # 10 announcement thread, 11 public thread, 12 private thread.
@@ -688,8 +760,55 @@ class Discord:
         parent = record.get("parent_id")
         if not isinstance(parent, str) or not parent:
             return None
-        self._markers.setdefault("parents", {})[channel] = parent
         return parent
+
+    def _remember_unresolved(self, channel, message_id):
+        """Keep the message below a floor until its thread parent is known.
+
+        History is `after` an id, exclusive. One below this message includes
+        it. A newer mention must not move the floor forward.
+        """
+        if not isinstance(message_id, str) or not message_id.isdigit():
+            return False
+        if int(message_id) <= 0:
+            return False
+        floor = str(int(message_id) - 1)
+        self._load_markers()
+        unresolved = self._markers.setdefault("unresolved", {})
+        current = unresolved.get(channel)
+        if not (isinstance(current, str) and current.isdigit()
+                and int(current) <= int(floor)):
+            unresolved[channel] = floor
+        self._pending.update((channel,))
+        self._persist_markers()
+        return True
+
+    def _retry_unresolved(self):
+        self._load_markers()
+        found = self._markers.get("unresolved")
+        if not isinstance(found, dict) or not found:
+            return
+        for thread, floor in list(found.items()):
+            try:
+                record = self._channel_record(thread)
+            except TransientFailure:
+                continue
+            if record is None:
+                continue
+            parent = self._resolved_parent(record)
+            if parent is None:
+                found.pop(thread, None)
+                self._pending.discard(thread)
+                continue
+            self._markers.setdefault("parents", {})[thread] = parent
+            stored = self._markers.setdefault("threads", {}).setdefault(parent, {})
+            if not (isinstance(stored.get(thread), str) and stored.get(thread)):
+                stored[thread] = floor if isinstance(floor, str) and floor.isdigit() else "0"
+            found.pop(thread, None)
+            self._pending.add(thread)
+            self._read_history(thread, parent)
+        if not found:
+            self._markers.pop("unresolved", None)
 
     def _stash_files(self, item):
         files = item.get("files")
@@ -847,6 +966,12 @@ class Discord:
             self._markers["parents"] = {
                 str(key): str(value) for key, value in parents.items()
                 if isinstance(value, str)
+            }
+        unresolved = data.get("unresolved")
+        if isinstance(unresolved, dict):
+            self._markers["unresolved"] = {
+                str(key): str(value) for key, value in unresolved.items()
+                if isinstance(value, str) and str(value).isdigit()
             }
 
     def _persist_markers(self):

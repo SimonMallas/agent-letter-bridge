@@ -457,5 +457,11 @@ def run_once(platform, transport, surface, root,
     # mail, and the platform told. A cycle that raised before this point
     # leaves the previous heartbeat, which is the honest signal.
     loop._write_heartbeat(root / "state" / "health.json")
+    # A Discord cycle that missed the gateway heartbeat is not idle-live.
+    expired = getattr(platform, "heartbeat_expired", None)
+    if callable(expired) and expired():
+        loop._write_heartbeat(
+            root / "state" / "health.json", state="degraded", reason="network",
+        )
 
     return published
