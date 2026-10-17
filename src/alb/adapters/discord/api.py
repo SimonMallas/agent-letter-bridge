@@ -84,7 +84,7 @@ class Discord:
         self._next_identify = None
         self._heartbeat_lapsed = False
         self._lookup_after = {}
-        self._history_after = {}
+        self._route_after = {}
         self._lookup_blocked_until = None
 
     def __repr__(self):
@@ -311,16 +311,25 @@ class Discord:
                                        blocked - now)
             failure.is_global = True
             raise failure
+        # A route's own 429 holds that route, whichever caller asks next.
+        route = path.split("?", 1)[0]
+        until = self._route_after.get(route)
+        if until is not None and now < until:
+            raise TransientFailure("discord deferred: rate limit", until - now)
         try:
             return self._call(method, path, self._token)
         except rest.HttpError as exc:
             delay = exc.retry_after
-            if (exc.status == 429 and exc.is_global
-                    and isinstance(delay, (int, float))
+            if (exc.status == 429 and isinstance(delay, (int, float))
                     and not isinstance(delay, bool) and delay >= 0):
                 until = self._monotonic() + float(delay)
-                if self._lookup_blocked_until is None or until > self._lookup_blocked_until:
-                    self._lookup_blocked_until = until
+                if exc.is_global:
+                    if self._lookup_blocked_until is None or until > self._lookup_blocked_until:
+                        self._lookup_blocked_until = until
+                else:
+                    current = self._route_after.get(route)
+                    if current is None or until > current:
+                        self._route_after[route] = until
             raise
 
     def _channel_record(self, channel):
@@ -371,8 +380,6 @@ class Discord:
         try:
             body = self._rest("GET", path)
         except rest.HttpError as exc:
-            if exc.status == 429 and not exc.is_global:
-                self._hold_history(channel, exc.retry_after)
             if exc.status == 429 or exc.status >= 500:
                 raise TransientFailure(
                     f"discord deferred: HTTP {exc.status}", exc.retry_after,
@@ -388,17 +395,15 @@ class Discord:
             return None
         return [row for row in body if isinstance(row, dict)]
 
-    def _hold_history(self, channel, delay):
-        if not isinstance(delay, (int, float)) or isinstance(delay, bool) or delay < 0:
-            return
-        until = self._monotonic() + float(delay)
-        current = self._history_after.get(channel)
-        if current is None or until > current:
-            self._history_after[channel] = until
+    def _route_waiting(self, route):
+        until = self._route_after.get(route)
+        return until is not None and self._monotonic() < until
 
     def _history_waiting(self, channel):
-        until = self._history_after.get(channel)
-        return until is not None and self._monotonic() < until
+        """A history read makes two calls: the channel, then its messages.
+        Either one held by Discord holds the read."""
+        return (self._route_waiting(f"/channels/{channel}")
+                or self._route_waiting(f"/channels/{channel}/messages"))
 
     def _queued(self):
         items = list(self._queue)
@@ -902,6 +907,8 @@ class Discord:
         now = self._monotonic()
         blocked = self._lookup_blocked_until
         if blocked is not None and now < blocked:
+            return True
+        if self._route_waiting(f"/channels/{thread}"):
             return True
         until = self._lookup_after.get(thread)
         return until is not None and now < until

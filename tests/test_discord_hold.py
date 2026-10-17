@@ -549,49 +549,59 @@ class Hold(unittest.TestCase):
         self.assertEqual(_bodies(box.root), ["held"])
 
     def test_a_history_rate_limit_waits_while_the_socket_is_live(self):
+        self._held_route("messages")
+
+    def test_a_channel_lookup_rate_limit_waits_while_the_socket_is_live(self):
+        self._held_route("channel")
+
+    def _held_route(self, route):
+        """A 429 on one channel's catch-up route, the socket healthy: that
+        route is asked once, the other channel is still read, and the held
+        message lands once the named wait has passed."""
         box = self._box()
         allow = box.allow(f"{CHANNEL}/{USER}", f"{OTHER}/{USER}")
         held_id = str(int(snowflake_at(box.clock() - 10)) + 1)
         other_id = str(int(held_id) + 1)
-        history = {CHANNEL: [], OTHER: []}
         limited = [True]
 
         def row(message_id, channel, text):
             return json.loads(message_create(message_id, text, channel=channel)[1])["d"]
 
-        history[CHANNEL].append(row(held_id, CHANNEL, "held back"))
-        history[OTHER].append(row(other_id, OTHER, "other channel"))
+        history = {CHANNEL: [row(held_id, CHANNEL, "held back")],
+                   OTHER: [row(other_id, OTHER, "other channel")]}
         requests = []
 
         def call(method, path, token, body=None, timeout=30, opener=None):
             for channel in (CHANNEL, OTHER):
                 if path == f"/channels/{channel}":
+                    if channel == CHANNEL and route == "channel":
+                        requests.append(box.clock())
+                        if limited[0]:
+                            raise HttpError(429, retry_after=300)
                     return {"id": channel, "type": 1}
                 if f"/channels/{channel}/messages?" in path:
-                    requests.append((box.clock(), channel))
-                    if channel == CHANNEL and limited[0]:
-                        raise HttpError(429, retry_after=300)
+                    if channel == CHANNEL and route == "messages":
+                        requests.append(box.clock())
+                        if limited[0]:
+                            raise HttpError(429, retry_after=300)
                     return [m for m in history[channel] if int(m["id"]) > _after(path)]
             return box.call(method, path, token, body)
 
-        sock = FakeSocket(box.clock, [hello(), ready()])
+        sockets = [FakeSocket(box.clock, [hello(), ready()])]
         bridge = Discord(
             TOKEN, state=box.root / "state", allowlist_path=allow,
-            poll_timeout=1, call=call, connect=lambda url, timeout=30: sock,
+            poll_timeout=1, call=call, connect=lambda url, timeout=30: sockets[-1],
             clock=box.clock, monotonic=box.clock,
         )
         start = box.clock()
         for _ in range(4):
             run.run_once(bridge, None, "", box.root)
-        held = [at for at, channel in requests if channel == CHANNEL]
-        self.assertEqual(held, [start], "the limited route is asked once")
+        self.assertEqual(requests, [start], "the limited route is asked once")
         self.assertIn("other channel", _bodies(box.root))
         self.assertNotIn("held back", _bodies(box.root))
-        # After the named wait, the route is read and the message lands.
         limited[0] = False
         box.clock.advance(300)
-        bridge._close_socket(4000)
-        sock = FakeSocket(box.clock, [hello(), ready()])
+        sockets.append(FakeSocket(box.clock, [hello(), ready()]))
         run.run_once(bridge, None, "", box.root)
         self.assertIn("held back", _bodies(box.root))
 

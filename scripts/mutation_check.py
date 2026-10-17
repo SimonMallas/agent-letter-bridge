@@ -1531,6 +1531,10 @@ EXTRA = {
         DISCORD_API, "tests.test_discord_hold",
         "        if blocked is not None and now < blocked:\n            failure = TransientFailure(\"discord deferred: global rate limit\",\n",
         "        if False:\n            failure = TransientFailure(\"discord deferred: global rate limit\",\n"),
+    "every discord route waits out its own rate limit": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        if until is not None and now < until:\n            raise TransientFailure(\"discord deferred: rate limit\", until - now)\n",
+        "        if False:\n            raise TransientFailure(\"discord deferred: rate limit\", until - now)\n"),
     "a discord history rate limit is waited out": (
         DISCORD_API, "tests.test_discord_hold",
         "        if self._history_waiting(channel):\n",
