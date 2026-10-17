@@ -554,6 +554,29 @@ class Hold(unittest.TestCase):
     def test_a_channel_lookup_rate_limit_waits_while_the_socket_is_live(self):
         self._held_route("channel")
 
+    def test_a_rate_limited_gateway_url_is_not_asked_again_early(self):
+        # No socket and no catch-up to skip it: only the REST gate itself
+        # can hold this route.
+        clock = Clock()
+        calls = []
+
+        def call(method, path, token, body=None, timeout=30, opener=None):
+            calls.append((clock(), path))
+            raise HttpError(429, retry_after=60)
+
+        bridge = Discord(TOKEN, call=call, connect=lambda url, timeout=30: None,
+                         clock=clock, monotonic=clock)
+        for _ in range(3):
+            with self.assertRaises(TransientFailure) as caught:
+                bridge.fetch()
+            clock.advance(10)
+        self.assertEqual([path for _at, path in calls], ["/gateway/bot"])
+        self.assertGreater(caught.exception.retry_after, 0)
+        clock.advance(60)
+        with self.assertRaises(TransientFailure):
+            bridge.fetch()
+        self.assertEqual(len(calls), 2, "asked again once the wait has passed")
+
     def _held_route(self, route):
         """A 429 on one channel's catch-up route, the socket healthy: that
         route is asked once, the other channel is still read, and the held
