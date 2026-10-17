@@ -1418,6 +1418,10 @@ EXTRA = {
         DISCORD_API, "tests.test_discord_fixes",
         "        if record.get(\"type\") not in (10, 11, 12):\n",
         "        if False and record.get(\"type\") not in (10, 11, 12):\n"),
+    "catch-up is not every poll": (
+        DISCORD_API, "tests.test_discord_fixes",
+        "        if not full and not self._pending and not self._resume_after:\n",
+        "        if False and not full and not self._pending and not self._resume_after:\n"),
 }
 
 MUTATIONS = {

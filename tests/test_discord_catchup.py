@@ -254,6 +254,11 @@ class CatchUp(unittest.TestCase):
         self.assertEqual(saved["parents"][THREAD], PARENT)
         self.calls.clear()
         bridge.fetch()
+        quiet = [path for _method, path in self.calls if "/messages?" in path]
+        self.assertEqual(quiet, [])
+        bridge.close()
+        self.calls.clear()
+        bridge.fetch()
         history = [path for _method, path in self.calls if path.startswith(
             f"/channels/{THREAD}/messages?",
         )]

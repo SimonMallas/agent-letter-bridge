@@ -147,6 +147,29 @@ class Fixes(unittest.TestCase):
         history = [path for _method, path in self.calls if "/messages" in path]
         self.assertFalse(any(other in path or category in path for path in history))
 
+    def test_catch_up_runs_on_connect_not_every_poll(self):
+        allow = self.root / "allowlist.json"
+        allow.write_text(json.dumps({"chats": [f"{CHANNEL}/{USER}"]}), encoding="utf-8")
+        scripts = [[hello(), ready()], [hello(), resumed()]]
+
+        def connect(url, timeout=30):
+            return FakeSocket(self.clock, scripts.pop(0), ack=True)
+
+        bridge = Discord(
+            TOKEN, state=self.root / "state", allowlist_path=allow,
+            poll_timeout=1, call=self.call, connect=connect,
+            clock=self.clock, monotonic=self.clock,
+        )
+        bridge.fetch()
+        self.assertTrue(any("/messages?" in path for _method, path in self.calls))
+        self.calls.clear()
+        bridge.fetch()
+        self.assertFalse(any("/messages?" in path for _method, path in self.calls))
+        bridge.close()
+        self.calls.clear()
+        bridge.fetch()
+        self.assertTrue(any("/messages?" in path for _method, path in self.calls))
+
 
 if __name__ == "__main__":
     unittest.main()

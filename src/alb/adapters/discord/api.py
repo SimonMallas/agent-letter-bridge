@@ -87,8 +87,9 @@ class Discord:
         deferred = None
         try:
             try:
+                reconnecting = self._ws is None
                 self._ensure_connection()
-                self._catch_up()
+                self._catch_up(full=reconnecting)
             except TransientFailure as exc:
                 deferred = exc
             if self._ws is not None:
@@ -158,11 +159,19 @@ class Discord:
             raise FetchFailed("photo download refused") from None
         return data
 
-    def _catch_up(self):
+    def _catch_up(self, full=True):
         if not self._bot_user:
+            return
+        # A live socket already has the gateway. Read history on connect, and
+        # when a channel is still pending or mid-page. Not on every poll.
+        if not full and not self._pending and not self._resume_after:
             return
         self._load_markers()
         channels, threads = self._watched()
+        if not full:
+            wanted = set(self._pending) | set(self._resume_after)
+            channels = [channel for channel in channels if channel in wanted]
+            threads = [item for item in threads if item[1] in wanted]
         for channel in channels:
             self._read_history(channel, None)
         for parent, thread in threads:
