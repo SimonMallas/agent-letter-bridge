@@ -24,7 +24,7 @@ through the two tokens and the allowlist pair. `--status`, `--check` and
 second connection on the same Slack app. Telegram configs, state, letters and
 output are unchanged. See [`docs/slack.md`](docs/slack.md).
 
-## [0.4.4] — Unreleased
+## [0.4.4] — 2026-09-30
 
 ### Added
 
@@ -33,7 +33,7 @@ A Herdr plugin in `herdr/`: one action opens a popup with `alb --status`
 plugin's `alb-plugin.env`. The file is parsed, never sourced; the popup loads
 no token, makes no network call and strips C0 and C1 control characters.
 
-## [0.4.3] — Unreleased
+## [0.4.3] — 2026-09-30
 
 ### Added
 
@@ -44,7 +44,7 @@ dialog before typing anything; ring health records its code
 `ALB_HERDR_SOCKET` pins the Herdr server. `alb --init` does not discover
 Herdr panes yet: set `ALB_NOTIFIER` and `ALB_SURFACE` by hand.
 
-## [0.4.2] — Unreleased
+## [0.4.2] — 2026-09-25
 
 ### Changed
 
@@ -57,7 +57,7 @@ clock limits, when that window next opens in Europe/London. If the hour and
 the day are both full, both are named. The count is what was already sent.
 Replies to an inbound letter are not counted against these limits.
 
-## [0.4.1] — Unreleased
+## [0.4.1] — 2026-09-24
 
 ### Fixed
 
