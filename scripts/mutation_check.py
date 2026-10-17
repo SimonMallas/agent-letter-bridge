@@ -85,6 +85,37 @@ EXTRA = {
         "tests.test_slack_outbound",
         '    return {"thread": thread} if thread else {}',
         "    return {}"),
+    # --- Discord outbound -----------------------------------------------
+    "discord agent text pings nobody": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        '        "allowed_mentions": {"parse": []},',
+        '        "allowed_mentions": {"parse": ["everyone", "users", "roles"]},'),
+    "discord refuses text over its limit": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        '    if len(text.encode("utf-16-le")) // 2 > MAX_TEXT:',
+        "    if len(text) > MAX_TEXT + 1000:"),
+    "discord 429 is throttled, not ambiguous": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        "        if status == 429:",
+        "        if status == 4290:"),
+    "discord server error is ambiguous": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        '            raise reply.AmbiguousOutcome(f"server error HTTP {status}") from None',
+        '            raise reply.DefiniteRefusal(f"server error HTTP {status}") from None'),
+    "discord reply goes where the letter was written": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        "    return post_in, message",
+        "    return channel, message"),
+    "discord destination must be a pair": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        "            or not _SNOWFLAKE.fullmatch(user)):",
+        "            or False):"),
     # --- Slack through the binary ----------------------------------------
     "slack socket is closed when the bridge exits": (
         ROOT / "src" / "alb" / "cli.py", "tests.test_slack_cli",
