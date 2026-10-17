@@ -164,8 +164,6 @@ class Discord:
             return
         # A live socket already has the gateway. Read history on connect, and
         # when a channel is still pending or mid-page. Not on every poll.
-        if not full and not self._pending and not self._resume_after:
-            return
         self._load_markers()
         channels, threads = self._watched()
         if not full:
