@@ -31,7 +31,7 @@ OUTBOUND = ROOT / "src" / "alb" / "outbound" / "store.py"
 ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
 TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
 SLACK = ROOT / "src" / "alb" / "adapters" / "slack" / "api.py"
-SOCKET = ROOT / "src" / "alb" / "adapters" / "slack" / "websocket.py"
+SOCKET = ROOT / "src" / "alb" / "adapters" / "websocket.py"
 SLACK_WEB = ROOT / "src" / "alb" / "adapters" / "slack" / "web.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
 HERDR = ROOT / "src" / "alb" / "adapters" / "herdr" / "transport.py"
@@ -119,7 +119,7 @@ EXTRA = {
         ""),
     # --- Found by the live round trip ------------------------------------
     "a server ping returns control to the caller": (
-        ROOT / "src" / "alb" / "adapters" / "slack" / "websocket.py",
+        ROOT / "src" / "alb" / "adapters" / "websocket.py",
         "tests.test_slack_websocket",
         '                self._send(0xA, data)\n                return "ping", data',
         "                self._send(0xA, data)\n                continue"),
@@ -1332,6 +1332,25 @@ EXTRA = {
         "                    self._saw_frame = True\n",
         "                        and received > received_at_start):\n"
         "                    pass\n"),
+    # --- Discord inbound -------------------------------------------------
+    "discord refuses an app token": (
+        BRIDGE, "tests.test_discord_config",
+        "        if app_token:\n"
+        "            raise ConfigError(\n"
+        "                \"ALB_APP_TOKEN is set on a discord bridge, where nothing \"\n",
+        "        if False:\n"
+        "            raise ConfigError(\n"
+        "                \"ALB_APP_TOKEN is set on a discord bridge, where nothing \"\n"),
+    "discord refuses a foreign token shape": (
+        BRIDGE, "tests.test_discord_config",
+        "        kind = _other_platform_token(config.get(\"ALB_TOKEN\", \"\"))\n"
+        "        if kind:\n",
+        "        kind = _other_platform_token(config.get(\"ALB_TOKEN\", \"\"))\n"
+        "        if False:\n"),
+    "recv clock defaults to monotonic": (
+        SOCKET, "tests.test_discord_config",
+        "        self._clock = time.monotonic if clock is None else clock\n",
+        "        self._clock = clock\n"),
 }
 
 MUTATIONS = {
