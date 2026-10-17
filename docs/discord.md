@@ -31,8 +31,10 @@ alb --init --platform discord --root ~/.alb-discord
 `--init` walks you through it in this order:
 
 1. **Create the application.** Open
-   <https://discord.com/developers/applications>, choose **New Application**,
-   and on its **Bot** page:
+   <https://discord.com/developers/applications> and choose **New
+   Application**. On its **Installation** page, set **Install Link** to
+   **None** and save; Discord refuses to make a bot private while it has an
+   install link. Then, on its **Bot** page:
    - turn **Public Bot** off, so only you can add it to a server;
    - leave every **Privileged Gateway Intent** off — the bridge needs none;
    - choose **Reset Token** and copy the token.

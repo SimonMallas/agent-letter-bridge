@@ -111,6 +111,8 @@ class Token(unittest.TestCase):
     def test_explain_says_to_turn_off_public_bot_and_leave_intents_off(self):
         console = ScriptedConsole()
         discord_wizard.explain(console)
+        self.assertLess(console.transcript.index("Install Link"),
+                        console.transcript.index("turn OFF Public Bot"))
         self.assertIn("turn OFF Public Bot", console.transcript)
         self.assertIn("Privileged Gateway Intent OFF", console.transcript)
 
