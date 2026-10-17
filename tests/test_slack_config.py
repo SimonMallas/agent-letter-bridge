@@ -34,7 +34,7 @@ class SlackConfig(unittest.TestCase):
         self.assertIn("ALB_APP_TOKEN", str(caught.exception))
 
     def test_unknown_platform_is_refused(self):
-        self._write("ALB_PLATFORM=discord\nALB_TOKEN=1:x\n")
+        self._write("ALB_PLATFORM=matrix\nALB_TOKEN=1:x\n")
         with self.assertRaises(run.ConfigError) as caught:
             run.load_config(self.path)
         message = str(caught.exception)

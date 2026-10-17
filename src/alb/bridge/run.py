@@ -37,7 +37,7 @@ NOTIFIERS = ("cmux", "tmux", "herdr")
 
 # Platforms that exist. Absent means telegram, the only one this file used to
 # know. Naming one that does not is refused rather than defaulted.
-PLATFORMS = ("telegram", "slack")
+PLATFORMS = ("telegram", "slack", "discord")
 
 # Surface values that are an unfinished edit rather than a pane. This build ran
 # for days on ALB_SURFACE=PLACEHOLDER: every ring failed, and because ring
@@ -155,6 +155,17 @@ def make_sender(config):
     return telegram_api.Telegram(config["ALB_TOKEN"])
 
 
+def _other_platform_token(token):
+    """Slack and Telegram tokens have a shape. The value is never returned."""
+    text = str(token)
+    if text.startswith("xox") or text.startswith("xapp-"):
+        return "slack"
+    head, sep, _rest = text.partition(":")
+    if sep and head.isdigit() and head:
+        return "telegram"
+    return ""
+
+
 def _check_platform(config):
     """Refuse a platform the process would not actually run.
 
@@ -170,6 +181,18 @@ def _check_platform(config):
             f"{', '.join(PLATFORMS)}."
         )
     app_token = config.get("ALB_APP_TOKEN", "")
+    if platform == "discord":
+        if app_token:
+            raise ConfigError(
+                "ALB_APP_TOKEN is set on a discord bridge, where nothing "
+                "reads it. Remove it."
+            )
+        kind = _other_platform_token(config.get("ALB_TOKEN", ""))
+        if kind:
+            raise ConfigError(
+                f"ALB_TOKEN on a discord bridge has the shape of a {kind} token."
+            )
+        return
     if platform != "slack":
         if app_token:
             raise ConfigError(

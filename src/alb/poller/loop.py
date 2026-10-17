@@ -206,8 +206,8 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
     # live in private state. Derived from the ledger's home when not given,
     # so existing callers keep working and everything private stays together.
     state = pathlib.Path(state) if state else pathlib.Path(ledger).parent
-    # A platform that does not name itself is the Telegram bridge. Slack sets
-    # name, and that name is what the index and the correspondent key use.
+    # A platform that does not name itself is the Telegram bridge. Slack and
+    # Discord set name, and that name is what the index and correspondent use.
     name = getattr(platform, "name", "telegram")
 
     result = Cycle()

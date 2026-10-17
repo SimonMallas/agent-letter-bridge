@@ -34,9 +34,10 @@ def _safe_letter(letter_id):
     return letter_id
 
 
-# Slack source ids are not digits. The staging directory is still a single
-# safe path component: a short hash, never the raw id.
+# Slack and Discord source ids are not digits. The staging directory is still
+# a single safe path component: a short hash, never the raw id.
 _SLACK_UPDATE = re.compile(r"^slack:[A-Z0-9]+:[A-Z0-9]+:[0-9]+\.[0-9]+$")
+_DISCORD_UPDATE = re.compile(r"^discord:[0-9]+:[0-9]+$")
 
 
 def _safe_update_id(update_id):
@@ -45,6 +46,8 @@ def _safe_update_id(update_id):
         return key
     if _SLACK_UPDATE.fullmatch(key):
         return "s" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
+    if _DISCORD_UPDATE.fullmatch(key):
+        return "d" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
     raise MediaError("update id refused")
 
 
