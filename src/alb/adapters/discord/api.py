@@ -388,13 +388,15 @@ class Discord:
         info = self._call("GET", "/gateway/bot", self._token)
         self._refuse_session_start(info)
         self._spend_attempt()
-        self._take_identify_slot(info)
         url = info.get("url") if isinstance(info, dict) else None
         if not isinstance(url, str) or not url.startswith("wss://"):
             raise TransientFailure("network: discord missing gateway")
         self._ws = self._connect(self._gateway_url(url))
         self._dispatch = None
         self._finish_hello()
+        # The window is counted from the Identify itself: a slow connect or
+        # Hello must not let two Identifies land closer than the limit.
+        self._take_identify_slot(info)
         self._send({"op": 2, "d": {
             "token": self._token,
             "intents": self.INTENTS,
@@ -445,10 +447,16 @@ class Discord:
         return 5.0 / concurrency
 
     def _take_identify_slot(self, info):
-        """Wait out a short gap. The next Identify time survives this fetch."""
+        """Wait out a short gap. The next Identify time survives this fetch.
+
+        Runs on an open socket after Hello. The gap is at most five seconds,
+        and the first heartbeat has just gone out, so none falls due during
+        it at any interval Discord sends; a beat that does fall due is sent.
+        """
         now = self._monotonic()
-        if self._next_identify is not None and now < self._next_identify:
-            self._pause(self._next_identify - now)
+        while self._next_identify is not None and now < self._next_identify:
+            self._beat_if_due()
+            self._pause(min(self._next_identify - now, 1.0))
             now = self._monotonic()
         self._next_identify = now + self._identify_spacing(info)
 
@@ -772,12 +780,19 @@ class Discord:
         return parent
 
     def _thread_record(self, channel, message_id):
-        """The channel object, or UNRESOLVED when the lookup itself failed."""
-        try:
-            record = self._channel_record(channel)
-        except TransientFailure as exc:
-            self._note_lookup_delay(channel, exc)
+        """The channel object, or UNRESOLVED when the lookup itself failed.
+
+        A lookup Discord asked us to wait on is not tried again for a new
+        mention either: the mention joins the unresolved floor instead.
+        """
+        if self._lookup_waiting(channel):
             record = None
+        else:
+            try:
+                record = self._channel_record(channel)
+            except TransientFailure as exc:
+                self._note_lookup_delay(channel, exc)
+                record = None
         if record is None:
             if self._remember_unresolved(channel, message_id):
                 return _UNRESOLVED

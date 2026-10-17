@@ -29,6 +29,10 @@ def _bodies(root):
     return found
 
 
+def _global_429(retry_after):
+    return HttpError(429, retry_after=retry_after, is_global=True)
+
+
 def _after(path):
     return int(urllib.parse.parse_qs(urllib.parse.urlsplit(path).query)["after"][0])
 
@@ -309,7 +313,16 @@ class Hold(unittest.TestCase):
                 self.assertEqual(len(times), 6)
                 self.assertTrue(all(gap >= 5 for gap in gaps), gaps)
 
-    def _identify_times(self, frame):
+    def test_identify_spacing_counts_from_the_identify_itself(self):
+        # A slow first connect must not let the next Identify land early.
+        for frame in ({"op": 7, "d": None}, {"op": 9, "d": True}):
+            with self.subTest(op=frame["op"], resumable=frame["d"]):
+                times = self._identify_times(frame, first_connect_delay=4)
+                gaps = [later - earlier for earlier, later in zip(times, times[1:])]
+                self.assertEqual(len(times), 6)
+                self.assertTrue(all(gap >= 5 for gap in gaps), (times, gaps))
+
+    def _identify_times(self, frame, first_connect_delay=0):
         clock = Clock()
         sockets = []
 
@@ -323,6 +336,8 @@ class Hold(unittest.TestCase):
             }
 
         def connect(url, timeout=30):
+            if not sockets:
+                clock.advance(first_connect_delay)
             sock = FakeSocket(clock, [hello(), text_frame(frame)], ack=True)
             sockets.append(sock)
             return sock
@@ -475,7 +490,18 @@ class Hold(unittest.TestCase):
         self.assertGreaterEqual(len(lookups), 2)
         self.assertEqual(health, ["running", "running"])
 
-    def _persistent_lookup(self, failure, cycles=3):
+    def test_a_live_mention_does_not_retry_a_waiting_lookup(self):
+        for failure in (HttpError(429, retry_after=300),
+                        _global_429(retry_after=300)):
+            with self.subTest(is_global=getattr(failure, "is_global", False)):
+                lookups, health, saved = self._persistent_lookup(
+                    failure, new_mention_each_cycle=True,
+                )
+                self.assertEqual(len(lookups), 1)
+                self.assertEqual(health, ["running", "running", "running"])
+                self.assertIn(THREAD, saved.get("unresolved") or {})
+
+    def _persistent_lookup(self, failure, cycles=3, new_mention_each_cycle=False):
         box = self._box()
         allow = box.allow(f"{CHANNEL}/{USER}")
         lookups = []
@@ -502,7 +528,12 @@ class Hold(unittest.TestCase):
             clock=box.clock, monotonic=box.clock,
         )
         health = []
-        for _ in range(cycles):
+        for cycle in range(cycles):
+            if new_mention_each_cycle and cycle:
+                sock.frames.append(message_create(
+                    str(int(message_id) + cycle), f"<@{BOT}> again {cycle}",
+                    channel=THREAD, guild=GUILD, mentions=[{"id": BOT}],
+                ))
             result = run.run_once(bridge, None, "", box.root)
             self.assertEqual(len(result), 0)
             saved = json.loads((box.root / "state" / "health.json").read_text())

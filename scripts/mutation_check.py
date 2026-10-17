@@ -1521,8 +1521,16 @@ EXTRA = {
         "        return False\n"),
     "identifies wait out one shared start window": (
         DISCORD_API, "tests.test_discord_hold",
-        "        if self._next_identify is not None and now < self._next_identify:\n",
-        "        if False and self._next_identify is not None and now < self._next_identify:\n"),
+        "        while self._next_identify is not None and now < self._next_identify:\n",
+        "        while False and self._next_identify is not None and now < self._next_identify:\n"),
+    "the identify window counts from the identify": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        self._take_identify_slot(info)\n        self._send({\"op\": 2, \"d\": {\n",
+        "        self._send({\"op\": 2, \"d\": {\n"),
+    "a live mention waits on a rate-limited lookup": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        if self._lookup_waiting(channel):\n            record = None\n",
+        "        if False:\n            record = None\n"),
     "a late heartbeat stays lapsed": (
         DISCORD_API, "tests.test_discord_hold",
         "        if now > self._heartbeat_due + self._heartbeat_interval:\n",
