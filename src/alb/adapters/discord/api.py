@@ -3,6 +3,7 @@
 Discord does not acknowledge events. confirm() is what moves a marker, after
 the poller has the letter on disk or has decided to drop it.
 """
+import base64
 import json
 import os
 import pathlib
@@ -54,7 +55,7 @@ class Discord:
         self._clock = clock
         self._monotonic = monotonic
         self._ws = None
-        self._bot_user = None
+        self._bot_user = bot_user_from_token(token)
         self._session_id = None
         self._resume_url = None
         self._seq = None
@@ -66,6 +67,7 @@ class Discord:
         self._staged = {}
         self._pending = set()
         self._resume_after = {}
+        self._channel_cache = {}
         self._markers = None
         self._file_urls = {}
         self._inflight = []
@@ -85,8 +87,9 @@ class Discord:
         deferred = None
         try:
             try:
+                reconnecting = self._ws is None
                 self._ensure_connection()
-                self._catch_up()
+                self._catch_up(full=reconnecting)
             except TransientFailure as exc:
                 deferred = exc
             if self._ws is not None:
@@ -156,11 +159,17 @@ class Discord:
             raise FetchFailed("photo download refused") from None
         return data
 
-    def _catch_up(self):
+    def _catch_up(self, full=True):
         if not self._bot_user:
             return
+        # A live socket already has the gateway. Read history on connect, and
+        # when a channel is still pending or mid-page. Not on every poll.
         self._load_markers()
         channels, threads = self._watched()
+        if not full:
+            wanted = set(self._pending) | set(self._resume_after)
+            channels = [channel for channel in channels if channel in wanted]
+            threads = [item for item in threads if item[1] in wanted]
         for channel in channels:
             self._read_history(channel, None)
         for parent, thread in threads:
@@ -203,6 +212,12 @@ class Discord:
         # Stay pending until this page run finishes, so confirm cannot move
         # the marker across a read that did not succeed.
         self._pending.add(channel)
+        record = self._channel_record(channel)
+        if record is None:
+            return
+        if record == "skip":
+            self._pending.discard(channel)
+            return
         after = (
             self._resume_after.get(channel)
             or self._stored_after(channel, parent)
@@ -229,7 +244,7 @@ class Discord:
                 return
             ordered.sort(key=lambda row: int(row["id"]))
             for row in ordered:
-                self._ingest(row, parent=parent)
+                self._ingest(self._with_guild(row, record), parent=parent)
             after = str(max(int(row["id"]) for row in ordered))
             self._resume_after[channel] = after
             if len(rows) < 100:
@@ -248,6 +263,47 @@ class Discord:
         if isinstance(current, str) and current:
             return current
         return snowflake_at(self._clock() - self.FIRST_RUN_WINDOW)
+
+    def _channel_record(self, channel):
+        """One GET /channels/{id}, reused. History rows do not carry a guild."""
+        if channel in self._channel_cache:
+            return self._channel_cache[channel]
+        self._beat_if_due()
+        try:
+            body = self._call("GET", f"/channels/{channel}", self._token)
+        except rest.HttpError as exc:
+            if exc.status == 429 or exc.status >= 500:
+                raise TransientFailure(
+                    f"discord deferred: HTTP {exc.status}", exc.retry_after,
+                ) from None
+            if exc.status in (403, 404):
+                self._channel_cache[channel] = "skip"
+                return "skip"
+            raise FetchFailed(f"discord refused: HTTP {exc.status}") from None
+        except OSError:
+            return None
+        except ValueError:
+            return None
+        if not isinstance(body, dict):
+            return None
+        kind = body.get("type")
+        guild = body.get("guild_id")
+        parent = body.get("parent_id")
+        record = {
+            "type": kind if isinstance(kind, int) else None,
+            "guild_id": guild if isinstance(guild, str) else "",
+            "parent_id": parent if isinstance(parent, str) else "",
+        }
+        self._channel_cache[channel] = record
+        return record
+
+    def _with_guild(self, row, record):
+        guild = record.get("guild_id") if isinstance(record, dict) else ""
+        if not guild or row.get("guild_id"):
+            return row
+        stamped = dict(row)
+        stamped["guild_id"] = guild
+        return stamped
 
     def _history_call(self, channel, after):
         path = f"/channels/{channel}/messages?limit=100&after={after}"
@@ -297,6 +353,9 @@ class Discord:
             self._session_id = session["session_id"]
             self._resume_url = session["resume_gateway_url"]
             self._seq = session["seq"]
+            saved = session.get("bot_user")
+            if isinstance(saved, str) and saved.isdigit():
+                self._bot_user = saved
             self._open_resume(session)
             return
         self._open_identify()
@@ -617,29 +676,16 @@ class Discord:
         if channel in self._allowlist_channels():
             return None
         self._load_markers()
-        cached = (self._markers.get("parents") or {}).get(channel)
-        if isinstance(cached, str) and cached:
-            return cached
         if events.normalise(message, bot_user=self._bot_user, parent=channel) is None:
             return None
-        self._beat_if_due()
-        try:
-            body = self._call("GET", f"/channels/{channel}", self._token)
-        except rest.HttpError as exc:
-            if exc.status == 429 or exc.status >= 500:
-                raise TransientFailure(
-                    f"discord deferred: HTTP {exc.status}", exc.retry_after,
-                ) from None
-            if exc.status in (403, 404):
-                return None
-            raise FetchFailed(f"discord refused: HTTP {exc.status}") from None
-        except OSError:
-            raise TransientFailure("network: discord channel") from None
-        except ValueError:
-            raise TransientFailure("network: discord unreadable response") from None
-        if not isinstance(body, dict):
+        record = self._channel_record(channel)
+        if not isinstance(record, dict):
             return None
-        parent = body.get("parent_id")
+        # 10 announcement thread, 11 public thread, 12 private thread.
+        # A category is also a parent_id, and it is not a thread.
+        if record.get("type") not in (10, 11, 12):
+            return None
+        parent = record.get("parent_id")
         if not isinstance(parent, str) or not parent:
             return None
         self._markers.setdefault("parents", {})[channel] = parent
@@ -682,21 +728,28 @@ class Discord:
         seq = data.get("seq")
         if not isinstance(seq, int):
             seq = None
+        saved = data.get("bot_user")
         return {
             "session_id": session_id,
             "resume_gateway_url": url,
             "seq": seq,
+            "bot_user": saved if isinstance(saved, str) and saved.isdigit() else "",
         }
 
     def _touch_session(self):
         if self._state is None or not self._session_id or not self._resume_url:
             return
-        _write_private(self._state / "discord-session.json", json.dumps({
+        payload = {
             "session_id": self._session_id,
             "resume_gateway_url": self._resume_url,
             "seq": self._seq,
             "at": self._clock(),
-        }, sort_keys=True))
+        }
+        if isinstance(self._bot_user, str) and self._bot_user:
+            payload["bot_user"] = self._bot_user
+        _write_private(self._state / "discord-session.json", json.dumps(
+            payload, sort_keys=True,
+        ))
 
     def _clear_session(self):
         self._session_id = None
@@ -804,6 +857,23 @@ class Discord:
             self._state / "discord-markers.json",
             json.dumps(self._markers, sort_keys=True),
         )
+
+
+def bot_user_from_token(token):
+    """A bot token's first segment is the user id. READY is not required."""
+    if not isinstance(token, str):
+        return None
+    segment = token.split(".", 1)[0]
+    if not segment:
+        return None
+    try:
+        raw = base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
+        text = raw.decode("ascii")
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if text.isdigit():
+        return text
+    return None
 
 
 def snowflake_at(unix_seconds):

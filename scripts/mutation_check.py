@@ -1483,6 +1483,22 @@ EXTRA = {
         MEDIA, "tests.test_discord_poller",
         "^discord:[0-9]+:[0-9]+$",
         "^discord:refused$"),
+    "resume knows the bot without READY": (
+        DISCORD_API, "tests.test_discord_fixes",
+        "self._bot_user = bot_user_from_token(token)",
+        "self._bot_user = None"),
+    "history rows take the channel guild": (
+        DISCORD_API, "tests.test_discord_fixes",
+        "        stamped[\"guild_id\"] = guild\n",
+        "        stamped[\"guild_id\"] = \"\"\n"),
+    "only thread types have a thread parent": (
+        DISCORD_API, "tests.test_discord_fixes",
+        "        if record.get(\"type\") not in (10, 11, 12):\n",
+        "        if False and record.get(\"type\") not in (10, 11, 12):\n"),
+    "catch-up is not every poll": (
+        DISCORD_API, "tests.test_discord_fixes",
+        "        if not full:\n",
+        "        if False:\n"),
 }
 
 MUTATIONS = {

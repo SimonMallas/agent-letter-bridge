@@ -63,6 +63,8 @@ class DiscordPoller(unittest.TestCase):
             return {"url": "wss://gateway.example"}
         if method == "GET" and "/messages?" in path:
             return []
+        if method == "GET" and path.startswith("/channels/"):
+            return {"id": path.rsplit("/", 1)[-1], "type": 1}
         raise AssertionError((method, path))
 
     def bridge(self):
