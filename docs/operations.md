@@ -427,6 +427,29 @@ Everything above applies to a Slack bridge. What differs is in
   Information, or reinstall the app for a new bot token, then edit
   `bridge.env` and restart.
 
+## Discord bridges
+
+Everything above applies to a Discord bridge. What differs is in
+[`discord.md`](discord.md); the operational points are these:
+
+- **One Discord bot per bridge.** Two bridges on one bot both receive every
+  message and both answer it. Nothing can detect that across machines.
+- **An allowlist entry is a pair**, `<channel>/<user>`. A thread is matched
+  against its parent channel. `--status` and `--check` name any entry written
+  as a bare ID, which matches nothing.
+- **Stopped is not lost.** On connect the bridge reads history after the last
+  message it recorded in each allowlisted channel, and in up to 200 threads
+  where it has been mentioned. Discord keeps channel history until it is
+  deleted. The first run reads back 24 hours.
+- **A refused token or intent stops the bridge** with the reason (Discord's
+  close codes 4004, 4013, 4014 and similar). It does not reconnect in a loop:
+  Discord allows 1,000 new sessions a day per bot.
+- **Moving machines:** carry `state/discord-markers.json` with the other state
+  files. `state/discord-session.json` can stay behind; a fresh session starts
+  on its own.
+- **Revoking the token:** Reset Token on the bot's page in the Developer
+  Portal, then edit `bridge.env` and restart.
+
 ## Canary
 
 A local timer **you own** (cron, launchd, or a systemd user unit) runs:

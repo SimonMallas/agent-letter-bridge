@@ -24,6 +24,19 @@ through the two tokens and the allowlist pair. `--status`, `--check` and
 second connection on the same Slack app. Telegram configs, state, letters and
 output are unchanged. See [`docs/slack.md`](docs/slack.md).
 
+Discord, as a third platform, selected with `ALB_PLATFORM=discord`. A Discord
+direct message, or a server message that @mentions the bot, becomes the same
+durable letter. The bridge connects over the Discord Gateway with the same
+standard-library WebSocket client, which now lives in `alb.adapters.websocket`
+and is shared by both. No privileged intent is used, so the bot is given only
+messages addressed to it. Discord never redelivers an event, so a message sent
+while the bridge was off is recovered from channel history when it connects.
+Agent text cannot ping anyone: every send sets `allowed_mentions` to nothing.
+`alb --init --platform discord` walks through making the bot, takes the
+token, and prints an invite link built from the token with no network call.
+`--status`, `--check` and `--doctor` know a Discord bridge. The privacy scan
+refuses Discord-token-shaped strings. See [`docs/discord.md`](docs/discord.md).
+
 ## [0.4.4] — 2026-09-30
 
 ### Added

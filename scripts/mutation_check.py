@@ -152,6 +152,10 @@ EXTRA = {
         ROOT / "scripts" / "privacy_scan.py", "tests.test_privacy_scan",
         '    (r"\\bxox" + r"[abprs]-[0-9]+-[0-9A-Za-z-]{20,}", "Slack-token-shaped string"),\n',
         ""),
+    "privacy scan catches Discord tokens": (
+        ROOT / "scripts" / "privacy_scan.py", "tests.test_privacy_scan",
+        '    (r"\\b[MN][A-Za-z0-9_-]{23,27}"',
+        '    (r"\\bNEVER[A-Za-z0-9_-]{23,27}"'),
     # --- Found by the live round trip ------------------------------------
     "a server ping returns control to the caller": (
         ROOT / "src" / "alb" / "adapters" / "websocket.py",

@@ -165,6 +165,19 @@ the existing text with no separator, so a clean write and a dirty one are
 identical in form. Do not re-derive this — the evidence is in the commit
 history.
 
+## Discord: the same invariants, mapped
+
+| Invariant | On Discord |
+| --- | --- |
+| Ack only after the durable write | Discord has no acknowledgement and never redelivers an event. What moves is the per-channel marker, and only in `confirm()`, after the letter exists. A crash in between loses the gateway copy; the next start reads history after the marker and publishes it then. |
+| Delivered-ids ledger | Keyed on channel and message ID, which Discord makes unique. The guild and a thread's parent are provenance only. |
+| The platform holds what the bridge missed | A reconnect resumes only a short gap. On connect the bridge reads the history of each allowlisted channel, and of up to 200 threads where it has been mentioned, after the last message it recorded. A message that arrives both ways lands once. A channel whose read failed keeps its marker until a read succeeds. |
+| Liveness means a completed cycle | Discord's heartbeat must be acknowledged. An idle cycle completes only if an acknowledgement arrived within the heartbeat interval; a missing one closes the connection and resumes. |
+| Allowlist fail-closed at both ends | An entry is `<channel>/<user>`; both must match. Checked again at send. |
+| Ambiguous outcome never retried | A Discord server error, a broken connection or an unreadable response after a send left is ambiguous and dead-letters. A 429 is the one provably unsent outcome. |
+| The poller has no send path | The Discord receiving object has no send method. Sending is a separate object. Both hold the one bot token. |
+| Token hygiene | The token lives only in the mode-600 config. It never appears in argv, a log line, an error, a `repr`, a letter or a test fixture. |
+
 ## Slack: the same invariants, mapped
 
 A second platform keeps every invariant here; none is relaxed for it. Where
