@@ -129,9 +129,9 @@ class WebSocket:
     def settimeout(self, seconds):
         self.sock.settimeout(seconds)
 
-    def close(self):
+    def close(self, code=1000):
         try:
-            self._send(0x8, struct.pack("!H", 1000))
+            self._send(0x8, struct.pack("!H", code))
         except OSError:
             pass
         try:

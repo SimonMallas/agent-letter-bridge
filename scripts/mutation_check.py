@@ -33,6 +33,8 @@ TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
 SLACK = ROOT / "src" / "alb" / "adapters" / "slack" / "api.py"
 SOCKET = ROOT / "src" / "alb" / "adapters" / "websocket.py"
 DISCORD_REST = ROOT / "src" / "alb" / "adapters" / "discord" / "rest.py"
+DISCORD_EVENTS = ROOT / "src" / "alb" / "adapters" / "discord" / "events.py"
+DISCORD_API = ROOT / "src" / "alb" / "adapters" / "discord" / "api.py"
 SLACK_WEB = ROOT / "src" / "alb" / "adapters" / "slack" / "web.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
 HERDR = ROOT / "src" / "alb" / "adapters" / "herdr" / "transport.py"
@@ -1367,6 +1369,30 @@ EXTRA = {
         DISCORD_REST, "tests.test_discord_rest",
         "        raise ValueError(\"discord response is not json\") from None\n",
         "        raise ValueError(bytes(payload).decode(\"utf-8\", \"replace\")) from None\n"),
+    "a guild message must mention the bot": (
+        DISCORD_EVENTS, "tests.test_discord_events",
+        "    if not direct and not _mentioned(message, content, bot_user):\n"
+        "        return None\n",
+        "    if False:\n"
+        "        return None\n"),
+    "the bot mention is removed from the text": (
+        DISCORD_EVENTS, "tests.test_discord_events",
+        "    text = content.replace(f\"<@{bot_user}>\", \"\").replace("
+        "f\"<@!{bot_user}>\", \"\").strip()\n",
+        "    text = content.strip()\n"),
+    "discord markers persist only in confirm": (
+        DISCORD_API, "tests.test_discord_gateway",
+        "        self._advance_markers(acked)\n"
+        "        self._persist_markers()\n",
+        "        self._advance_markers(acked)\n"),
+    "heartbeat ACK required for liveness": (
+        DISCORD_API, "tests.test_discord_gateway",
+        "            if not self._queue and not self._ack_is_fresh():\n",
+        "            if False and not self._queue and not self._ack_is_fresh():\n"),
+    "fatal close is not transient": (
+        DISCORD_API, "tests.test_discord_gateway",
+        "            raise FetchFailed(f\"discord refused: {reason}\")\n",
+        "            raise TransientFailure(f\"discord refused: {reason}\")\n"),
 }
 
 MUTATIONS = {
