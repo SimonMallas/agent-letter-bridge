@@ -135,7 +135,7 @@ def _consume_token_file(path):
 def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
          cmux_born=None, bridge_running=None, start_pane=None,
          resident_command=_UNSET, token_file=None, platform="telegram",
-         app_token_file=None, slack_call=None):
+         app_token_file=None, slack_call=None, discord_call=None):
     """Create the boilerplate under `root`, asking for what cannot be derived.
 
     `console` supplies say / ask / ask_secret, so the questions are testable
@@ -250,6 +250,13 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
         token, app_token = slack_wizard.tokens(
             console, _consume_token_file, bot_token_file=token_file,
             app_token_file=app_token_file)
+    elif platform == "discord":
+        from alb.setup import discord_wizard
+        discord_wizard.explain(console)
+        console.say()
+        token = discord_wizard.token(console, _consume_token_file,
+                                     token_file=token_file)
+        discord_wizard.invite_step(console, token)
     else:
         token = _telegram_token(console, token_file)
 
@@ -265,6 +272,8 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
         if platform == "slack":
             lines = ["ALB_PLATFORM=slack\n", f"ALB_TOKEN={token}\n",
                      f"ALB_APP_TOKEN={app_token}\n"]
+        elif platform == "discord":
+            lines = ["ALB_PLATFORM=discord\n", f"ALB_TOKEN={token}\n"]
         if mailbox:
             lines.append(f"ALB_MAIL_ROOT={mailbox}\n")
         if recipient:
@@ -302,6 +311,8 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     #    to read.
     if platform == "slack":
         chats = slack_wizard.pairs(console, token, app_token, slack_call)
+    elif platform == "discord":
+        chats = discord_wizard.pairs(console, token, discord_call)
     else:
         chats = _chat_ids(console, token, chat_id_reader)
 

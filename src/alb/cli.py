@@ -156,7 +156,7 @@ def main(argv=None):
     parser.add_argument("--as", dest="as_label", metavar="LABEL",
                         help="label to bind or disable")
     parser.add_argument("--platform", default=None,
-                        help="telegram or slack: what --init sets up, and the "
+                        help="telegram, slack or discord: what --init sets up, and the "
                              "grant platform for --grant-create (default: the "
                              "bridge's own)")
     parser.add_argument("--chat-id", dest="chat_id",
@@ -278,6 +278,8 @@ def main(argv=None):
         from alb.doctor import checks as _checks
         for line in _checks.slack_advisories(pathlib.Path(args.root)):
             print(f"slack: {line}")
+        for line in _checks.discord_advisories(pathlib.Path(args.root)):
+            print(f"discord: {line}")
         if v.action == "restart":
             # Names only what exists today. The first version of this line
             # recommended an alb flag that had not been built, so obeying the
@@ -319,6 +321,8 @@ def main(argv=None):
         print(f"ring   : {health.ring_report(state / 'ring-health.json')}")
         for line in _checks.slack_advisories(pathlib.Path(args.root)):
             print(f"slack  : {line}")
+        for line in _checks.discord_advisories(pathlib.Path(args.root)):
+            print(f"discord: {line}")
         # A bridge that cannot deliver is not ok, however fresh its heartbeat.
         return 0 if (bridge.state == "ok" and delivery["can_deliver"]) else 1
 

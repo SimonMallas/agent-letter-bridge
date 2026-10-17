@@ -188,6 +188,27 @@ EXTRA = {
         "tests.test_slack_websocket",
         "                        and received > received_at_start):",
         "                        and received >= received_at_start):"),
+    # --- Discord through the binary, doctor and status ------------------
+    "discord bridge is named by its application": (
+        ROOT / "src" / "alb" / "doctor" / "checks.py",
+        "tests.test_discord_cli",
+        '        return f"discord:{app}" if app else None',
+        "        return None"),
+    "bare discord ids deny delivery": (
+        ROOT / "src" / "alb" / "doctor" / "checks.py",
+        "tests.test_discord_cli",
+        "    if len(_bare_discord_ids(root)) == len(chats):",
+        "    if False:"),
+    "discord config builds the discord sender": (
+        ROOT / "src" / "alb" / "bridge" / "run.py",
+        "tests.test_discord_cli",
+        "        return discord_out.Sender(config[\"ALB_TOKEN\"])",
+        "        return None"),
+    "discord init writes its platform": (
+        ROOT / "src" / "alb" / "setup" / "wizard.py",
+        "tests.test_discord_cli",
+        '            lines = ["ALB_PLATFORM=discord\\n", f"ALB_TOKEN={token}\\n"]',
+        '            lines = [f"ALB_TOKEN={token}\\n"]'),
     # --- Discord setup --------------------------------------------------
     "discord setup reads nothing unless asked": (
         ROOT / "src" / "alb" / "setup" / "discord_wizard.py",

@@ -132,9 +132,13 @@ def platform_of(config):
 
 def make_poller(config, root):
     """The inbound adapter this config names. Telegram is built exactly as it
-    always was; Slack gets both tokens, its state and the allowlist it catches
-    up from."""
+    always was; Slack gets both tokens, and Slack and Discord their state and
+    the allowlist they catch up from."""
     root = pathlib.Path(root)
+    if platform_of(config) == "discord":
+        from alb.adapters.discord import api as discord_api
+        return discord_api.Discord(config["ALB_TOKEN"], state=root / "state",
+                                   allowlist_path=root / "allowlist.json")
     if platform_of(config) == "slack":
         from alb.adapters.slack import api as slack_api
         return slack_api.Slack(config["ALB_TOKEN"], config["ALB_APP_TOKEN"],
@@ -148,6 +152,9 @@ def make_poller(config, root):
 def make_sender(config):
     """The outbound adapter this config names. Slack's holds the bot token
     only: sending never needs the app-level token."""
+    if platform_of(config) == "discord":
+        from alb.adapters.discord import outbound as discord_out
+        return discord_out.Sender(config["ALB_TOKEN"])
     if platform_of(config) == "slack":
         from alb.adapters.slack import outbound as slack_out
         return slack_out.Sender(config["ALB_TOKEN"])

@@ -101,10 +101,16 @@ def slack_app_id(app_token):
 
 
 def _bridge_identity(config):
-    """What tells this bridge's bot apart: a Telegram bot id, or a Slack app."""
-    if config.get("ALB_PLATFORM", "telegram") == "slack":
+    """What tells this bridge's bot apart: a Telegram bot id, a Slack app, or
+    a Discord application."""
+    platform = config.get("ALB_PLATFORM", "telegram")
+    if platform == "slack":
         app = slack_app_id(config.get("ALB_APP_TOKEN", ""))
         return f"slack:{app}" if app else None
+    if platform == "discord":
+        from alb.adapters.discord import invite
+        app = invite.application_id(config.get("ALB_TOKEN", ""))
+        return f"discord:{app}" if app else None
     return bot_id(config.get("ALB_TOKEN", ""))
 
 
@@ -128,6 +134,33 @@ def _bare_slack_ids(root):
         return []
     return [str(c) for c in chats
             if isinstance(c, str) and _BARE_SLACK_ID.fullmatch(c)]
+
+
+# A Discord ID written alone. On a Discord bridge an entry is
+# `<channel>/<user>`, so this matches nothing. Telegram ids are far shorter,
+# but the check runs only on a Discord bridge all the same.
+_BARE_DISCORD_ID = re.compile(r"[0-9]{17,20}")
+
+
+def _bare_discord_ids(root):
+    if _platform_of_root(root) != "discord":
+        return []
+    path = pathlib.Path(root) / "allowlist.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    chats = data.get("chats") if isinstance(data, dict) else None
+    if not isinstance(chats, list):
+        return []
+    return [str(c) for c in chats
+            if isinstance(c, str) and _BARE_DISCORD_ID.fullmatch(c)]
+
+
+def discord_advisories(root):
+    """Lines an operator of a Discord bridge needs, from local files only."""
+    return [f'allowlist entry "{entry}" is not a channel/user pair; on '
+            f"Discord it matches nothing." for entry in _bare_discord_ids(root)]
 
 
 def slack_advisories(root):
@@ -324,6 +357,10 @@ def deliverability(root):
         return {"can_deliver": False,
                 "reason": f"allowlist at {path} holds only bare Slack IDs; a "
                           f"Slack entry is <conversation>/<member>"}
+    if len(_bare_discord_ids(root)) == len(chats):
+        return {"can_deliver": False,
+                "reason": f"allowlist at {path} holds only bare Discord IDs; a "
+                          f"Discord entry is <channel>/<user>"}
     return {"can_deliver": True, "reason": f"{len(chats)} chat(s) permitted"}
 
 
@@ -429,6 +466,11 @@ def summary(process_listing, self_pid, root, environ):
         lines.append("SLACK")
         lines.extend(f"  {line}" for line in advisories)
         lines.append("")
+    advisories = discord_advisories(root)
+    if advisories:
+        lines.append("DISCORD")
+        lines.extend(f"  {line}" for line in advisories)
+        lines.append("")
     lines.append("WHAT THIS CANNOT PROVE")
     lines.append("  A consumer on ANOTHER MACHINE is not detectable from here.")
     if _platform_of_root(root) == "slack":
@@ -437,6 +479,13 @@ def summary(process_listing, self_pid, root, environ):
         lines.append("  each would see only some of your messages. alb --status")
         lines.append("  shows how many connections Slack reported at the last")
         lines.append("  connect; give each bridge its own app.")
+        return "\n".join(lines)
+    if _platform_of_root(root) == "discord":
+        lines.append("  A second bridge using the same Discord bot is not")
+        lines.append("  detectable either. Every connection on one bot receives")
+        lines.append("  every message, so both bridges would write the letter and")
+        lines.append("  both would answer it. Give each bridge its own")
+        lines.append("  application.")
         return "\n".join(lines)
     lines.append("  A webhook is not detectable from here either - run this")
     lines.append("  yourself, it is read-only and consumes nothing:")
