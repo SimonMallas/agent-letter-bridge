@@ -1531,6 +1531,10 @@ EXTRA = {
         DISCORD_API, "tests.test_discord_hold",
         "        if blocked is not None and now < blocked:\n            failure = TransientFailure(\"discord deferred: global rate limit\",\n",
         "        if False:\n            failure = TransientFailure(\"discord deferred: global rate limit\",\n"),
+    "a discord history rate limit is waited out": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        if self._history_waiting(channel):\n",
+        "        if False:\n"),
     "a rest wait does not stop the discord gateway": (
         DISCORD_API, "tests.test_discord_hold",
         "            if deferred is not None and not self._queue and self._ws is None:\n",

@@ -84,6 +84,7 @@ class Discord:
         self._next_identify = None
         self._heartbeat_lapsed = False
         self._lookup_after = {}
+        self._history_after = {}
         self._lookup_blocked_until = None
 
     def __repr__(self):
@@ -239,6 +240,10 @@ class Discord:
         # Stay pending until this page run finishes, so confirm cannot move
         # the marker across a read that did not succeed.
         self._pending.add(channel)
+        if self._history_waiting(channel):
+            # Discord named a time for this route. Ask again then, not on
+            # every poll; the channel stays pending, so its marker holds.
+            return
         record = self._channel_record(channel)
         if record is None:
             return
@@ -366,6 +371,8 @@ class Discord:
         try:
             body = self._rest("GET", path)
         except rest.HttpError as exc:
+            if exc.status == 429 and not exc.is_global:
+                self._hold_history(channel, exc.retry_after)
             if exc.status == 429 or exc.status >= 500:
                 raise TransientFailure(
                     f"discord deferred: HTTP {exc.status}", exc.retry_after,
@@ -380,6 +387,18 @@ class Discord:
         if not isinstance(body, list):
             return None
         return [row for row in body if isinstance(row, dict)]
+
+    def _hold_history(self, channel, delay):
+        if not isinstance(delay, (int, float)) or isinstance(delay, bool) or delay < 0:
+            return
+        until = self._monotonic() + float(delay)
+        current = self._history_after.get(channel)
+        if current is None or until > current:
+            self._history_after[channel] = until
+
+    def _history_waiting(self, channel):
+        until = self._history_after.get(channel)
+        return until is not None and self._monotonic() < until
 
     def _queued(self):
         items = list(self._queue)
