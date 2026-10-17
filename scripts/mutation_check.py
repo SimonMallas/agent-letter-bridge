@@ -1393,6 +1393,14 @@ EXTRA = {
         DISCORD_API, "tests.test_discord_gateway",
         "            raise FetchFailed(f\"discord refused: {reason}\")\n",
         "            raise TransientFailure(f\"discord refused: {reason}\")\n"),
+    "failed read freezes its marker": (
+        DISCORD_API, "tests.test_discord_catchup",
+        "        self._pending.add(channel)\n",
+        "        self._pending.discard(channel)\n"),
+    "first run window": (
+        DISCORD_API, "tests.test_discord_catchup",
+        "self._clock() - self.FIRST_RUN_WINDOW",
+        "self._clock() - 0"),
 }
 
 MUTATIONS = {

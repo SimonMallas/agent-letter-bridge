@@ -18,6 +18,7 @@ from alb.media import inspect as media_inspect
 
 # GUILD_MESSAGES (1 << 9) and DIRECT_MESSAGES (1 << 12). No privileged bit.
 INTENTS = (1 << 9) | (1 << 12)
+_DISCORD_EPOCH_MS = 1420070400000
 
 _FATAL = {
     4004: "authentication failed",
@@ -64,6 +65,7 @@ class Discord:
         self._held = []
         self._staged = {}
         self._pending = set()
+        self._resume_after = {}
         self._markers = None
         self._file_urls = {}
         self._inflight = []
@@ -155,7 +157,117 @@ class Discord:
         return data
 
     def _catch_up(self):
-        return
+        if not self._bot_user:
+            return
+        self._load_markers()
+        channels, threads = self._watched()
+        for channel in channels:
+            self._read_history(channel, None)
+        for parent, thread in threads:
+            self._read_history(thread, parent)
+
+    def _watched(self):
+        channels = self._allowlist_channels()
+        threads = []
+        for parent, mapping in (self._markers.get("threads") or {}).items():
+            if not isinstance(mapping, dict):
+                continue
+            for thread in mapping:
+                if thread not in channels:
+                    threads.append((str(parent), str(thread)))
+        return channels, threads
+
+    def _allowlist_channels(self):
+        found = []
+        for entry in self._allowlist_entries():
+            channel = entry.split("/", 1)[0]
+            if channel and channel not in found:
+                found.append(channel)
+        return found
+
+    def _allowlist_entries(self):
+        if not self._allowlist_path:
+            return []
+        try:
+            data = json.loads(
+                pathlib.Path(self._allowlist_path).read_text(encoding="utf-8"),
+            )
+        except (OSError, json.JSONDecodeError):
+            return []
+        chats = data.get("chats") if isinstance(data, dict) else None
+        if not isinstance(chats, list):
+            return []
+        return [entry for entry in chats if isinstance(entry, str) and "/" in entry]
+
+    def _read_history(self, channel, parent):
+        # Stay pending until this page run finishes, so confirm cannot move
+        # the marker across a read that did not succeed.
+        self._pending.add(channel)
+        after = (
+            self._resume_after.get(channel)
+            or self._stored_after(channel, parent)
+        )
+        for _page in range(self.MAX_PAGES):
+            self._beat_if_due()
+            rows = self._history_call(channel, after)
+            if rows is None:
+                return
+            if rows == "skip":
+                self._pending.discard(channel)
+                return
+            if not rows:
+                self._pending.discard(channel)
+                self._resume_after.pop(channel, None)
+                return
+            ordered = [
+                row for row in rows
+                if isinstance(row, dict) and isinstance(row.get("id"), str)
+                and row["id"].isdigit()
+            ]
+            if not ordered:
+                self._pending.discard(channel)
+                return
+            ordered.sort(key=lambda row: int(row["id"]))
+            for row in ordered:
+                self._ingest(row, parent=parent)
+            after = str(max(int(row["id"]) for row in ordered))
+            self._resume_after[channel] = after
+            if len(rows) < 100:
+                self._pending.discard(channel)
+                self._resume_after.pop(channel, None)
+                return
+
+    def _stored_after(self, channel, parent):
+        self._load_markers()
+        if parent:
+            current = (
+                (self._markers.get("threads") or {}).get(parent) or {}
+            ).get(channel)
+        else:
+            current = (self._markers.get("channels") or {}).get(channel)
+        if isinstance(current, str) and current:
+            return current
+        return snowflake_at(self._clock() - self.FIRST_RUN_WINDOW)
+
+    def _history_call(self, channel, after):
+        path = f"/channels/{channel}/messages?limit=100&after={after}"
+        try:
+            body = self._call("GET", path, self._token)
+        except rest.HttpError as exc:
+            if exc.status == 429 or exc.status >= 500:
+                raise TransientFailure(
+                    f"discord deferred: HTTP {exc.status}", exc.retry_after,
+                ) from None
+            if exc.status in (403, 404):
+                return "skip"
+            raise FetchFailed(f"discord refused: HTTP {exc.status}") from None
+        except OSError:
+            return None
+        except ValueError:
+            return None
+        if not isinstance(body, list):
+            return None
+        return [row for row in body if isinstance(row, dict)]
 
     def _queued(self):
         items = list(self._queue)
@@ -471,10 +583,11 @@ class Discord:
         except OSError:
             return
 
-    def _ingest(self, message):
+    def _ingest(self, message, parent=None):
         if not isinstance(message, dict) or not self._bot_user:
             return
-        parent = self._thread_parent(message)
+        if parent is None:
+            parent = self._thread_parent(message)
         item = events.normalise(message, bot_user=self._bot_user, parent=parent)
         channel = message.get("channel_id")
         message_id = message.get("id")
@@ -495,7 +608,42 @@ class Discord:
         self._queue.append(item)
 
     def _thread_parent(self, message):
-        return None
+        guild = message.get("guild_id")
+        if not isinstance(guild, str) or not guild:
+            return None
+        channel = message.get("channel_id")
+        if not isinstance(channel, str) or not channel:
+            return None
+        if channel in self._allowlist_channels():
+            return None
+        self._load_markers()
+        cached = (self._markers.get("parents") or {}).get(channel)
+        if isinstance(cached, str) and cached:
+            return cached
+        if events.normalise(message, bot_user=self._bot_user, parent=channel) is None:
+            return None
+        self._beat_if_due()
+        try:
+            body = self._call("GET", f"/channels/{channel}", self._token)
+        except rest.HttpError as exc:
+            if exc.status == 429 or exc.status >= 500:
+                raise TransientFailure(
+                    f"discord deferred: HTTP {exc.status}", exc.retry_after,
+                ) from None
+            if exc.status in (403, 404):
+                return None
+            raise FetchFailed(f"discord refused: HTTP {exc.status}") from None
+        except OSError:
+            raise TransientFailure("network: discord channel") from None
+        except ValueError:
+            raise TransientFailure("network: discord unreadable response") from None
+        if not isinstance(body, dict):
+            return None
+        parent = body.get("parent_id")
+        if not isinstance(parent, str) or not parent:
+            return None
+        self._markers.setdefault("parents", {})[channel] = parent
+        return parent
 
     def _stash_files(self, item):
         files = item.get("files")
@@ -656,6 +804,14 @@ class Discord:
             self._state / "discord-markers.json",
             json.dumps(self._markers, sort_keys=True),
         )
+
+
+def snowflake_at(unix_seconds):
+    """A Discord snowflake for an instant. The low bits stay zero."""
+    ms = int(float(unix_seconds) * 1000) - _DISCORD_EPOCH_MS
+    if ms < 0:
+        ms = 0
+    return str(ms << 22)
 
 
 def _max_snowflake(current, new):
