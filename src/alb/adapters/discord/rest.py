@@ -11,7 +11,18 @@ import urllib.request
 API = "https://discord.com/api/v10"
 _CDN_HOSTS = frozenset({"cdn.discordapp.com", "media.discordapp.net"})
 _URL = "https://github.com/SimonMallas/agent-letter-bridge"
-_VERSION = "0.5.0"
+
+
+def _package_version():
+    """Installed version. An uninstalled checkout still sends 0.5.0."""
+    try:
+        from importlib.metadata import version
+        return version("agent-letter-bridge")
+    except Exception:  # noqa: BLE001 - any failure means "not installed"
+        return "0.5.0"
+
+
+_VERSION = _package_version()
 USER_AGENT = f"DiscordBot ({_URL}, {_VERSION})"
 
 
