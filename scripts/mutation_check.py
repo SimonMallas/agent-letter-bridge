@@ -1410,6 +1410,10 @@ EXTRA = {
         DISCORD_API, "tests.test_discord_fixes",
         "self._bot_user = bot_user_from_token(token)",
         "self._bot_user = None"),
+    "history rows take the channel guild": (
+        DISCORD_API, "tests.test_discord_fixes",
+        "        stamped[\"guild_id\"] = guild\n",
+        "        stamped[\"guild_id\"] = \"\"\n"),
 }
 
 MUTATIONS = {

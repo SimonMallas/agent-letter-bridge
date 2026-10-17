@@ -10,8 +10,8 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
 from alb.adapters.discord.api import Discord, bot_user_from_token  # noqa: E402
 from discord_fakes import (  # noqa: E402
-    BOT, CHANNEL, MESSAGE, TOKEN, USER, Clock, FakeSocket, hello,
-    message_create, resumed,
+    BOT, CHANNEL, GUILD, MESSAGE, TOKEN, USER, Clock, FakeSocket, hello,
+    message_create, ready, resumed,
 )
 
 
@@ -31,6 +31,8 @@ class Fixes(unittest.TestCase):
         (self.root / "state").mkdir()
         self.clock = Clock()
         self.calls = []
+        self.rows = {}
+        self.channels = {}
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -41,9 +43,10 @@ class Fixes(unittest.TestCase):
         if path == "/gateway/bot":
             return {"url": "wss://gateway.example"}
         if method == "GET" and "/messages?" in path:
-            return []
+            return self.rows.get(path.split("?", 1)[0], [])
         if method == "GET" and path.startswith("/channels/"):
-            return {"id": path.rsplit("/", 1)[-1], "type": 1}
+            channel = path.rsplit("/", 1)[-1]
+            return self.channels.get(channel, {"id": channel, "type": 1})
         raise AssertionError((method, path))
 
     def test_resumed_fresh_process_delivers_and_catches_up(self):
@@ -78,6 +81,38 @@ class Fixes(unittest.TestCase):
         )
         self.assertEqual(saved["bot_user"], BOT)
         self.assertNotIn(TOKEN, json.dumps(saved))
+
+    def test_history_rows_keep_the_channel_guild(self):
+        mentioned = "100000000000000081"
+        plain = "100000000000000082"
+        self.channels[CHANNEL] = {"id": CHANNEL, "type": 0, "guild_id": GUILD}
+        self.rows[f"/channels/{CHANNEL}/messages"] = [
+            {
+                "id": plain, "channel_id": CHANNEL, "type": 0,
+                "content": "no mention", "author": {"id": USER},
+            },
+            {
+                "id": mentioned, "channel_id": CHANNEL, "type": 0,
+                "content": f"<@{BOT}> hi", "author": {"id": USER},
+                "mentions": [{"id": BOT}],
+            },
+        ]
+        allow = self.root / "allowlist.json"
+        allow.write_text(json.dumps({"chats": [f"{CHANNEL}/{USER}"]}), encoding="utf-8")
+        bridge = Discord(
+            TOKEN, state=self.root / "state", allowlist_path=allow,
+            poll_timeout=1, call=self.call,
+            connect=Connect(self.clock, [hello(), ready()]),
+            clock=self.clock, monotonic=self.clock,
+        )
+        items = bridge.fetch()
+        self.assertEqual([item["message_id"] for item in items], [mentioned])
+        self.assertEqual(items[0]["provenance"]["discord_guild"], GUILD)
+        self.assertEqual(items[0]["reply_thread"], f"{CHANNEL}:{mentioned}")
+        self.assertEqual(
+            [path for _method, path in self.calls if path == f"/channels/{CHANNEL}"],
+            [f"/channels/{CHANNEL}"],
+        )
 
 
 if __name__ == "__main__":

@@ -48,7 +48,7 @@ def row(message_id, channel=CHANNEL, content="hello", bot=False, guild=None):
         "author": author,
     }
     if guild is not None:
-        body["guild_id"] = guild
+        # History payloads have no guild_id. The channel lookup carries it.
         body["mentions"] = [{"id": BOT}]
         body["content"] = f"<@{BOT}> {content}"
     return body
@@ -100,7 +100,9 @@ class CatchUp(unittest.TestCase):
         if method == "GET" and path.startswith("/channels/"):
             looked = self.history.get(path)
             if looked is None:
-                raise AssertionError(path)
+                return {"id": path.rsplit("/", 1)[-1], "type": 1}
+            if isinstance(looked, Exception):
+                raise looked
             return looked
         raise AssertionError((method, path))
 
@@ -154,6 +156,9 @@ class CatchUp(unittest.TestCase):
                 row(str(PAGE_BASE + 1001), guild=GUILD),
             ]
 
+        self.history[f"/channels/{CHANNEL}"] = {
+            "id": CHANNEL, "type": 0, "guild_id": GUILD,
+        }
         self.history[f"/channels/{CHANNEL}/messages"] = history_for
         bridge = self.bridge(
             ([hello(), ready()], True),
@@ -180,6 +185,9 @@ class CatchUp(unittest.TestCase):
         self.assertEqual(bridge._held, [])
 
     def test_marker_advances_only_after_confirm(self):
+        self.history[f"/channels/{CHANNEL}"] = {
+            "id": CHANNEL, "type": 0, "guild_id": GUILD,
+        }
         self.history[f"/channels/{CHANNEL}/messages"] = [
             row(BOT_MESSAGE, bot=True, guild=GUILD),
             row(USER_MESSAGE, guild=GUILD),
@@ -267,6 +275,9 @@ class CatchUp(unittest.TestCase):
     def test_missing_access_skips_without_moving_the_marker(self):
         self.write_markers({OTHER: LOW})
         self.history[f"/channels/{OTHER}/messages"] = HttpError(403)
+        self.history[f"/channels/{CHANNEL}"] = {
+            "id": CHANNEL, "type": 0, "guild_id": GUILD,
+        }
         self.history[f"/channels/{CHANNEL}/messages"] = [row(HIGH, guild=GUILD)]
         bridge = self.bridge(
             ([hello(), ready()], True),

@@ -67,6 +67,7 @@ class Discord:
         self._staged = {}
         self._pending = set()
         self._resume_after = {}
+        self._channel_cache = {}
         self._markers = None
         self._file_urls = {}
         self._inflight = []
@@ -204,6 +205,12 @@ class Discord:
         # Stay pending until this page run finishes, so confirm cannot move
         # the marker across a read that did not succeed.
         self._pending.add(channel)
+        record = self._channel_record(channel)
+        if record is None:
+            return
+        if record == "skip":
+            self._pending.discard(channel)
+            return
         after = (
             self._resume_after.get(channel)
             or self._stored_after(channel, parent)
@@ -230,7 +237,7 @@ class Discord:
                 return
             ordered.sort(key=lambda row: int(row["id"]))
             for row in ordered:
-                self._ingest(row, parent=parent)
+                self._ingest(self._with_guild(row, record), parent=parent)
             after = str(max(int(row["id"]) for row in ordered))
             self._resume_after[channel] = after
             if len(rows) < 100:
@@ -249,6 +256,47 @@ class Discord:
         if isinstance(current, str) and current:
             return current
         return snowflake_at(self._clock() - self.FIRST_RUN_WINDOW)
+
+    def _channel_record(self, channel):
+        """One GET /channels/{id}, reused. History rows do not carry a guild."""
+        if channel in self._channel_cache:
+            return self._channel_cache[channel]
+        self._beat_if_due()
+        try:
+            body = self._call("GET", f"/channels/{channel}", self._token)
+        except rest.HttpError as exc:
+            if exc.status == 429 or exc.status >= 500:
+                raise TransientFailure(
+                    f"discord deferred: HTTP {exc.status}", exc.retry_after,
+                ) from None
+            if exc.status in (403, 404):
+                self._channel_cache[channel] = "skip"
+                return "skip"
+            raise FetchFailed(f"discord refused: HTTP {exc.status}") from None
+        except OSError:
+            return None
+        except ValueError:
+            return None
+        if not isinstance(body, dict):
+            return None
+        kind = body.get("type")
+        guild = body.get("guild_id")
+        parent = body.get("parent_id")
+        record = {
+            "type": kind if isinstance(kind, int) else None,
+            "guild_id": guild if isinstance(guild, str) else "",
+            "parent_id": parent if isinstance(parent, str) else "",
+        }
+        self._channel_cache[channel] = record
+        return record
+
+    def _with_guild(self, row, record):
+        guild = record.get("guild_id") if isinstance(record, dict) else ""
+        if not guild or row.get("guild_id"):
+            return row
+        stamped = dict(row)
+        stamped["guild_id"] = guild
+        return stamped
 
     def _history_call(self, channel, after):
         path = f"/channels/{channel}/messages?limit=100&after={after}"
