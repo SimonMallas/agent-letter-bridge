@@ -1406,6 +1406,10 @@ EXTRA = {
         MEDIA, "tests.test_discord_poller",
         "^discord:[0-9]+:[0-9]+$",
         "^discord:refused$"),
+    "resume knows the bot without READY": (
+        DISCORD_API, "tests.test_discord_fixes",
+        "self._bot_user = bot_user_from_token(token)",
+        "self._bot_user = None"),
 }
 
 MUTATIONS = {

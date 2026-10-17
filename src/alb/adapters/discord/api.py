@@ -3,6 +3,7 @@
 Discord does not acknowledge events. confirm() is what moves a marker, after
 the poller has the letter on disk or has decided to drop it.
 """
+import base64
 import json
 import os
 import pathlib
@@ -54,7 +55,7 @@ class Discord:
         self._clock = clock
         self._monotonic = monotonic
         self._ws = None
-        self._bot_user = None
+        self._bot_user = bot_user_from_token(token)
         self._session_id = None
         self._resume_url = None
         self._seq = None
@@ -297,6 +298,9 @@ class Discord:
             self._session_id = session["session_id"]
             self._resume_url = session["resume_gateway_url"]
             self._seq = session["seq"]
+            saved = session.get("bot_user")
+            if isinstance(saved, str) and saved.isdigit():
+                self._bot_user = saved
             self._open_resume(session)
             return
         self._open_identify()
@@ -682,21 +686,28 @@ class Discord:
         seq = data.get("seq")
         if not isinstance(seq, int):
             seq = None
+        saved = data.get("bot_user")
         return {
             "session_id": session_id,
             "resume_gateway_url": url,
             "seq": seq,
+            "bot_user": saved if isinstance(saved, str) and saved.isdigit() else "",
         }
 
     def _touch_session(self):
         if self._state is None or not self._session_id or not self._resume_url:
             return
-        _write_private(self._state / "discord-session.json", json.dumps({
+        payload = {
             "session_id": self._session_id,
             "resume_gateway_url": self._resume_url,
             "seq": self._seq,
             "at": self._clock(),
-        }, sort_keys=True))
+        }
+        if isinstance(self._bot_user, str) and self._bot_user:
+            payload["bot_user"] = self._bot_user
+        _write_private(self._state / "discord-session.json", json.dumps(
+            payload, sort_keys=True,
+        ))
 
     def _clear_session(self):
         self._session_id = None
@@ -804,6 +815,23 @@ class Discord:
             self._state / "discord-markers.json",
             json.dumps(self._markers, sort_keys=True),
         )
+
+
+def bot_user_from_token(token):
+    """A bot token's first segment is the user id. READY is not required."""
+    if not isinstance(token, str):
+        return None
+    segment = token.split(".", 1)[0]
+    if not segment:
+        return None
+    try:
+        raw = base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
+        text = raw.decode("ascii")
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if text.isdigit():
+        return text
+    return None
 
 
 def snowflake_at(unix_seconds):

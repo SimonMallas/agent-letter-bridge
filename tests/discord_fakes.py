@@ -1,10 +1,20 @@
 """Stand-ins for the Discord gateway. No network, no real ids."""
+import base64
 import json
 import socket
 import struct
 
-TOKEN = "Bot." + "fixture"
 BOT = "100000000000000009"
+
+
+def _token_part(text):
+    """A Discord token's first segment is the user id, unpadded."""
+    raw = base64.urlsafe_b64encode(text.encode("ascii")).decode("ascii")
+    return raw.rstrip("=")
+
+
+# Three segments, like a bot token. The first decodes to BOT.
+TOKEN = ".".join((_token_part(BOT), _token_part("fixture"), _token_part("sig")))
 USER = "100000000000000003"
 CHANNEL = "100000000000000001"
 THREAD = "100000000000000002"
