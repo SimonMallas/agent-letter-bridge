@@ -501,6 +501,53 @@ class Hold(unittest.TestCase):
                 self.assertEqual(health, ["running", "running", "running"])
                 self.assertIn(THREAD, saved.get("unresolved") or {})
 
+    def test_a_global_rate_limit_holds_every_route_across_a_reconnect(self):
+        box = self._box()
+        allow = box.allow(f"{CHANNEL}/{USER}")
+        message_id = str(int(snowflake_at(box.clock() - 10)) + 1)
+        calls = []
+        limited = [True]
+
+        def call(method, path, token, body=None, timeout=30, opener=None):
+            calls.append((box.clock(), path))
+            if path == f"/channels/{THREAD}":
+                if limited[0]:
+                    raise HttpError(429, retry_after=300, is_global=True)
+                return {"id": THREAD, "type": 11, "parent_id": CHANNEL,
+                        "guild_id": GUILD}
+            if path == f"/channels/{CHANNEL}":
+                return {"id": CHANNEL, "type": 0, "guild_id": GUILD}
+            if f"/channels/{THREAD}/messages?" in path:
+                return [json.loads(mention[1])["d"]] if _after(path) < int(message_id) else []
+            if "/messages?" in path:
+                return []
+            return box.call(method, path, token, body)
+
+        mention = message_create(message_id, f"<@{BOT}> held", channel=THREAD,
+                                 guild=GUILD, mentions=[{"id": BOT}])
+        sockets = [FakeSocket(box.clock, [hello(), ready(), mention])]
+        bridge = Discord(
+            TOKEN, state=box.root / "state", allowlist_path=allow,
+            poll_timeout=1, call=call, connect=lambda url, timeout=30: sockets[-1],
+            clock=box.clock, monotonic=box.clock,
+        )
+        run.run_once(bridge, None, "", box.root)
+        limited_at = box.clock()
+        # A dropped connection, the same adapter: the global limit still holds.
+        bridge._close_socket(4000)
+        sockets.append(FakeSocket(box.clock, [hello(), resumed()]))
+        before = len(calls)
+        run.run_once(bridge, None, "", box.root)
+        early = [path for at, path in calls[before:] if at < limited_at + 300]
+        self.assertEqual(early, [], "no REST call inside a global rate limit")
+        self.assertEqual(_bodies(box.root), [])
+        # Once it has passed, the held thread is read and the mention lands.
+        limited[0] = False
+        box.clock.advance(300)
+        sockets.append(FakeSocket(box.clock, [hello(), ready()]))
+        run.run_once(bridge, None, "", box.root)
+        self.assertEqual(_bodies(box.root), ["held"])
+
     def _persistent_lookup(self, failure, cycles=3, new_mention_each_cycle=False):
         box = self._box()
         allow = box.allow(f"{CHANNEL}/{USER}")

@@ -107,7 +107,12 @@ class Discord:
                 deferred = exc
             if self._ws is not None:
                 self._read_live()
-            if deferred is not None and not self._queue:
+            # A REST wait is not a reason to stop reading the gateway. With
+            # the socket live, the deferred channels stay pending (frozen
+            # markers) and the cycle returns; raising would have the CLI sleep
+            # out the wait - up to a global 429's whole retry_after - with no
+            # heartbeat sent. Only a fetch with no live socket defers.
+            if deferred is not None and not self._queue and self._ws is None:
                 raise deferred
             if not self._queue and not self._ack_is_fresh():
                 raise TransientFailure("network: discord heartbeat not acknowledged")
@@ -286,13 +291,40 @@ class Discord:
             return current
         return snowflake_at(self._clock() - self.FIRST_RUN_WINDOW)
 
+    def _rest(self, method, path):
+        """One authenticated REST call. A global rate limit holds every route.
+
+        Discord's global 429 is not about the route that drew it, so while one
+        is in force nothing here asks again - not a lookup, not catch-up
+        history, not the gateway URL. The gateway itself is not REST: a live
+        socket keeps its heartbeats and a Resume needs no REST call.
+        """
+        blocked = self._lookup_blocked_until
+        now = self._monotonic()
+        if blocked is not None and now < blocked:
+            failure = TransientFailure("discord deferred: global rate limit",
+                                       blocked - now)
+            failure.is_global = True
+            raise failure
+        try:
+            return self._call(method, path, self._token)
+        except rest.HttpError as exc:
+            delay = exc.retry_after
+            if (exc.status == 429 and exc.is_global
+                    and isinstance(delay, (int, float))
+                    and not isinstance(delay, bool) and delay >= 0):
+                until = self._monotonic() + float(delay)
+                if self._lookup_blocked_until is None or until > self._lookup_blocked_until:
+                    self._lookup_blocked_until = until
+            raise
+
     def _channel_record(self, channel):
         """One GET /channels/{id}, reused. History rows do not carry a guild."""
         if channel in self._channel_cache:
             return self._channel_cache[channel]
         self._beat_if_due()
         try:
-            body = self._call("GET", f"/channels/{channel}", self._token)
+            body = self._rest("GET", f"/channels/{channel}")
         except rest.HttpError as exc:
             if exc.status == 429 or exc.status >= 500:
                 failure = TransientFailure(
@@ -332,7 +364,7 @@ class Discord:
     def _history_call(self, channel, after):
         path = f"/channels/{channel}/messages?limit=100&after={after}"
         try:
-            body = self._call("GET", path, self._token)
+            body = self._rest("GET", path)
         except rest.HttpError as exc:
             if exc.status == 429 or exc.status >= 500:
                 raise TransientFailure(
@@ -385,7 +417,7 @@ class Discord:
         self._open_identify()
 
     def _open_identify(self):
-        info = self._call("GET", "/gateway/bot", self._token)
+        info = self._rest("GET", "/gateway/bot")
         self._refuse_session_start(info)
         self._spend_attempt()
         url = info.get("url") if isinstance(info, dict) else None
@@ -449,9 +481,10 @@ class Discord:
     def _take_identify_slot(self, info):
         """Wait out a short gap. The next Identify time survives this fetch.
 
-        Runs on an open socket after Hello. The gap is at most five seconds,
-        and the first heartbeat has just gone out, so none falls due during
-        it at any interval Discord sends; a beat that does fall due is sent.
+        Runs on an open socket after Hello. The gap is at most five seconds
+        and the first heartbeat has just gone out; Discord's interval (about
+        41 s) is far longer, so none falls due. ACKs are not read during the
+        wait, so an interval shorter than the gap would end it as a transient.
         """
         now = self._monotonic()
         while self._next_identify is not None and now < self._next_identify:
