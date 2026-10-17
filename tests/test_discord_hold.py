@@ -19,6 +19,7 @@ from discord_fakes import (  # noqa: E402
     hello, message_create, ready, resumed, text_frame,
 )
 from test_discord_catchup import OTHER, CatchUp  # noqa: E402
+from test_discord_gateway import PNG  # noqa: E402
 
 
 def _bodies(root):
@@ -295,6 +296,309 @@ class Hold(unittest.TestCase):
         run.run_once(bridge, None, "", box.root)
         self.assertEqual(sockets[0].closed, 4000)
         self.assertIn(6, [item["payload"].get("op") for item in sockets[1].sent])
+
+    def test_identifies_keep_five_seconds_between_them(self):
+        for frame in (
+            {"op": 7, "d": None},
+            {"op": 9, "d": False},
+            {"op": 9, "d": True},
+        ):
+            with self.subTest(op=frame["op"], resumable=frame["d"]):
+                times = self._identify_times(frame)
+                gaps = [later - earlier for earlier, later in zip(times, times[1:])]
+                self.assertEqual(len(times), 6)
+                self.assertTrue(all(gap >= 5 for gap in gaps), gaps)
+
+    def _identify_times(self, frame):
+        clock = Clock()
+        sockets = []
+
+        def call(method, path, token, body=None, timeout=30, opener=None):
+            self.assertNotIn(TOKEN, path)
+            return {
+                "url": "wss://gateway.example",
+                "session_start_limit": {
+                    "remaining": 5, "reset_after": 1000, "max_concurrency": 1,
+                },
+            }
+
+        def connect(url, timeout=30):
+            sock = FakeSocket(clock, [hello(), text_frame(frame)], ack=True)
+            sockets.append(sock)
+            return sock
+
+        bridge = Discord(
+            TOKEN, call=call, connect=connect, clock=clock, monotonic=clock,
+        )
+        for _ in range(2):
+            with self.assertRaises(TransientFailure):
+                bridge.fetch()
+            clock.advance(10)
+        return [
+            item["at"] for sock in sockets for item in sock.sent
+            if item["payload"].get("op") == 2
+        ]
+
+    def test_resume_does_not_wait_on_the_identify_window(self):
+        box = self._box()
+        clock = box.clock
+        sockets = []
+
+        def call(method, path, token, body=None, timeout=30, opener=None):
+            return {
+                "url": "wss://gateway.example",
+                "session_start_limit": {
+                    "remaining": 5, "reset_after": 1000, "max_concurrency": 1,
+                },
+            }
+
+        def connect(url, timeout=30):
+            frames = [hello(), ready()] if not sockets else [hello(), resumed()]
+            sock = FakeSocket(clock, frames, ack=True)
+            sockets.append(sock)
+            return sock
+
+        bridge = Discord(
+            TOKEN, state=box.root / "state", poll_timeout=1,
+            call=call, connect=connect, clock=clock, monotonic=clock,
+        )
+        bridge.fetch()
+        identify_at = next(
+            item["at"] for item in sockets[0].sent
+            if item["payload"].get("op") == 2
+        )
+        bridge.close()
+        bridge.fetch()
+        resume_at = next(
+            item["at"] for item in sockets[1].sent
+            if item["payload"].get("op") == 6
+        )
+        self.assertLess(resume_at - identify_at, 5)
+        self.assertNotIn(
+            2, [item["payload"].get("op") for item in sockets[1].sent],
+        )
+
+    def test_a_late_download_heartbeat_stays_lapsed(self):
+        box = self._box()
+        allow = box.allow(f"{CHANNEL}/{USER}")
+        sockets = []
+        file_id = "100000000000000031"
+
+        def connect(url, timeout=30):
+            if not sockets:
+                frames = [hello(10000), ready(), message_create(
+                    MESSAGE, "photo", attachments=[{
+                        "id": file_id,
+                        "content_type": "image/png",
+                        "url": (
+                            "https://cdn.discordapp.com/attachments/"
+                            "100000000000000001/pic.png"
+                        ),
+                    }],
+                )]
+            else:
+                frames = [hello(10000), resumed()]
+            sock = FakeSocket(box.clock, frames, ack=True)
+            sockets.append(sock)
+            return sock
+
+        bridge = Discord(
+            TOKEN, state=box.root / "state", allowlist_path=allow,
+            poll_timeout=1, call=box.call, connect=connect,
+            clock=box.clock, monotonic=box.clock,
+        )
+
+        def get_bytes(url, max_bytes, opener=None):
+            box.clock.advance(35)
+            return PNG
+
+        with patch("alb.adapters.discord.rest.get_bytes", get_bytes):
+            result = run.run_once(bridge, None, "", box.root)
+        self.assertEqual(len(result), 1)
+        beats = [
+            item["at"] for item in sockets[0].sent
+            if item["payload"].get("op") == 1
+        ]
+        self.assertEqual(len(beats), 2)
+        self.assertGreater(beats[1], beats[0] + 20)
+        self.assertTrue(bridge.heartbeat_expired())
+        health = json.loads((box.root / "state" / "health.json").read_text())
+        self.assertEqual(health["state"], "degraded")
+        self.assertEqual(health["reason"], "network")
+        run.run_once(bridge, None, "", box.root)
+        self.assertEqual(len(sockets), 2)
+        self.assertEqual(sockets[0].closed, 4000)
+        self.assertIn(6, [item["payload"].get("op") for item in sockets[1].sent])
+        self.assertFalse(bridge.heartbeat_expired())
+
+    def test_a_heartbeat_one_interval_late_is_not_lapsed(self):
+        clock = Clock()
+        sock = FakeSocket(clock, [hello(10000), ready()], ack=True)
+
+        def call(method, path, token, body=None, timeout=30, opener=None):
+            return {"url": "wss://gateway.example"}
+
+        bridge = Discord(
+            TOKEN, poll_timeout=1, call=call,
+            connect=lambda url, timeout=30: sock,
+            clock=clock, monotonic=clock,
+        )
+        bridge.fetch()
+        first = next(
+            item["at"] for item in sock.sent if item["payload"].get("op") == 1
+        )
+        self.assertLess(clock(), first + 20)
+        clock.advance((first + 20) - clock())
+        bridge._file_urls["100000000000000031"] = (
+            "https://cdn.discordapp.com/attachments/100000000000000001/pic.png"
+        )
+
+        def get_bytes(url, max_bytes, opener=None):
+            return PNG
+
+        with patch("alb.adapters.discord.rest.get_bytes", get_bytes):
+            self.assertEqual(bridge.download_photo("100000000000000031"), PNG)
+        beats = [item["at"] for item in sock.sent if item["payload"].get("op") == 1]
+        self.assertEqual(beats[1] - beats[0], 20)
+        self.assertFalse(bridge.heartbeat_expired())
+
+    def test_a_thread_lookup_waits_out_retry_after(self):
+        lookups, health, saved = self._persistent_lookup(
+            HttpError(429, retry_after=300),
+        )
+        self.assertEqual(len(lookups), 1)
+        self.assertEqual(health, ["running", "running", "running"])
+        self.assertIn(THREAD, saved.get("unresolved") or {})
+
+    def test_a_lookup_without_retry_after_runs_again(self):
+        lookups, health, _saved = self._persistent_lookup(HttpError(503), cycles=2)
+        self.assertGreaterEqual(len(lookups), 2)
+        self.assertEqual(health, ["running", "running"])
+
+    def _persistent_lookup(self, failure, cycles=3):
+        box = self._box()
+        allow = box.allow(f"{CHANNEL}/{USER}")
+        lookups = []
+        message_id = str(int(snowflake_at(box.clock() - 10)) + 1)
+
+        def call(method, path, token, body=None, timeout=30, opener=None):
+            if path == f"/channels/{THREAD}":
+                lookups.append(box.clock())
+                raise failure
+            if path == f"/channels/{CHANNEL}":
+                return {"id": CHANNEL, "type": 0, "guild_id": GUILD}
+            if "/messages?" in path:
+                return []
+            return box.call(method, path, token, body)
+
+        frame = message_create(
+            message_id, f"<@{BOT}> wait", channel=THREAD, guild=GUILD,
+            mentions=[{"id": BOT}],
+        )
+        sock = FakeSocket(box.clock, [hello(), ready(), frame])
+        bridge = Discord(
+            TOKEN, state=box.root / "state", allowlist_path=allow,
+            poll_timeout=1, call=call, connect=lambda url, timeout=30: sock,
+            clock=box.clock, monotonic=box.clock,
+        )
+        health = []
+        for _ in range(cycles):
+            result = run.run_once(bridge, None, "", box.root)
+            self.assertEqual(len(result), 0)
+            saved = json.loads((box.root / "state" / "health.json").read_text())
+            health.append(saved["state"])
+        return lookups, health, box.markers() or {}
+
+    def test_a_global_rate_limit_holds_every_unresolved_lookup(self):
+        box = self._box()
+        allow = box.allow(f"{CHANNEL}/{USER}")
+        (box.root / "state" / "discord-markers.json").write_text(json.dumps({
+            "channels": {}, "threads": {}, "parents": {},
+            "unresolved": {THREAD: "1", OTHER: "1"},
+        }), encoding="utf-8")
+        lookups = []
+
+        def call(method, path, token, body=None, timeout=30, opener=None):
+            if path in (f"/channels/{THREAD}", f"/channels/{OTHER}"):
+                lookups.append(path)
+                raise HttpError(429, retry_after=300, is_global=True)
+            if path == f"/channels/{CHANNEL}":
+                return {"id": CHANNEL, "type": 0, "guild_id": GUILD}
+            if "/messages?" in path:
+                return []
+            return box.call(method, path, token, body)
+
+        sock = FakeSocket(box.clock, [hello(), ready()])
+        bridge = Discord(
+            TOKEN, state=box.root / "state", allowlist_path=allow,
+            poll_timeout=1, call=call, connect=lambda url, timeout=30: sock,
+            clock=box.clock, monotonic=box.clock,
+        )
+        bridge.fetch()
+        self.assertEqual(lookups, [f"/channels/{THREAD}"])
+        saved = box.markers()
+        self.assertEqual(saved["unresolved"][THREAD], "1")
+        self.assertEqual(saved["unresolved"][OTHER], "1")
+        bridge.fetch()
+        self.assertEqual(lookups, [f"/channels/{THREAD}"])
+
+    def test_a_fresh_adapter_retries_a_lookup_immediately(self):
+        box = self._box()
+        allow = box.allow(f"{CHANNEL}/{USER}")
+        message_id = str(int(snowflake_at(box.clock() - 10)) + 1)
+        lookups = {"n": 0}
+        row = {}
+
+        def call(method, path, token, body=None, timeout=30, opener=None):
+            if path == f"/channels/{THREAD}":
+                lookups["n"] += 1
+                if lookups["n"] == 1:
+                    raise HttpError(429, retry_after=300)
+                return {
+                    "id": THREAD, "type": 11, "parent_id": CHANNEL,
+                    "guild_id": GUILD,
+                }
+            if path == f"/channels/{CHANNEL}":
+                return {"id": CHANNEL, "type": 0, "guild_id": GUILD}
+            if f"/channels/{THREAD}/messages?" in path:
+                if row and int(row["id"]) > _after(path):
+                    return [row]
+                return []
+            if "/messages?" in path:
+                return []
+            return box.call(method, path, token, body)
+
+        frame = message_create(
+            message_id, f"<@{BOT}> held", channel=THREAD, guild=GUILD,
+            mentions=[{"id": BOT}],
+        )
+        row.update(json.loads(frame[1])["d"])
+        sockets = []
+
+        def connect(url, timeout=30):
+            frames = [hello(), ready(), frame] if not sockets else [hello(), resumed()]
+            sock = FakeSocket(box.clock, frames, ack=True)
+            sockets.append(sock)
+            return sock
+
+        first = Discord(
+            TOKEN, state=box.root / "state", allowlist_path=allow,
+            poll_timeout=1, call=call, connect=connect,
+            clock=box.clock, monotonic=box.clock,
+        )
+        first.fetch()
+        self.assertEqual(
+            box.markers()["unresolved"][THREAD], str(int(message_id) - 1),
+        )
+        fresh = Discord(
+            TOKEN, state=box.root / "state", allowlist_path=allow,
+            poll_timeout=1, call=call, connect=connect,
+            clock=box.clock, monotonic=box.clock,
+        )
+        result = run.run_once(fresh, None, "", box.root)
+        self.assertEqual(_bodies(box.root), ["held"])
+        self.assertEqual(len(result), 1)
+        self.assertGreaterEqual(lookups["n"], 2)
 
 
 if __name__ == "__main__":

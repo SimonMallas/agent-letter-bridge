@@ -81,6 +81,10 @@ class Discord:
         self._dispatch = None
         self._control = None
         self._connect_attempts = 0
+        self._next_identify = None
+        self._heartbeat_lapsed = False
+        self._lookup_after = {}
+        self._lookup_blocked_until = None
 
     def __repr__(self):
         return "<Discord bot>"
@@ -291,9 +295,11 @@ class Discord:
             body = self._call("GET", f"/channels/{channel}", self._token)
         except rest.HttpError as exc:
             if exc.status == 429 or exc.status >= 500:
-                raise TransientFailure(
+                failure = TransientFailure(
                     f"discord deferred: HTTP {exc.status}", exc.retry_after,
-                ) from None
+                )
+                failure.is_global = bool(exc.is_global)
+                raise failure from None
             if exc.status in (403, 404):
                 self._channel_cache[channel] = "skip"
                 return "skip"
@@ -382,6 +388,7 @@ class Discord:
         info = self._call("GET", "/gateway/bot", self._token)
         self._refuse_session_start(info)
         self._spend_attempt()
+        self._take_identify_slot(info)
         url = info.get("url") if isinstance(info, dict) else None
         if not isinstance(url, str) or not url.startswith("wss://"):
             raise TransientFailure("network: discord missing gateway")
@@ -426,6 +433,24 @@ class Discord:
         if isinstance(reset, (int, float)) and not isinstance(reset, bool) and reset >= 0:
             retry = float(reset) / 1000.0
         raise TransientFailure("discord deferred: session start limit", retry)
+
+    def _identify_spacing(self, info):
+        """How long one Identify holds the shared start window."""
+        limit = info.get("session_start_limit") if isinstance(info, dict) else None
+        concurrency = 1
+        if isinstance(limit, dict):
+            raw = limit.get("max_concurrency")
+            if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 1:
+                concurrency = raw
+        return 5.0 / concurrency
+
+    def _take_identify_slot(self, info):
+        """Wait out a short gap. The next Identify time survives this fetch."""
+        now = self._monotonic()
+        if self._next_identify is not None and now < self._next_identify:
+            self._pause(self._next_identify - now)
+            now = self._monotonic()
+        self._next_identify = now + self._identify_spacing(info)
 
     def _gateway_url(self, base):
         parsed = urllib.parse.urlsplit(base)
@@ -581,6 +606,7 @@ class Discord:
         elif event == "RESUMED":
             self._dispatch = "RESUMED"
             self._touch_session()
+            self._heartbeat_lapsed = False
         elif event == "MESSAGE_CREATE":
             body = frame.get("d")
             if isinstance(body, dict):
@@ -610,6 +636,7 @@ class Discord:
         self._session_id = session_id
         self._resume_url = url
         self._touch_session()
+        self._heartbeat_lapsed = False
 
     def _beat_if_due(self):
         if self._heartbeat_interval is None or self._ws is None:
@@ -620,6 +647,10 @@ class Discord:
         if self._awaiting_ack:
             self._close_socket(4000)
             raise TransientFailure("network: discord heartbeat not acknowledged")
+        # A beat this late still goes out, but the cycle is no longer live.
+        # Moving the deadline must not erase that.
+        if now > self._heartbeat_due + self._heartbeat_interval:
+            self._heartbeat_lapsed = True
         seq = self._seq if isinstance(self._seq, int) else None
         self._send({"op": 1, "d": seq})
         self._awaiting_ack = True
@@ -627,6 +658,8 @@ class Discord:
 
     def heartbeat_expired(self):
         """A beat late by more than one interval is not a live cycle."""
+        if self._heartbeat_lapsed:
+            return True
         if not self._heartbeat_interval or self._heartbeat_due is None:
             return False
         return self._monotonic() > self._heartbeat_due + self._heartbeat_interval
@@ -742,7 +775,8 @@ class Discord:
         """The channel object, or UNRESOLVED when the lookup itself failed."""
         try:
             record = self._channel_record(channel)
-        except TransientFailure:
+        except TransientFailure as exc:
+            self._note_lookup_delay(channel, exc)
             record = None
         if record is None:
             if self._remember_unresolved(channel, message_id):
@@ -783,15 +817,40 @@ class Discord:
         self._persist_markers()
         return True
 
+    def _note_lookup_delay(self, thread, exc):
+        """Remember retry_after for this process. A restart looks up again."""
+        delay = getattr(exc, "retry_after", None)
+        if not isinstance(delay, (int, float)) or isinstance(delay, bool) or delay < 0:
+            return
+        until = self._monotonic() + float(delay)
+        if getattr(exc, "is_global", False):
+            if self._lookup_blocked_until is None or until > self._lookup_blocked_until:
+                self._lookup_blocked_until = until
+            return
+        current = self._lookup_after.get(thread)
+        if current is None or until > current:
+            self._lookup_after[thread] = until
+
+    def _lookup_waiting(self, thread):
+        now = self._monotonic()
+        blocked = self._lookup_blocked_until
+        if blocked is not None and now < blocked:
+            return True
+        until = self._lookup_after.get(thread)
+        return until is not None and now < until
+
     def _retry_unresolved(self):
         self._load_markers()
         found = self._markers.get("unresolved")
         if not isinstance(found, dict) or not found:
             return
         for thread, floor in list(found.items()):
+            if self._lookup_waiting(thread):
+                continue
             try:
                 record = self._channel_record(thread)
-            except TransientFailure:
+            except TransientFailure as exc:
+                self._note_lookup_delay(thread, exc)
                 continue
             if record is None:
                 continue

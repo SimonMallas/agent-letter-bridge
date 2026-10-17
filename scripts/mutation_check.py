@@ -1519,6 +1519,18 @@ EXTRA = {
         DISCORD_API, "tests.test_discord_hold",
         "        return self._monotonic() > self._heartbeat_due + self._heartbeat_interval\n",
         "        return False\n"),
+    "identifies wait out one shared start window": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        if self._next_identify is not None and now < self._next_identify:\n",
+        "        if False and self._next_identify is not None and now < self._next_identify:\n"),
+    "a late heartbeat stays lapsed": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        if now > self._heartbeat_due + self._heartbeat_interval:\n",
+        "        if False and now > self._heartbeat_due + self._heartbeat_interval:\n"),
+    "a rate-limited thread lookup waits": (
+        DISCORD_API, "tests.test_discord_hold",
+        "            if self._lookup_waiting(thread):\n",
+        "            if False and self._lookup_waiting(thread):\n"),
 }
 
 MUTATIONS = {
