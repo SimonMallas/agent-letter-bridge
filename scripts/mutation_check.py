@@ -1543,18 +1543,10 @@ EXTRA = {
         DISCORD_API, "tests.test_discord_hold",
         "            if deferred is not None and not self._queue and self._ws is None:\n",
         "            if deferred is not None and not self._queue:\n"),
-    "a live mention waits on a rate-limited lookup": (
-        DISCORD_API, "tests.test_discord_hold",
-        "        if self._lookup_waiting(channel):\n            record = None\n",
-        "        if False:\n            record = None\n"),
     "a late heartbeat stays lapsed": (
         DISCORD_API, "tests.test_discord_hold",
         "        if now > self._heartbeat_due + self._heartbeat_interval:\n",
         "        if False and now > self._heartbeat_due + self._heartbeat_interval:\n"),
-    "a rate-limited thread lookup waits": (
-        DISCORD_API, "tests.test_discord_hold",
-        "            if self._lookup_waiting(thread):\n",
-        "            if False and self._lookup_waiting(thread):\n"),
 }
 
 MUTATIONS = {

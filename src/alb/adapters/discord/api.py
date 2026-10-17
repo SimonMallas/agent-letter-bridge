@@ -83,7 +83,6 @@ class Discord:
         self._connect_attempts = 0
         self._next_identify = None
         self._heartbeat_lapsed = False
-        self._lookup_after = {}
         self._route_after = {}
         self._lookup_blocked_until = None
 
@@ -839,17 +838,13 @@ class Discord:
     def _thread_record(self, channel, message_id):
         """The channel object, or UNRESOLVED when the lookup itself failed.
 
-        A lookup Discord asked us to wait on is not tried again for a new
-        mention either: the mention joins the unresolved floor instead.
+        A lookup Discord asked us to wait on is refused by the REST gate
+        without a call, so a new mention joins the unresolved floor instead.
         """
-        if self._lookup_waiting(channel):
+        try:
+            record = self._channel_record(channel)
+        except TransientFailure:
             record = None
-        else:
-            try:
-                record = self._channel_record(channel)
-            except TransientFailure as exc:
-                self._note_lookup_delay(channel, exc)
-                record = None
         if record is None:
             if self._remember_unresolved(channel, message_id):
                 return _UNRESOLVED
@@ -889,42 +884,17 @@ class Discord:
         self._persist_markers()
         return True
 
-    def _note_lookup_delay(self, thread, exc):
-        """Remember retry_after for this process. A restart looks up again."""
-        delay = getattr(exc, "retry_after", None)
-        if not isinstance(delay, (int, float)) or isinstance(delay, bool) or delay < 0:
-            return
-        until = self._monotonic() + float(delay)
-        if getattr(exc, "is_global", False):
-            if self._lookup_blocked_until is None or until > self._lookup_blocked_until:
-                self._lookup_blocked_until = until
-            return
-        current = self._lookup_after.get(thread)
-        if current is None or until > current:
-            self._lookup_after[thread] = until
-
-    def _lookup_waiting(self, thread):
-        now = self._monotonic()
-        blocked = self._lookup_blocked_until
-        if blocked is not None and now < blocked:
-            return True
-        if self._route_waiting(f"/channels/{thread}"):
-            return True
-        until = self._lookup_after.get(thread)
-        return until is not None and now < until
-
     def _retry_unresolved(self):
         self._load_markers()
         found = self._markers.get("unresolved")
         if not isinstance(found, dict) or not found:
             return
         for thread, floor in list(found.items()):
-            if self._lookup_waiting(thread):
-                continue
             try:
+                # Refused at the REST gate, with no call, while Discord's
+                # wait for this route or a global one is still running.
                 record = self._channel_record(thread)
-            except TransientFailure as exc:
-                self._note_lookup_delay(thread, exc)
+            except TransientFailure:
                 continue
             if record is None:
                 continue
