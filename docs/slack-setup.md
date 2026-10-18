@@ -67,8 +67,8 @@ and **What it can respond to in Slack (2)**. Choose **Create**.
 The app now exists. You are on its **Basic Information** page.
 
 > **Do not screenshot or share the Basic Information page.** Further down it
-> shows the app's secrets. The bridge never needs them; it needs only the two
-> tokens in the next steps.
+> shows the app's secrets; they are blurred in the picture above. The bridge
+> never needs them; it needs only the two tokens in the next steps.
 
 ## 3. Make the app-level token (starts `xapp-`)
 

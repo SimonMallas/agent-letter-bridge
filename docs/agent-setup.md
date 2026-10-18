@@ -106,10 +106,11 @@ reading mail does not.
 The same rules as Telegram: one reply per letter, and the reply goes where
 the letter came from. What differs:
 
-- **Length.** Discord accepts at most 2,000 characters from a bot; Slack
-  accepts 40,000. A longer reply is refused before anything is sent, and the
-  letter can still be answered, so shorten it and send again. On Discord,
-  write short.
+- **Length.** Discord accepts at most 2,000 characters from a bot, and some
+  characters, such as many emoji, count as two. Slack accepts 40,000, counted
+  after `&`, `<` and `>` are escaped. A longer reply is refused before
+  anything is sent, and the letter can still be answered, so shorten it and
+  send again. On Discord, write short.
 - **Nothing you write pings anyone.** `@everyone`, `@here`, and user and role
   mentions arrive as plain text.
 - **Channels.** A letter from a channel came from a message that mentioned the

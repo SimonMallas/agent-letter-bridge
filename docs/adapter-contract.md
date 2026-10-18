@@ -41,8 +41,9 @@ classification of a send outcome. Its WebSocket client is standard library
 only. [`slack.md`](slack.md) maps each rule.
 
 The Discord adapter meets them the same way. Discord has no per-event
-acknowledgement and never redelivers, so its durability comes from the
-per-channel marker. It moves only in `confirm()`, after the letter exists, and
+acknowledgement and does not retry missed events beyond a short Gateway
+resume, so its durability comes from the per-channel marker. It moves only in
+`confirm()`, after the letter exists, and
 the next start reads channel history after it. The ledger is keyed on channel
 and message ID, the allowlist is a pair at both ends, and sends are classified
 by the same doctrine. It shares the Slack adapter's WebSocket client.

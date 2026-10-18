@@ -419,7 +419,7 @@ Everything above applies to a Slack bridge. What differs is in
   as long as the workspace keeps history (90 days on the free plan). It
   tracks the 200 most recently active threads it has seen; a thread it has
   never seen, or one that has dropped out of those 200, is covered only by
-  Slack's own retries, about six minutes.
+  Slack's own retries, about five minutes.
 - **Moving machines:** carry `state/slack-markers.json` with the other state
   files. Without it the bridge re-reads the last 24 hours, and the ledger
   keeps that from producing duplicate letters.

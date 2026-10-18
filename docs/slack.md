@@ -128,7 +128,7 @@ Limits, stated plainly:
 - Threads are caught up when the bridge is tracking them: the 200 most
   recently active threads it has seen. A reply sent while it is off, in a
   thread it has never seen or one that has dropped out of those 200, arrives
-  only if Slack's own retries deliver it — within about six minutes.
+  only if Slack's own retries deliver it — within about five minutes.
 - A long backlog is read in steps of up to ten pages a cycle. The marker for
   that conversation does not move until the whole backlog has been read, so
   nothing in it is skipped.

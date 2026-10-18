@@ -29,8 +29,9 @@ direct message, or a server message that @mentions the bot, becomes the same
 durable letter. The bridge connects over the Discord Gateway with the same
 standard-library WebSocket client, which now lives in `alb.adapters.websocket`
 and is shared by both. No privileged intent is used, so the bot is given only
-messages addressed to it. Discord never redelivers an event, so a message sent
-while the bridge was off is recovered from channel history when it connects.
+messages addressed to it. Discord does not retry missed events beyond a short
+Gateway resume, so a message sent while the bridge was off is recovered from
+channel history when it connects.
 Agent text cannot ping anyone: every send sets `allowed_mentions` to nothing.
 `alb --init --platform discord` walks through making the bot, takes the
 token, and prints an invite link built from the token with no network call.

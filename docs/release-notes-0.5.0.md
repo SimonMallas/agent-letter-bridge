@@ -85,7 +85,7 @@ durable letter, and the agent's reply goes back to the same place.
 
 - **One bot serves one bridge.** Two bridges on one bot would both receive
   every message and both answer it, and nothing can detect it.
-- **Discord never redelivers.** The bridge catches up from channel history on
+- **Discord does not retry missed events beyond a short Gateway resume.** The bridge catches up from channel history on
   connect: allowlisted channels, and up to 200 threads where it has been
   mentioned. The first run reads back 24 hours.
 
