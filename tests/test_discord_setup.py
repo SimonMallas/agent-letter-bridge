@@ -6,6 +6,7 @@ plainly.
 """
 import base64
 import pathlib
+import re
 import sys
 import unittest
 from urllib.parse import parse_qs, urlsplit
@@ -92,6 +93,15 @@ class Invite(unittest.TestCase):
         console = ScriptedConsole()
         discord_wizard.invite_step(console, TOKEN)
         self.assertIn(invite.url(APP_ID), console.transcript)
+
+    def test_the_steps_count_up_without_a_repeat(self):
+        for bot_token in (TOKEN, ""):
+            with self.subTest(with_app_id=bool(bot_token)):
+                console = ScriptedConsole()
+                discord_wizard.explain(console)
+                discord_wizard.invite_step(console, bot_token)
+                numbers = re.findall(r"^(\d+)\. ", console.transcript, re.M)
+                self.assertEqual(numbers, ["1", "2", "3", "4"])
 
 
 class Token(unittest.TestCase):

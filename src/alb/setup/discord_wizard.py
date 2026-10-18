@@ -71,16 +71,16 @@ def token(console, consume, *, token_file=None):
 
 
 def invite_step(console, bot_token):
-    """Step 3, from the token alone: no network call."""
+    """Step 4, from the token alone: no network call."""
     app_id = invite.application_id(bot_token)
     console.say()
     if not app_id:
-        console.say("3. Add the bot to your server: on the Developer Portal's")
+        console.say("4. Add the bot to your server: on the Developer Portal's")
         console.say("   OAuth2 page, tick bot, then View Channels, Send Messages,")
         console.say("   Send Messages in Threads, Read Message History and Attach")
         console.say("   Files, and open the link it makes.")
     else:
-        console.say("3. Add the bot to your server. Open this link, pick the")
+        console.say("4. Add the bot to your server. Open this link, pick the")
         console.say("   server, then Authorize:")
         console.say()
         console.say(f"   {invite.url(app_id)}")
