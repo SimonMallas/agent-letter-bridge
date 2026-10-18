@@ -17,7 +17,7 @@ alb --init --platform slack --root ~/.alb-slack
 
 Setup prints an app manifest, walks you through the two tokens and writes your
 allowlist entry. [`docs/slack.md`](slack.md) covers everything that differs
-from Telegram.
+from Telegram, and [Slack, step by step](slack-setup.md) shows every screen.
 
 ### How it works
 
@@ -65,7 +65,8 @@ alb --init --platform discord --root ~/.alb-discord
 
 A Discord DM to your bot, or a server message that @mentions it, becomes a
 durable letter, and the agent's reply goes back to the same place.
-[`docs/discord.md`](discord.md) covers what differs.
+[`docs/discord.md`](discord.md) covers what differs, and
+[Discord, step by step](discord-setup.md) shows every screen.
 
 - **Your own bot, in your own server.** Setup tells you to turn Public Bot off
   and to leave every privileged intent off.
@@ -75,7 +76,8 @@ durable letter, and the agent's reply goes back to the same place.
   Discord gives the bot DMs and messages that mention it, nothing else.
 - **Nothing an agent writes can ping anyone.** Discord enforces it through
   `allowed_mentions`. Link previews are off. Text over 2,000 characters is
-  refused before anything is sent.
+  refused before anything is sent, and the agent can still answer that letter
+  with shorter text.
 - **The allowlist is a pair**, `<channel>/<user>`. A thread is matched against
   its parent channel.
 
@@ -94,5 +96,9 @@ mutation checks, and reviewed adversarially until no finding remained. The
 suite and mutation gate passed on macOS and on Linux (Python 3.12). Slack then
 ran a live round trip in a real workspace: setup, DMs in and out, catch-up
 after a stop, an initiated send, photos both ways, a channel mention answered
-in its thread, literal markup, and the canary. <!-- DISCORD LIVE ROUND TRIP: fill in after it runs; do not tag before --> Faults that the live run found
-were fixed and pinned before this release.
+in its thread, literal markup, and the canary. Discord ran the same round trip
+in a private server: setup, DMs in and out, catch-up after a stop, an
+initiated send, photos both ways, a channel mention answered as a reply, a
+mention in a thread, `@everyone` and `@here` arriving as plain text, the
+2,000-character limit, the ring and the canary. Faults that the live runs
+found were fixed and pinned before this release.
