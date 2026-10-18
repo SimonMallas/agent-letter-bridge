@@ -1,4 +1,5 @@
-"""Codex HOLD on the merged Discord candidate. Loss, budget, and health."""
+"""Discord under failure: no message is lost, the session budget is kept, and
+rate limits and heartbeats are honoured."""
 import json
 import pathlib
 import sys
