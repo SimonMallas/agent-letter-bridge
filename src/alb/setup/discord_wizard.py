@@ -101,8 +101,8 @@ def _manual(console):
     console.say()
     console.say("Put the pair in allowlist.json yourself, as")
     console.say('  {"chats": ["<channel>/<user>"]}')
-    console.say("First turn on Developer Mode: User Settings -> Advanced ->")
-    console.say("Developer Mode.")
+    console.say("First turn on Developer Mode: User Settings -> Developer")
+    console.say("(Advanced in older versions) -> Developer Mode.")
     console.say("Your user ID: right-click your own name -> Copy User ID.")
     console.say("The DM channel: open your DM with the bot; the address ends")
     console.say("with its ID (discord.com/channels/@me/<this>).")
@@ -131,8 +131,9 @@ def pairs(console, bot_token, call=None):
         return []
 
     console.say()
-    console.say("Your user ID: turn on Developer Mode (User Settings ->")
-    console.say("Advanced), then right-click your own name -> Copy User ID.")
+    console.say("Your user ID: in User Settings -> Developer (Advanced in")
+    console.say("older versions) turn on Developer Mode, then right-click")
+    console.say("your own name -> Copy User ID.")
     user = console.ask("  your user ID", "").strip()
     if not _SNOWFLAKE.fullmatch(user):
         # Anything not understood means no entry. An allowlist written from a

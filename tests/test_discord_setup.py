@@ -137,6 +137,7 @@ class Pairs(unittest.TestCase):
                          [("GET", "/users/@me"), ("POST", "/users/@me/channels")])
         self.assertEqual(call.calls[1][3], {"recipient_id": USER})
         self.assertFalse(any("/messages" in p for _m, p, _t, _b in call.calls))
+        self.assertIn("User Settings -> Developer", console.transcript)
 
     def test_print_route_makes_no_call(self):
         call = FakeCall()
@@ -145,6 +146,8 @@ class Pairs(unittest.TestCase):
         self.assertEqual(discord_wizard.pairs(console, TOKEN, call), [])
         self.assertEqual(call.calls, [])
         self.assertIn("Copy User ID", console.transcript)
+        # Developer Mode is under its own Developer page now, not Advanced.
+        self.assertIn("User Settings -> Developer", console.transcript)
 
     def test_the_default_is_print(self):
         call = FakeCall()

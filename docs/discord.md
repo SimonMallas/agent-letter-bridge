@@ -69,9 +69,9 @@ it: `<channel>/<user>`, both numeric IDs.
 
 - The first ID is your DM channel with the bot, or a server channel.
 - The second is your user ID.
-- Copying IDs needs **Developer Mode**: User Settings → Advanced → Developer
-  Mode. Then right-click a name → **Copy User ID**, or a channel → **Copy
-  Channel ID**.
+- Copying IDs needs **Developer Mode**: User Settings → Developer (Advanced
+  in older versions) → Developer Mode. Then right-click a name → **Copy User
+  ID**, or a channel → **Copy Channel ID**.
 
 A message becomes a letter only when **both** halves match. A message in a
 thread is matched against the thread's parent channel, so one entry for a
