@@ -1,27 +1,22 @@
 # Agent Letter Bridge
 
+![Agent Letter Bridge: contact your agents from your phone, on Telegram, Slack and Discord](https://raw.githubusercontent.com/SimonMallas/agent-letter-bridge/main/docs/images/hero.jpg)
+
 [![PyPI version](https://img.shields.io/pypi/v/agent-letter-bridge)](https://pypi.org/project/agent-letter-bridge/)
 
-**Message the CLI agents on your machine from your phone — and every message
-becomes part of their memory.**
+**Message the CLI agents on your machine from your phone, via Telegram, Discord
+or Slack — and every message becomes part of their memory.**
+
+**New in 0.5.0: Discord and Slack join Telegram.** Use one, or run all three
+side by side with one letterbox behind them. Setup:
+[Telegram](INSTALL.md) · [Discord, step by step](docs/discord-setup.md) ·
+[Slack, step by step](docs/slack-setup.md).
 
 Agent Letter Bridge connects a chat app to AI agents on your own machine. An
 incoming message becomes a durable file on disk **before** it is acknowledged and
 **before** any agent is notified. The file is the source of truth; the ring is
 how it gets read. Letter first, then ring — without a bell, mail lands in a dead
 drop and nobody is told.
-
-Integrated mode **requires a doorbell helper with a `ring <to> <type> <id>`
-command that prints one `doorbell-outcome v=1` line**. Letterbox 0.4.0
-defines that format and its fixtures. The public Herdr edition ships a compatible
-`letterbox ring` dispatcher; point `ALB_BUS_BINARY` at its absolute path for
-Herdr integrated mode, with `LETTERBOX_DIR` set to the shared letterbox containing
-`ALB_MAIL_ROOT`'s recipient inbox. The public cmux, tmux and Zellij editions do not ship
-that dispatcher yet; those integrated deployments need a separate compatible
-helper. A helper that still prints prose will make every ring `failing` /
-`unparseable`. `alb --doctor` reports
-`helper does not emit doorbell-outcome v=1` instead of waiting for a silent
-ring-health failure after cutover.
 
 Most tools in this space deliver an external message **as the agent's input** —
 typed into its terminal, or handed to its session as a prompt. This one delivers
@@ -221,6 +216,18 @@ On Herdr, a read-only popup shows `alb --status` for one bridge:
 `ALB_ROOT=~/.alb` (and `ALB_BIN=/path/to/alb` if `alb` is not on Herdr's
 `PATH`) in `alb-plugin.env` under `herdr plugin config-dir agent-letter-bridge`.
 It reads state files only: no token, no network, no letters.
+
+Integrated mode **requires a doorbell helper with a `ring <to> <type> <id>`
+command that prints one `doorbell-outcome v=1` line**. Letterbox 0.4.0
+defines that format and its fixtures. The public Herdr edition ships a compatible
+`letterbox ring` dispatcher; point `ALB_BUS_BINARY` at its absolute path for
+Herdr integrated mode, with `LETTERBOX_DIR` set to the shared letterbox containing
+`ALB_MAIL_ROOT`'s recipient inbox. The public cmux, tmux and Zellij editions do not ship
+that dispatcher yet; those integrated deployments need a separate compatible
+helper. A helper that still prints prose will make every ring `failing` /
+`unparseable`. `alb --doctor` reports
+`helper does not emit doorbell-outcome v=1` instead of waiting for a silent
+ring-health failure after cutover.
 
 Reference and failure modes: [`docs/operations.md`](docs/operations.md).
 Waking an agent that already handles other mail: [`docs/agent-setup.md`](docs/agent-setup.md).
