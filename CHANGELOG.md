@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0] — Unreleased
+## [0.5.0] — 2026-10-18
 
 ### Added
 
@@ -36,6 +36,11 @@ Agent text cannot ping anyone: every send sets `allowed_mentions` to nothing.
 token, and prints an invite link built from the token with no network call.
 `--status`, `--check` and `--doctor` know a Discord bridge. The privacy scan
 refuses Discord-token-shaped strings. See [`docs/discord.md`](docs/discord.md).
+
+Step-by-step setup guides with screenshots for Slack and Discord
+([`docs/slack-setup.md`](docs/slack-setup.md),
+[`docs/discord-setup.md`](docs/discord-setup.md)), and the agent install and
+reply notes cover both platforms.
 
 ## [0.4.4] — 2026-09-30
 
