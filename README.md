@@ -4,13 +4,13 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/agent-letter-bridge)](https://pypi.org/project/agent-letter-bridge/)
 
-**Message the CLI agents on your machine from your phone, via Telegram, Discord
-or Slack — and every message becomes part of their memory.**
+**Message the CLI agents on your machine from your phone, via Telegram, Slack
+or Discord — and every message becomes part of their memory.**
 
-**New in 0.5.0: Discord and Slack join Telegram.** Use one, or run all three
+**New in 0.5.0: Slack and Discord join Telegram.** Use one, or run all three
 side by side with one letterbox behind them. Setup:
-[Telegram](INSTALL.md) · [Discord, step by step](docs/discord-setup.md) ·
-[Slack, step by step](docs/slack-setup.md).
+[Telegram](INSTALL.md) · [Slack, step by step](docs/slack-setup.md) ·
+[Discord, step by step](docs/discord-setup.md).
 
 Agent Letter Bridge connects a chat app to AI agents on your own machine. An
 incoming message becomes a durable file on disk **before** it is acknowledged and
