@@ -101,6 +101,23 @@ alb --reply-to <letter-id> --text "..."
 Replying needs the token, so it is an operator-side action. Being woken and
 reading mail does not.
 
+## Replying on Slack and Discord
+
+The same rules as Telegram: one reply per letter, and the reply goes where
+the letter came from. What differs:
+
+- **Length.** Discord accepts at most 2,000 characters from a bot; Slack
+  accepts 40,000. A longer reply is refused before anything is sent, and the
+  letter can still be answered, so shorten it and send again. On Discord,
+  write short.
+- **Nothing you write pings anyone.** `@everyone`, `@here`, and user and role
+  mentions arrive as plain text.
+- **Channels.** A letter from a channel came from a message that mentioned the
+  bot. Your reply goes back as a reply to that message, in its thread on Slack.
+  On Discord the person who asked is notified.
+- **Photos.** `--photo <path>` works on both, from a path under a root listed
+  in `<root>/state/attach-roots.json`.
+
 ## Check your own relay when you wake
 
 **Put this in your standing instructions.** Not in a hook that a compaction
