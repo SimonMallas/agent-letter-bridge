@@ -161,11 +161,13 @@ alb --init --root ~/.alb                        # creates the files, asks for th
 
 For Slack instead of Telegram, run `alb --init --platform slack --root
 ~/.alb-slack`; it prints the app manifest and asks for the two tokens. What
-differs from Telegram is in [`docs/slack.md`](docs/slack.md).
+differs from Telegram is in [`docs/slack.md`](docs/slack.md), and
+[Slack, step by step](docs/slack-setup.md) shows every screen.
 
 For Discord, run `alb --init --platform discord --root ~/.alb-discord`; it
 walks you through making the bot, asks for its token and prints the link that
-adds it to your server. What differs is in [`docs/discord.md`](docs/discord.md).
+adds it to your server. What differs is in [`docs/discord.md`](docs/discord.md),
+and [Discord, step by step](docs/discord-setup.md) shows every screen.
 
 For pip, first create and activate a dedicated virtual environment, then run
 `python -m pip install agent-letter-bridge`. For development from a checkout,

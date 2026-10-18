@@ -23,6 +23,9 @@ added to your own server. Nothing passes through anyone else.
 
 ## Setup
 
+First time? [Discord, step by step](discord-setup.md) walks through every
+screen, with screenshots.
+
 ```sh
 pipx install agent-letter-bridge
 alb --init --platform discord --root ~/.alb-discord
