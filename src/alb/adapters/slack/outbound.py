@@ -110,13 +110,17 @@ def _post(call, method, token, params):
     raise reply.DefiniteRefusal(f"refused: {error}")
 
 
+def _check_length(body):
+    # Measured after escaping: the escaped form is what Slack counts.
+    if len(body) > MAX_TEXT:
+        raise reply.DefiniteRefusal("text longer than Slack accepts")
+
+
 def send(call, bot_token, chat_id, text, thread=None):
     """Post plain text. Returns the message ts, which is Slack's message id."""
     conversation = conversation_of(chat_id)
     body = escape(text or "")
-    # Measured after escaping: the escaped form is what Slack counts.
-    if len(body) > MAX_TEXT:
-        raise reply.DefiniteRefusal("text longer than Slack accepts")
+    _check_length(body)
     params = {
         "channel": conversation,
         "text": body,
@@ -210,6 +214,9 @@ class Sender:
     def __repr__(self):
         # The token must never reach a log line, an error message or a repr.
         return "<Slack sender>"
+
+    def check_text(self, text):
+        _check_length(escape(text or ""))
 
     def send(self, chat_id, text, thread=None):
         return send(self._call or _web_call(), self._bot, chat_id, text, thread)

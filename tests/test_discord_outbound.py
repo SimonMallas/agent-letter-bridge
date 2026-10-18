@@ -7,10 +7,13 @@ and a 429 is the one provable not-sent case.
 import json
 import pathlib
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 from alb.adapters.discord import outbound as discord_out  # noqa: E402
+from alb.letter import store  # noqa: E402
+from alb.outbound import store as outbound  # noqa: E402
 from alb.send import reply  # noqa: E402
 
 # Built at runtime so nothing here is shaped like a real token.
@@ -246,6 +249,48 @@ class TheSender(unittest.TestCase):
         sender.send_photo(CHANNEL_PAIR, PNG, caption="c", thread=f"{CHANNEL}:{MESSAGE}")
         self.assertEqual(call.calls[0][2], TOKEN)
         self.assertEqual(post.calls[0][1], TOKEN)
+
+
+class OverLongReply(unittest.TestCase):
+    """Found live: a refused over-long reply used to take the letter's one
+    reply, so the agent could never answer that letter with shorter text."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = pathlib.Path(self.tmp.name)
+        self.inbox, self.outbox, self.state = (root / "inbox", root / "outbox",
+                                               root / "state")
+        self.inbox.mkdir()
+        self.state.mkdir()
+        self.allow = root / "allowlist.json"
+        self.allow.write_text(json.dumps({"chats": [PAIR]}), encoding="utf-8")
+        self.call = FakeCall()
+        self.sender = discord_out.Sender(TOKEN, call=self.call,
+                                         post_multipart=FakeMultipart())
+        self.letter_id = store.publish(self.inbox, "incoming", store.envelope(
+            sender="discord-bridge", recipient="agent",
+            extra={"discord_channel": DM, "discord_message": MESSAGE,
+                   "correspondent": outbound.correspondent_key(
+                       self.state, PAIR, platform="discord")}))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def reply(self, text):
+        return reply.send_reply(self.sender, self.inbox, self.state, self.allow,
+                                self.letter_id, text, outbox=self.outbox)
+
+    def test_an_over_long_reply_leaves_the_letter_answerable(self):
+        with self.assertRaises(reply.DefiniteRefusal):
+            self.reply("x" * (discord_out.MAX_TEXT + 1))
+        self.assertEqual(self.call.calls, [], "nothing reached Discord")
+        self.assertEqual(list(self.outbox.glob("*.md")), [], "no reply composed")
+        self.reply("shorter")
+        self.assertEqual([c[3]["content"] for c in self.call.calls], ["shorter"])
+
+    def test_exactly_the_limit_is_sent(self):
+        self.reply("x" * discord_out.MAX_TEXT)
+        self.assertEqual(len(self.call.calls), 1)
 
 
 if __name__ == "__main__":

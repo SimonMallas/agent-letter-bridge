@@ -84,6 +84,11 @@ EXTRA = {
         "tests.test_slack_outbound",
         "    if origin_platform != platform or not sep or not chat:",
         "    if not sep or not chat:"),
+    "slack checks length before the reply is claimed": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "outbound.py",
+        "tests.test_slack_outbound",
+        '        _check_length(escape(text or ""))',
+        "        pass"),
     "reply stays in the thread the letter names": (
         ROOT / "src" / "alb" / "send" / "reply.py",
         "tests.test_slack_outbound",
@@ -100,6 +105,16 @@ EXTRA = {
         "tests.test_discord_outbound",
         '    if len(text.encode("utf-16-le")) // 2 > MAX_TEXT:',
         "    if len(text) > MAX_TEXT + 1000:"),
+    "discord checks length before the reply is claimed": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        '        _check_length(text or "")',
+        "        pass"),
+    "an over-long reply leaves the letter answerable": (
+        ROOT / "src" / "alb" / "send" / "reply.py",
+        "tests.test_discord_outbound",
+        "    if check_text is not None:\n        check_text(text)",
+        "    if False:\n        check_text(text)"),
     "discord 429 is throttled, not ambiguous": (
         ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
         "tests.test_discord_outbound",

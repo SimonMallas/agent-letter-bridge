@@ -184,6 +184,9 @@ class Sender:
         # The token must never reach a log line, an error message or a repr.
         return "<Discord sender>"
 
+    def check_text(self, text):
+        _check_length(text or "")
+
     def send(self, chat_id, text, thread=None):
         return send(self._call or _rest_call(), self._token, chat_id, text,
                     thread)

@@ -245,6 +245,12 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
         inspect.preflight(photo_bytes, text)
     if not text and photo_bytes is None:
         raise DefiniteRefusal("reply needs text or a photo")
+    # Before the claim, like the photo preflight: text the platform would
+    # refuse must not use up the letter's one reply, or shorter text could
+    # never answer it.
+    check_text = getattr(sender, "check_text", None)
+    if check_text is not None:
+        check_text(text)
 
     # v0.2 W1: the outbound LETTER is written first and its O_EXCL create IS
     # the claim - one logical reply per source letter, established in the same

@@ -188,6 +188,26 @@ class Replies(Base):
                                             platform="slack"))
 
 
+class OverLongReply(Base):
+    """A refused over-long reply must not use up the letter's one reply."""
+
+    def test_an_over_long_reply_leaves_the_letter_answerable(self):
+        call = FakeCall()
+        sender = slack_out.Sender(TOKEN, call=call)
+        letter_id = self.letter()
+        with self.assertRaises(reply.DefiniteRefusal):
+            self.reply(sender, letter_id, "x" * (slack_out.MAX_TEXT + 1))
+        self.assertEqual(call.calls, [], "nothing reached Slack")
+        self.assertEqual(list(self.outbox.glob("*.md")), [], "no reply composed")
+        self.reply(sender, letter_id, "shorter")
+        self.assertEqual([c[2]["text"] for c in call.calls], ["shorter"])
+
+    def test_the_limit_counts_the_escaped_text(self):
+        sender = slack_out.Sender(TOKEN, call=FakeCall())
+        with self.assertRaises(reply.DefiniteRefusal):
+            sender.check_text("<" * (slack_out.MAX_TEXT // 4 + 1))
+
+
 class Escaping(Base):
     def test_send_escapes_control_characters_and_disables_markup(self):
         sender = SlackSender()
