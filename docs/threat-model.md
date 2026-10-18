@@ -79,3 +79,52 @@ capability boundary.
 
 **A remote `getUpdates` consumer on another machine cannot be detected before
 first poll.** Revoke and re-issue the token if its history is unknown.
+
+**Slack: both tokens sit in the receiving process.** The app-level token opens
+the Socket Mode connection; the bot token is needed on the same side to read
+history for catch-up and to download images. There is no credential
+separation to claim, as for Telegram. The sending object is given the bot
+token only.
+
+**Slack: the app can read every message in a channel it is added to.**
+Recovering channel mentions sent while the bridge was off means reading
+channel history (`channels:history`, `groups:history`). Only messages that
+mention the bot become letters, and nothing else is stored, but the scope is
+broader than the letters it produces. Setup and [`slack.md`](slack.md) say so.
+
+**Slack: a second bridge on the same app is not detectable.** Slack spreads
+events across every connection on an app without an error, so two bridges
+would each see part of the traffic. The lock covers one machine. Across
+machines the only signal is the connection count Slack reports at connect,
+which `alb --status` shows; one Slack app per bridge is the rule.
+
+**Discord: one token does everything.** The bot token opens the gateway,
+reads history for catch-up and sends. The sending object is separate and the
+receiving object has no send method, but there is one credential.
+
+**Discord: the bot reads only what is addressed to it.** With every privileged
+intent left off, Discord gives the bot the text of DMs and of messages that
+mention it, live and from history; other channel messages arrive empty. If an
+operator turns the Message Content intent on, the bridge still turns only DMs
+and mentions into letters, but the bot could then read more than it uses.
+Setup says to leave it off.
+
+**Discord: a second bridge on the same bot is not detectable,** and unlike
+Slack it does not split traffic: every connection on one bot receives every
+message, so two bridges would each write the letter and each answer it. One
+bot per bridge is the rule.
+
+**Discord: agent text cannot ping.** Every send sets `allowed_mentions` to
+nothing, so `@everyone`, `@here`, user and role mentions in an agent's text
+arrive as text; Discord enforces it. Link previews are suppressed. A reply in
+a channel notifies only the person it answers.
+
+**Discord: a public bot can be added by anyone with its link.** That would
+not deliver their messages (the allowlist is still a pair), but it would let
+the bot see mentions in servers the operator never chose. Setup says to turn
+Public Bot off.
+
+**Slack: agent text is escaped, not trusted to be harmless.** `&`, `<` and
+`>` are escaped and formatting and link previews are turned off, so an
+agent's text cannot produce a mass mention, a ping or an unfurl. A photo
+caption is escaped the same way but may still show Slack formatting.

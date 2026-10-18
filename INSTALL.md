@@ -5,6 +5,13 @@ A single path from nothing to a working bridge, in order. Roughly 15 minutes.
 If you want to know *why* any step is the way it is, every step links into
 [`docs/operations.md`](docs/operations.md). This page only tells you what to do.
 
+**Using Slack or Discord instead of Telegram?** Steps 3 and 4 differ: follow
+[Slack, step by step](docs/slack-setup.md) or
+[Discord, step by step](docs/discord-setup.md), which walk through every
+screen with screenshots. [`docs/slack.md`](docs/slack.md) and
+[`docs/discord.md`](docs/discord.md) cover what differs from Telegram. Every
+other step applies as written.
+
 **Installing this with a CLI agent rather than by hand?** Give it
 [`docs/agent-install.md`](docs/agent-install.md) instead — same install, written
 as a brief for an agent.

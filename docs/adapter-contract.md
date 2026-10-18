@@ -5,9 +5,10 @@ that must never vary. Both lists are explicit.
 
 ## Varies — parameterise freely
 
-Seat identity · lock target name · state and env paths · allowlist contents ·
-token · poll cadence *within validated bounds* · notification transport
-(cmux / tmux / herdr / none) · store layout root.
+Platform (Telegram / Slack / Discord) · seat identity · lock target name · state and
+env paths · allowlist contents · token · poll cadence *within validated
+bounds* · notification transport (cmux / tmux / herdr / none) · store layout
+root.
 
 ## Must stay FIXED
 
@@ -30,6 +31,23 @@ Varying these is how people hurt themselves.
 - **One language across all four processes.** Letters on disk would technically
   permit mixing; a stranger cannot audit four runtimes as easily as one.
 - **No `kqueue`/FSEvents requirement.** `selectors` or a poll fallback only.
+
+Every rule in this list holds **per platform**. A platform adapter is added by
+meeting all of them, never by relaxing one: the Slack adapter keeps the same
+ack-after-durable-write order (its envelope acknowledgements are sent from
+`confirm()`), the same delivered-ids ledger (keyed on workspace, conversation
+and message timestamp), the same allowlist at both ends, and the same
+classification of a send outcome. Its WebSocket client is standard library
+only. [`slack.md`](slack.md) maps each rule.
+
+The Discord adapter meets them the same way. Discord has no per-event
+acknowledgement and does not retry missed events beyond a short Gateway
+resume, so its durability comes from the per-channel marker. It moves only in
+`confirm()`, after the letter exists, and
+the next start reads channel history after it. The ledger is keyed on channel
+and message ID, the allowlist is a pair at both ends, and sends are classified
+by the same doctrine. It shares the Slack adapter's WebSocket client.
+[`discord.md`](discord.md) maps each rule.
 
 ## Platform support
 

@@ -182,6 +182,52 @@ So, for an agent like this:
 
 ---
 
+## On Slack or Discord: Steps 3 to 5 differ
+
+Steps 0–2 and 6–9 apply as written, and so does the table of what you may and
+may not do. Use `--platform slack` or `--platform discord`, each with its own
+`--root` (`~/.alb-slack`, `~/.alb-discord`). The human's step-by-step guides
+are [`slack-setup.md`](slack-setup.md) and [`discord-setup.md`](discord-setup.md);
+point them there. Steps 3 to 5 below are Telegram's.
+
+**What you cannot do on either platform:** create the app or the bot, sign in,
+type the human's password, pass a "prove you are human" check, or copy their
+user ID from their chat app. All of that happens in their browser or app.
+
+**Slack.** The app is made from a manifest that `alb --init` prints on its
+first screen, so the app cannot exist before init runs.
+
+- Run `alb --init --platform slack --root ~/.alb-slack` in a terminal pane the
+  human can see (Step 5's rules on driving it apply).
+- They copy the manifest from that screen, make the app, then paste the two
+  tokens at init's hidden prompts themselves: the app-level token (`xapp-`)
+  and the bot token (`xoxb-`). Never ask for either in chat.
+- If the app already exists and both tokens are issued, the token-file route
+  works: `--token-file <bot> --app-token-file <app>`, both mode 600, both
+  removed after reading.
+- A work workspace may need an admin to approve the app. That is the human's
+  call, not yours.
+- For the allowlist (`read`): ask the human to send the app one DM first. Setup
+  lists the bot's DMs and the human picks which one is them. Do not pick for
+  them.
+
+**Discord.** The bot exists before init, so the token-file route works.
+
+- The human makes the application by following `discord-setup.md` Steps 2–3.
+  On the Installation page, Install Link must be **None** before Public Bot can
+  be turned off. Reset Token may ask for their password.
+- They write the token into a mode-600 file you name. Then run
+  `alb --init --platform discord --root ~/.alb-discord --token-file <file>`.
+- Init prints an invite link. The human opens it, picks their server, and
+  authorizes. Discord may ask them to prove they are human.
+- For the allowlist (`read`): ask for their Discord user ID. In Discord: User
+  Settings → Developer (Advanced in older versions) → Developer Mode on, then
+  right-click their own name → Copy User ID. Setup opens the DM with them;
+  nothing is sent.
+- One bot serves one bridge. A second agent needs a second application.
+
+---
+
 ## Step 3 — ASK: the bot token
 
 > "I need a bot token. In Telegram, message @BotFather, send `/newbot`, and

@@ -23,6 +23,14 @@ PATTERNS = [
     (r"/Volumes/[A-Za-z0-9._-]+", "external volume path"),
     (r"\bgui/\d+/", "launchd GUI domain path"),
     (r"\b\d{8,10}:[A-Za-z0-9_-]{30,}", "bot-token-shaped string"),
+    # Slack bot/user tokens and app-level tokens. Assembled from fragments so
+    # this file does not match its own patterns.
+    (r"\bxox" + r"[abprs]-[0-9]+-[0-9A-Za-z-]{20,}", "Slack-token-shaped string"),
+    (r"\bxapp" + r"-\d+-[A-Z0-9]+-\d+-[0-9a-f]{20,}",
+     "Slack-app-token-shaped string"),
+    # Discord bot token: the bot's ID in base64, a timestamp, an HMAC.
+    (r"\b[MN][A-Za-z0-9_-]{23,27}" + r"\.[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,40}\b",
+     "Discord-token-shaped string"),
     # Assembled from fragments so this file does not match its own pattern.
     # That is what lets the scanner run with NO exemptions - see the SELF note.
     (r"(?i)co-authored" + r"-by:.*\b(claude|copilot|gpt|gemini|cursor)\b",

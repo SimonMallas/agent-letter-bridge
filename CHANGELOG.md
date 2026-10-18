@@ -5,7 +5,45 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.4] — Unreleased
+## [0.5.0] — 2026-10-18
+
+### Added
+
+Slack, as a second platform beside Telegram, selected with
+`ALB_PLATFORM=slack`. A Slack direct message, or a channel message that
+@mentions the bot, becomes the same durable letter a Telegram message does,
+and replies, initiated sends, photos, the allowlist, the claim ledger and the
+ambiguous-outcome rule work as they do for Telegram. The bridge connects over
+Slack's Socket Mode with its own standard-library WebSocket client, so the core
+still has no third-party runtime dependency. Messages sent while the bridge
+was off are recovered from Slack history when it reconnects. The receiving
+object holds both Slack tokens and has no send path; sending uses the bot
+token alone. `alb --init --platform slack` prints the app manifest and walks
+through the two tokens and the allowlist pair. `--status`, `--check` and
+`--doctor` warn about allowlist entries written as bare Slack IDs and about a
+second connection on the same Slack app. Telegram configs, state, letters and
+output are unchanged. See [`docs/slack.md`](docs/slack.md).
+
+Discord, as a third platform, selected with `ALB_PLATFORM=discord`. A Discord
+direct message, or a server message that @mentions the bot, becomes the same
+durable letter. The bridge connects over the Discord Gateway with the same
+standard-library WebSocket client, which now lives in `alb.adapters.websocket`
+and is shared by both. No privileged intent is used, so the bot is given only
+messages addressed to it. Discord does not retry missed events beyond a short
+Gateway resume, so a message sent while the bridge was off is recovered from
+channel history when it connects.
+Agent text cannot ping anyone: every send sets `allowed_mentions` to nothing.
+`alb --init --platform discord` walks through making the bot, takes the
+token, and prints an invite link built from the token with no network call.
+`--status`, `--check` and `--doctor` know a Discord bridge. The privacy scan
+refuses Discord-token-shaped strings. See [`docs/discord.md`](docs/discord.md).
+
+Step-by-step setup guides with screenshots for Slack and Discord
+([`docs/slack-setup.md`](docs/slack-setup.md),
+[`docs/discord-setup.md`](docs/discord-setup.md)), and the agent install and
+reply notes cover both platforms.
+
+## [0.4.4] — 2026-09-30
 
 ### Added
 
@@ -14,7 +52,7 @@ A Herdr plugin in `herdr/`: one action opens a popup with `alb --status`
 plugin's `alb-plugin.env`. The file is parsed, never sourced; the popup loads
 no token, makes no network call and strips C0 and C1 control characters.
 
-## [0.4.3] — Unreleased
+## [0.4.3] — 2026-09-30
 
 ### Added
 
@@ -25,7 +63,7 @@ dialog before typing anything; ring health records its code
 `ALB_HERDR_SOCKET` pins the Herdr server. `alb --init` does not discover
 Herdr panes yet: set `ALB_NOTIFIER` and `ALB_SURFACE` by hand.
 
-## [0.4.2] — Unreleased
+## [0.4.2] — 2026-09-25
 
 ### Changed
 
@@ -38,7 +76,7 @@ clock limits, when that window next opens in Europe/London. If the hour and
 the day are both full, both are named. The count is what was already sent.
 Replies to an inbound letter are not counted against these limits.
 
-## [0.4.1] — Unreleased
+## [0.4.1] — 2026-09-24
 
 ### Fixed
 

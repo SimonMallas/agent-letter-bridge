@@ -214,7 +214,8 @@ def send_initiated(sender, state, outbox, allowlist_path, *, label, intent_id,
 
     grant_id = destinations.resolve(state, label)
     grant = grants.load(state, grant_id)
-    if grant.get("platform") != "telegram":
+    # A grant names one platform; only that platform's sender may cross it.
+    if grant.get("platform") != getattr(sender, "name", "telegram"):
         raise ids.UsageError("platform not supported")
     if len(text.encode("utf-8")) > grants.effective(grant, "max_body"):
         raise ids.UsageError("body too large")

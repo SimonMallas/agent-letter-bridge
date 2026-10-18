@@ -27,12 +27,17 @@ REQUIRED = ("ALB_TOKEN",)
 # did not exist, and their deployment diverged from their config in silence. A
 # key that looks like it did something is worse than one that errors.
 KNOWN = ("ALB_TOKEN", "ALB_SURFACE", "ALB_FROM", "ALB_TO", "ALB_NOTIFIER",
-         "ALB_MAIL_ROOT", "ALB_BUS_BINARY", "ALB_HERDR_SOCKET")
+         "ALB_MAIL_ROOT", "ALB_PLATFORM", "ALB_APP_TOKEN",
+         "ALB_BUS_BINARY", "ALB_HERDR_SOCKET")
 
 # Transports that exist. Naming one that does not is refused rather than
 # defaulted, because defaulting is what let a deployment believe it had
 # selected tmux for days while nothing read the setting.
 NOTIFIERS = ("cmux", "tmux", "herdr")
+
+# Platforms that exist. Absent means telegram, the only one this file used to
+# know. Naming one that does not is refused rather than defaulted.
+PLATFORMS = ("telegram", "slack", "discord")
 
 # Surface values that are an unfinished edit rather than a pane. This build ran
 # for days on ALB_SURFACE=PLACEHOLDER: every ring failed, and because ring
@@ -116,7 +121,100 @@ def load_config(path):
             f"Refusing rather than ignoring them, so a setting never appears to "
             f"take effect when nothing read it."
         )
+    _check_platform(config)
     return config
+
+
+def platform_of(config):
+    """Which platform this bridge talks to. Absent means telegram."""
+    return config.get("ALB_PLATFORM", "telegram")
+
+
+def make_poller(config, root):
+    """The inbound adapter this config names. Telegram is built exactly as it
+    always was; Slack gets both tokens, and Slack and Discord their state and
+    the allowlist they catch up from."""
+    root = pathlib.Path(root)
+    if platform_of(config) == "discord":
+        from alb.adapters.discord import api as discord_api
+        return discord_api.Discord(config["ALB_TOKEN"], state=root / "state",
+                                   allowlist_path=root / "allowlist.json")
+    if platform_of(config) == "slack":
+        from alb.adapters.slack import api as slack_api
+        return slack_api.Slack(config["ALB_TOKEN"], config["ALB_APP_TOKEN"],
+                               state=root / "state",
+                               allowlist_path=root / "allowlist.json")
+    from alb.adapters.telegram import api as telegram_api
+    return telegram_api.Telegram(config["ALB_TOKEN"],
+                                 offset_path=root / "state" / "offset.json")
+
+
+def make_sender(config):
+    """The outbound adapter this config names. Slack's holds the bot token
+    only: sending never needs the app-level token."""
+    if platform_of(config) == "discord":
+        from alb.adapters.discord import outbound as discord_out
+        return discord_out.Sender(config["ALB_TOKEN"])
+    if platform_of(config) == "slack":
+        from alb.adapters.slack import outbound as slack_out
+        return slack_out.Sender(config["ALB_TOKEN"])
+    from alb.adapters.telegram import api as telegram_api
+    return telegram_api.Telegram(config["ALB_TOKEN"])
+
+
+def _other_platform_token(token):
+    """Slack and Telegram tokens have a shape. The value is never returned."""
+    text = str(token)
+    if text.startswith("xox") or text.startswith("xapp-"):
+        return "slack"
+    head, sep, _rest = text.partition(":")
+    if sep and head.isdigit() and head:
+        return "telegram"
+    return ""
+
+
+def _check_platform(config):
+    """Refuse a platform the process would not actually run.
+
+    An app token on a telegram bridge is the same failure as an unknown key:
+    nothing would read it, and the operator would believe it had taken effect.
+    Slack prefixes are checked here so a swapped pair of tokens fails at
+    startup. The message names the key and the expected prefix, never the value.
+    """
+    platform = platform_of(config)
+    if platform not in PLATFORMS:
+        raise ConfigError(
+            f"unsupported ALB_PLATFORM {platform!r}. Available: "
+            f"{', '.join(PLATFORMS)}."
+        )
+    app_token = config.get("ALB_APP_TOKEN", "")
+    if platform == "discord":
+        if app_token:
+            raise ConfigError(
+                "ALB_APP_TOKEN is set on a discord bridge, where nothing "
+                "reads it. Remove it."
+            )
+        kind = _other_platform_token(config.get("ALB_TOKEN", ""))
+        if kind:
+            raise ConfigError(
+                f"ALB_TOKEN on a discord bridge has the shape of a {kind} token."
+            )
+        return
+    if platform != "slack":
+        if app_token:
+            raise ConfigError(
+                "ALB_APP_TOKEN is set on a telegram bridge, where nothing "
+                "reads it. Remove it, or set ALB_PLATFORM=slack."
+            )
+        return
+    if not app_token:
+        raise ConfigError("missing required settings: ALB_APP_TOKEN")
+    if not str(config.get("ALB_TOKEN", "")).startswith("xoxb-"):
+        raise ConfigError("ALB_TOKEN on a slack bridge must start with xoxb-.")
+    if not str(app_token).startswith("xapp-"):
+        raise ConfigError(
+            "ALB_APP_TOKEN on a slack bridge must start with xapp-."
+        )
 
 
 # Private by default, not private if the operator remembers. The state
@@ -359,5 +457,11 @@ def run_once(platform, transport, surface, root,
     # mail, and the platform told. A cycle that raised before this point
     # leaves the previous heartbeat, which is the honest signal.
     loop._write_heartbeat(root / "state" / "health.json")
+    # A Discord cycle that missed the gateway heartbeat is not idle-live.
+    expired = getattr(platform, "heartbeat_expired", None)
+    if callable(expired) and expired():
+        loop._write_heartbeat(
+            root / "state" / "health.json", state="degraded", reason="network",
+        )
 
     return published

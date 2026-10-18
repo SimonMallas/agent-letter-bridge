@@ -30,6 +30,13 @@ CLI = ROOT / "src" / "alb" / "cli.py"
 OUTBOUND = ROOT / "src" / "alb" / "outbound" / "store.py"
 ALLOW = ROOT / "src" / "alb" / "allowlist" / "gate.py"
 TG = ROOT / "src" / "alb" / "adapters" / "telegram" / "api.py"
+SLACK = ROOT / "src" / "alb" / "adapters" / "slack" / "api.py"
+SOCKET = ROOT / "src" / "alb" / "adapters" / "websocket.py"
+DISCORD_REST = ROOT / "src" / "alb" / "adapters" / "discord" / "rest.py"
+DISCORD_EVENTS = ROOT / "src" / "alb" / "adapters" / "discord" / "events.py"
+DISCORD_API = ROOT / "src" / "alb" / "adapters" / "discord" / "api.py"
+MEDIA = ROOT / "src" / "alb" / "media" / "store.py"
+SLACK_WEB = ROOT / "src" / "alb" / "adapters" / "slack" / "web.py"
 CMUX = ROOT / "src" / "alb" / "adapters" / "cmux" / "transport.py"
 HERDR = ROOT / "src" / "alb" / "adapters" / "herdr" / "transport.py"
 BRIDGE = ROOT / "src" / "alb" / "bridge" / "run.py"
@@ -46,6 +53,228 @@ POLLER = ROOT / "src" / "alb" / "poller" / "loop.py"
 
 # invariant -> (file, tests module, old, new)
 EXTRA = {
+    # --- Slack outbound -------------------------------------------------
+    "slack ambiguous outcome is never a refusal": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "outbound.py",
+        "tests.test_slack_outbound",
+        '        raise reply.AmbiguousOutcome(f"slack reported {error}")',
+        '        raise reply.DefiniteRefusal(f"slack reported {error}")'),
+    "slack text is escaped": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "outbound.py",
+        "tests.test_slack_outbound",
+        '                .replace("<", "&lt;")',
+        '                .replace("<", "<")'),
+    "slack refuses text it would truncate": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "outbound.py",
+        "tests.test_slack_outbound",
+        "    if len(body) > MAX_TEXT:",
+        "    if False:"),
+    "slack bytes go only to slack's file host": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "outbound.py",
+        "tests.test_slack_outbound",
+        "            or not upload_url.startswith(_UPLOAD_PREFIX)\n",
+        ""),
+    "slack failure before sharing is definite": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "outbound.py",
+        "tests.test_slack_outbound",
+        '        raise reply.DefiniteRefusal(f"upload not started: {exc}") from None',
+        "        raise"),
+    "correspondent resolves only for its own platform": (
+        ROOT / "src" / "alb" / "outbound" / "store.py",
+        "tests.test_slack_outbound",
+        "    if origin_platform != platform or not sep or not chat:",
+        "    if not sep or not chat:"),
+    "slack checks length before the reply is claimed": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "outbound.py",
+        "tests.test_slack_outbound",
+        '        _check_length(escape(text or ""))',
+        "        pass"),
+    "reply stays in the thread the letter names": (
+        ROOT / "src" / "alb" / "send" / "reply.py",
+        "tests.test_slack_outbound",
+        '    return {"thread": thread} if thread else {}',
+        "    return {}"),
+    # --- Discord outbound -----------------------------------------------
+    "discord agent text pings nobody": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        '        "allowed_mentions": {"parse": []},',
+        '        "allowed_mentions": {"parse": ["everyone", "users", "roles"]},'),
+    "discord refuses text over its limit": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        '    if len(text.encode("utf-16-le")) // 2 > MAX_TEXT:',
+        "    if len(text) > MAX_TEXT + 1000:"),
+    "discord checks length before the reply is claimed": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        '        _check_length(text or "")',
+        "        pass"),
+    "an over-long reply leaves the letter answerable": (
+        ROOT / "src" / "alb" / "send" / "reply.py",
+        "tests.test_discord_outbound",
+        "    if check_text is not None:\n        check_text(text)",
+        "    if False:\n        check_text(text)"),
+    "discord 429 is throttled, not ambiguous": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        "        if status == 429:",
+        "        if status == 4290:"),
+    "discord server error is ambiguous": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        '            raise reply.AmbiguousOutcome(f"server error HTTP {status}") from None',
+        '            raise reply.DefiniteRefusal(f"server error HTTP {status}") from None'),
+    "discord reply goes where the letter was written": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        "    return post_in, message",
+        "    return channel, message"),
+    "discord destination must be a pair": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "outbound.py",
+        "tests.test_discord_outbound",
+        "            or not _SNOWFLAKE.fullmatch(user)):",
+        "            or False):"),
+    # --- Slack through the binary ----------------------------------------
+    "slack socket is closed when the bridge exits": (
+        ROOT / "src" / "alb" / "cli.py", "tests.test_slack_cli",
+        "            if close is not None:\n                close()",
+        "            if close is not None:\n                pass"),
+    "grant platform defaults to the bridge's own": (
+        ROOT / "src" / "alb" / "cli.py", "tests.test_slack_cli",
+        "            rec = grants.create(state, args.platform or run.platform_of(config),",
+        '            rec = grants.create(state, args.platform or "telegram",'),
+    "slack sender is built from the bot token only": (
+        ROOT / "src" / "alb" / "bridge" / "run.py", "tests.test_slack_cli",
+        '        return slack_out.Sender(config["ALB_TOKEN"])',
+        '        return slack_out.Sender(config["ALB_APP_TOKEN"])'),
+    # --- Slack in doctor, status and check -------------------------------
+    "doctor makes no Slack call": (
+        ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_slack_ops",
+        '        app = slack_app_id(config.get("ALB_APP_TOKEN", ""))',
+        '        app = __import__("urllib.request").request.urlopen(\n'
+        '            "https://slack.com/api/auth.test") and slack_app_id(\n'
+        '            config.get("ALB_APP_TOKEN", ""))'),
+    "bare Slack ids are flagged": (
+        ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_slack_ops",
+        "            if isinstance(c, str) and _BARE_SLACK_ID.fullmatch(c)]",
+        "            if False]"),
+    "a second connection on the app is reported": (
+        ROOT / "src" / "alb" / "doctor" / "checks.py", "tests.test_slack_ops",
+        "    if count > 1:",
+        "    if count > 99:"),
+    "privacy scan catches Slack tokens": (
+        ROOT / "scripts" / "privacy_scan.py", "tests.test_privacy_scan",
+        '    (r"\\bxox" + r"[abprs]-[0-9]+-[0-9A-Za-z-]{20,}", "Slack-token-shaped string"),\n',
+        ""),
+    "privacy scan catches Discord tokens": (
+        ROOT / "scripts" / "privacy_scan.py", "tests.test_privacy_scan",
+        '    (r"\\b[MN][A-Za-z0-9_-]{23,27}"',
+        '    (r"\\bNEVER[A-Za-z0-9_-]{23,27}"'),
+    # --- Found by the live round trip ------------------------------------
+    "a server ping returns control to the caller": (
+        ROOT / "src" / "alb" / "adapters" / "websocket.py",
+        "tests.test_slack_websocket",
+        '                self._send(0xA, data)\n                return "ping", data',
+        "                self._send(0xA, data)\n                continue"),
+    "first-run oldest is a six-decimal Slack timestamp": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "api.py",
+        "tests.test_slack_catchup",
+        '        return f"{self._clock() - self.FIRST_RUN_WINDOW:.6f}"',
+        "        return self._clock() - self.FIRST_RUN_WINDOW"),
+    "canary fixture names the sender's platform": (
+        ROOT / "src" / "alb" / "canary" / "probe.py", "tests.test_slack_outbound",
+        '    if platform != "telegram":\n        from alb.outbound import store as outbound',
+        '    if False:\n        from alb.outbound import store as outbound'),
+    # --- Found by the adversarial review ---------------------------------
+    "an unconfirmed batch is carried into the next fetch": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "api.py",
+        "tests.test_slack_recovery",
+        "        if not self._inflight:\n            return\n        carried, self._inflight",
+        "        if True:\n            return\n        carried, self._inflight"),
+    "a page cap is partial, never done": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "api.py",
+        "tests.test_slack_recovery",
+        '        self._continuations[key] = (oldest, cursor)\n        return "partial", found',
+        '        self._continuations[key] = (oldest, cursor)\n        return "done", found'),
+    "marks wait until a conversation is caught up": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "api.py",
+        "tests.test_slack_recovery",
+        '            if mark["conv"] in self._pending:\n                held.append(mark)',
+        "            if False:\n                held.append(mark)"),
+    "a stale partial frame is not liveness": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "api.py",
+        "tests.test_slack_websocket",
+        "                        and received > received_at_start):",
+        "                        and received >= received_at_start):"),
+    # --- Discord through the binary, doctor and status ------------------
+    "discord bridge is named by its application": (
+        ROOT / "src" / "alb" / "doctor" / "checks.py",
+        "tests.test_discord_cli",
+        '        return f"discord:{app}" if app else None',
+        "        return None"),
+    "bare discord ids deny delivery": (
+        ROOT / "src" / "alb" / "doctor" / "checks.py",
+        "tests.test_discord_cli",
+        "    if len(_bare_discord_ids(root)) == len(chats):",
+        "    if False:"),
+    "discord config builds the discord sender": (
+        ROOT / "src" / "alb" / "bridge" / "run.py",
+        "tests.test_discord_cli",
+        "        return discord_out.Sender(config[\"ALB_TOKEN\"])",
+        "        return None"),
+    "discord init writes its platform": (
+        ROOT / "src" / "alb" / "setup" / "wizard.py",
+        "tests.test_discord_cli",
+        '            lines = ["ALB_PLATFORM=discord\\n", f"ALB_TOKEN={token}\\n"]',
+        '            lines = [f"ALB_TOKEN={token}\\n"]'),
+    # --- Discord setup --------------------------------------------------
+    "discord setup reads nothing unless asked": (
+        ROOT / "src" / "alb" / "setup" / "discord_wizard.py",
+        "tests.test_discord_setup",
+        '    if choice != "read" or not bot_token:',
+        "    if not bot_token:"),
+    "discord allowlist only from an understood user id": (
+        ROOT / "src" / "alb" / "setup" / "discord_wizard.py",
+        "tests.test_discord_setup",
+        "    if not _SNOWFLAKE.fullmatch(user):",
+        "    if not user:"),
+    "discord token shape is checked": (
+        ROOT / "src" / "alb" / "setup" / "discord_wizard.py",
+        "tests.test_discord_setup",
+        "    if value and not invite.looks_like_a_token(value):",
+        "    if False:"),
+    "discord invite asks only for named permissions": (
+        ROOT / "src" / "alb" / "adapters" / "discord" / "invite.py",
+        "tests.test_discord_setup",
+        "               | READ_MESSAGE_HISTORY | SEND_MESSAGES_IN_THREADS)",
+        "               | READ_MESSAGE_HISTORY | SEND_MESSAGES_IN_THREADS | 8)"),
+    # --- Slack setup ----------------------------------------------------
+    "slack setup reads nothing unless asked": (
+        ROOT / "src" / "alb" / "setup" / "slack_wizard.py",
+        "tests.test_slack_setup",
+        '    if choice != "read" or not (bot and app):',
+        "    if not (bot and app):"),
+    "slack token prefixes are checked": (
+        ROOT / "src" / "alb" / "setup" / "slack_wizard.py",
+        "tests.test_slack_setup",
+        "    if token and not token.startswith(prefix):",
+        "    if False:"),
+    "slack allowlist only from an understood choice": (
+        ROOT / "src" / "alb" / "setup" / "slack_wizard.py",
+        "tests.test_slack_setup",
+        "    if not picked.isdigit() or not 1 <= int(picked) <= len(found):",
+        "    if not picked.isdigit():"),
+    "slack bot is not shown online while stopped": (
+        ROOT / "src" / "alb" / "adapters" / "slack" / "manifest.py",
+        "tests.test_slack_setup",
+        '            "display_name": "letterbox",\n',
+        '            "display_name": "letterbox",\n            "always_online": True,\n'),
+    "grant platform must match the sender": (
+        ROOT / "src" / "alb" / "initiate" / "send.py",
+        "tests.test_slack_outbound",
+        '    if grant.get("platform") != getattr(sender, "name", "telegram"):',
+        "    if False:"),
     "distribution rejects VCS members": (
         ROOT / "scripts" / "check_distribution.py", "tests.test_distribution",
         '        if any(p in (".git", ".hg", ".svn", ".venv", "__pycache__") for p in parts):',
@@ -96,8 +325,8 @@ EXTRA = {
         "    if False:"),
     "correspondent present but unresolved fails closed, never raw fallback": (
         SEND, "tests.test_send",
-        "        return outbound.origin_chat_for(state, key)",
-        "        chat = outbound.origin_chat_for(state, key)\n"
+        "        return outbound.origin_chat_for(state, key, platform)",
+        "        chat = outbound.origin_chat_for(state, key, platform)\n"
         "        if chat:\n            return chat"),
     "empty correspondent is present unresolved": (
         SEND, "tests.test_send",
@@ -113,7 +342,7 @@ EXTRA = {
         "    if not isinstance(rec, dict):\n        rec = {}"),
     "non-telegram origin does not route telegram": (
         OUTBOUND, "tests.test_send",
-        '    if platform != "telegram" or not sep or not chat:',
+        "    if origin_platform != platform or not sep or not chat:",
         "    if not sep or not chat:"),
     "retry only a proven pre-inject helper_timeout": (
         RING_OUTCOME, "tests.test_mail_root",
@@ -149,8 +378,8 @@ EXTRA = {
         "    if False:\n        return \"incompatible\", HUNG"),
     "resume destination uses private state": (
         SEND, "tests.test_send",
-        "    chat_id = destination(source.meta, state)",
-        "    chat_id = destination(source.meta)"),
+        "    chat_id = destination(source.meta, state, platform)",
+        "    chat_id = destination(source.meta, platform=platform)"),
     "empty media content is missing": (
         ROOT / "src" / "alb" / "media" / "store.py", "tests.test_media",
         "    if st.st_size == 0:\n        raise MediaError(\"asset missing\")",
@@ -1073,6 +1302,266 @@ EXTRA = {
         "            raise SetupError(\"token file refused\")",
         "        if False:\n"
         "            raise SetupError(\"token file refused\")"),
+    "slack acks only in confirm": (
+        SLACK, "tests.test_slack_inbound",
+        "        items = list(self._queue)\n"
+        "        self._queue.clear()\n"
+        "        self._inflight = list(items)\n"
+        "        return items",
+        "        items = list(self._queue)\n"
+        "        self._queue.clear()\n"
+        "        self._inflight = list(items)\n"
+        "        for _envelopes in self._envelopes.values():\n"
+        "            for _envelope in _envelopes:\n"
+        "                self._ws.send_text(json.dumps({\"envelope_id\": _envelope}))\n"
+        "        return items"),
+    "slack marker persisted only in confirm": (
+        SLACK, "tests.test_slack_catchup",
+        "            self._read_live()\n",
+        "            self._read_live()\n"
+        "            self._persist_markers()\n"),
+    "failed catch-up freezes its marker": (
+        SLACK, "tests.test_slack_catchup",
+        '            if mark["conv"] in self._pending:\n                held.append(mark)',
+        "            if False:\n                held.append(mark)"),
+    "unread conversations stay pending": (
+        SLACK, "tests.test_slack_catchup",
+        "        for conv in watched:\n"
+        "            self._pending.add(conv)\n"
+        "        for conv in watched:\n"
+        "            self._read_conversation(conv)\n",
+        "        for conv in watched:\n"
+        "            self._read_conversation(conv)\n"),
+    "catch-up rate limit still returns a live event": (
+        SLACK, "tests.test_slack_catchup",
+        "            except TransientFailure as exc:\n"
+        "                deferred = exc\n",
+        "            except TransientFailure as exc:\n"
+        "                raise\n"),
+    "slack letter before ack": (
+        BRIDGE, "tests.test_slack_poller",
+        "    published = loop.poll_once(\n",
+        "    confirm = getattr(platform, \"confirm\", None)\n"
+        "    if confirm is not None:\n"
+        "        confirm()\n"
+        "    published = loop.poll_once(\n"),
+    "slack bookkeeping is dropped after confirm": (
+        SLACK, "tests.test_slack_inbound",
+        "        for update_id in acked:\n"
+        "            self._marks.pop(update_id, None)\n"
+        "        self._dropped_marks.clear()\n"
+        "        self._file_urls.clear()\n",
+        ""),
+    "unreadable slack response is transient": (
+        SLACK, "tests.test_slack_inbound",
+        "        except ValueError:\n"
+        "            raise TransientFailure(\"network: slack unreadable response\") from None\n"
+        "        except web.HttpError as exc:\n",
+        "        except web.HttpError as exc:\n"),
+    "unreadable files.info is transient": (
+        SLACK, "tests.test_slack_inbound",
+        "        except ValueError:\n"
+        "            raise TransientFailure(\"network: slack unreadable response\") from None\n"
+        "        if not isinstance(body, dict) or body.get(\"ok\") is False:\n",
+        "        if not isinstance(body, dict) or body.get(\"ok\") is False:\n"),
+    "file download stops at the size limit": (
+        SLACK_WEB, "tests.test_slack_web",
+        "min(64 * 1024, max_bytes + 1 - total)",
+        "min(64 * 1024, max_bytes + 10 ** 9 - total)"),
+    "partial frame timeout is not retried": (
+        SOCKET, "tests.test_slack_websocket",
+        "            chunk = self.sock.recv(count - len(self.buf))\n"
+        "            if not chunk:\n",
+        "            try:\n"
+        "                chunk = self.sock.recv(count - len(self.buf))\n"
+        "            except socket.timeout:\n"
+        "                if self.buf:\n"
+        "                    continue\n"
+        "                raise\n"
+        "            if not chunk:\n"),
+    "reassembled message stays within one frame": (
+        SOCKET, "tests.test_slack_websocket",
+        "            if pending + size > MAX_MESSAGE:\n",
+        "            if pending + size > MAX_MESSAGE + MAX_MESSAGE:\n"),
+    "fragment count is bounded": (
+        SOCKET, "tests.test_slack_websocket",
+        "            if len(self._parts) > MAX_FRAGMENTS:\n",
+        "            if len(self._parts) > MAX_FRAGMENTS + 10 ** 9:\n"),
+    "control frames are final and small": (
+        SOCKET, "tests.test_slack_websocket",
+        "        if opcode >= 0x8 and (not fin or size > 125):\n"
+        "            raise WebSocketError(\"control frame refused\")\n",
+        ""),
+    "reserved bits are refused": (
+        SOCKET, "tests.test_slack_websocket",
+        "        if first & 0x70:\n"
+        "            raise WebSocketError(\"reserved bits set\")\n",
+        ""),
+    "a server frame is unmasked": (
+        SOCKET, "tests.test_slack_websocket",
+        "        if second & 0x80:\n"
+        "            raise WebSocketError(\"server frame is masked\")\n",
+        ""),
+    "a data frame cannot interrupt a message": (
+        SOCKET, "tests.test_slack_websocket",
+        "            if opcode in (0x1, 0x2) and self._parts:\n"
+        "                self._parts = []\n"
+        "                raise WebSocketError(\"message already started\")\n",
+        ""),
+    "a continuation needs a message": (
+        SOCKET, "tests.test_slack_websocket",
+        "            if opcode == 0x0 and not self._parts:\n"
+        "                raise WebSocketError(\"continuation without a message\")\n",
+        ""),
+    "a slow frame cannot outlive its deadline": (
+        SOCKET, "tests.test_slack_websocket",
+        "            self._honor_deadline()\n",
+        ""),
+    "the poll passes its deadline to recv": (
+        SLACK, "tests.test_slack_websocket",
+        "        if isinstance(self._ws, websocket.WebSocket):\n"
+        "            return self._ws.recv(deadline, self._clock)\n",
+        ""),
+    "a progressing partial frame is not a silent socket": (
+        SLACK, "tests.test_slack_websocket",
+        "                        and received > received_at_start):\n"
+        "                    self._saw_frame = True\n",
+        "                        and received > received_at_start):\n"
+        "                    pass\n"),
+    # --- Discord inbound -------------------------------------------------
+    "discord refuses an app token": (
+        BRIDGE, "tests.test_discord_config",
+        "        if app_token:\n"
+        "            raise ConfigError(\n"
+        "                \"ALB_APP_TOKEN is set on a discord bridge, where nothing \"\n",
+        "        if False:\n"
+        "            raise ConfigError(\n"
+        "                \"ALB_APP_TOKEN is set on a discord bridge, where nothing \"\n"),
+    "discord refuses a foreign token shape": (
+        BRIDGE, "tests.test_discord_config",
+        "        kind = _other_platform_token(config.get(\"ALB_TOKEN\", \"\"))\n"
+        "        if kind:\n",
+        "        kind = _other_platform_token(config.get(\"ALB_TOKEN\", \"\"))\n"
+        "        if False:\n"),
+    "recv clock defaults to monotonic": (
+        SOCKET, "tests.test_discord_config",
+        "        self._clock = time.monotonic if clock is None else clock\n",
+        "        self._clock = clock\n"),
+    "discord redirects are refused": (
+        DISCORD_REST, "tests.test_discord_rest",
+        "    if status in (301, 302, 303, 307, 308):\n"
+        "        raise ValueError(\"redirect refused\")\n",
+        "    if False:\n"
+        "        raise ValueError(\"redirect refused\")\n"),
+    "discord cdn gets no authorization": (
+        DISCORD_REST, "tests.test_discord_rest",
+        "    request = urllib.request.Request(url, method=\"GET\")\n",
+        "    request = urllib.request.Request(url, method=\"GET\")\n"
+        "    request.add_header(\"Authorization\", \"Bot injected\")\n"),
+    "discord errors omit the response body": (
+        DISCORD_REST, "tests.test_discord_rest",
+        "        raise ValueError(\"discord response is not json\") from None\n",
+        "        raise ValueError(bytes(payload).decode(\"utf-8\", \"replace\")) from None\n"),
+    "a guild message must mention the bot": (
+        DISCORD_EVENTS, "tests.test_discord_events",
+        "    if not direct and not _mentioned(message, content, bot_user):\n"
+        "        return None\n",
+        "    if False:\n"
+        "        return None\n"),
+    "the bot mention is removed from the text": (
+        DISCORD_EVENTS, "tests.test_discord_events",
+        "    text = content.replace(f\"<@{bot_user}>\", \"\").replace("
+        "f\"<@!{bot_user}>\", \"\").strip()\n",
+        "    text = content.strip()\n"),
+    "discord markers persist only in confirm": (
+        DISCORD_API, "tests.test_discord_gateway",
+        "        self._advance_markers(acked)\n"
+        "        self._persist_markers()\n",
+        "        self._advance_markers(acked)\n"),
+    "heartbeat ACK required for liveness": (
+        DISCORD_API, "tests.test_discord_gateway",
+        "            if not self._queue and not self._ack_is_fresh():\n",
+        "            if False and not self._queue and not self._ack_is_fresh():\n"),
+    "fatal close is not transient": (
+        DISCORD_API, "tests.test_discord_gateway",
+        "            raise FetchFailed(f\"discord refused: {reason}\")\n",
+        "            raise TransientFailure(f\"discord refused: {reason}\")\n"),
+    "failed read freezes its marker": (
+        DISCORD_API, "tests.test_discord_catchup",
+        "        self._pending.add(channel)\n",
+        "        self._pending.discard(channel)\n"),
+    "first run window": (
+        DISCORD_API, "tests.test_discord_catchup",
+        "self._clock() - self.FIRST_RUN_WINDOW",
+        "self._clock() - 0"),
+    "discord update ids can be staged": (
+        MEDIA, "tests.test_discord_poller",
+        "^discord:[0-9]+:[0-9]+$",
+        "^discord:refused$"),
+    "resume knows the bot without READY": (
+        DISCORD_API, "tests.test_discord_fixes",
+        "self._bot_user = bot_user_from_token(token)",
+        "self._bot_user = None"),
+    "history rows take the channel guild": (
+        DISCORD_API, "tests.test_discord_fixes",
+        "        stamped[\"guild_id\"] = guild\n",
+        "        stamped[\"guild_id\"] = \"\"\n"),
+    "only thread types have a thread parent": (
+        DISCORD_API, "tests.test_discord_fixes",
+        "        if record.get(\"type\") not in (10, 11, 12):\n",
+        "        if False and record.get(\"type\") not in (10, 11, 12):\n"),
+    "catch-up is not every poll": (
+        DISCORD_API, "tests.test_discord_fixes",
+        "        if not full:\n",
+        "        if False:\n"),
+    "unresolved thread lookup is not a denial": (
+        DISCORD_API, "tests.test_discord_hold",
+        "            if self._remember_unresolved(channel, message_id):\n",
+        "            if False and self._remember_unresolved(channel, message_id):\n"),
+    "a rate limit holds channels not yet read": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        self._pending.update(channels)\n",
+        "        self._pending.clear()\n"),
+    "gateway identifies share one attempt budget": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        if self._connect_attempts > self.CONNECT_ATTEMPTS:\n",
+        "        if False and self._connect_attempts > self.CONNECT_ATTEMPTS:\n"),
+    "a spent session budget does not identify": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        raise TransientFailure(\"discord deferred: session start limit\", retry)\n",
+        "        return\n"),
+    "a lapsed heartbeat is not a live cycle": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        return self._monotonic() > self._heartbeat_due + self._heartbeat_interval\n",
+        "        return False\n"),
+    "identifies wait out one shared start window": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        while self._next_identify is not None and now < self._next_identify:\n",
+        "        while False and self._next_identify is not None and now < self._next_identify:\n"),
+    "the identify window counts from the identify": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        self._take_identify_slot(info)\n        self._send({\"op\": 2, \"d\": {\n",
+        "        self._send({\"op\": 2, \"d\": {\n"),
+    "a global rate limit holds every discord route": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        if blocked is not None and now < blocked:\n            failure = TransientFailure(\"discord deferred: global rate limit\",\n",
+        "        if False:\n            failure = TransientFailure(\"discord deferred: global rate limit\",\n"),
+    "every discord route waits out its own rate limit": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        if until is not None and now < until:\n            raise TransientFailure(\"discord deferred: rate limit\", until - now)\n",
+        "        if False:\n            raise TransientFailure(\"discord deferred: rate limit\", until - now)\n"),
+    "a discord history rate limit is waited out": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        if self._history_waiting(channel):\n",
+        "        if False:\n"),
+    "a rest wait does not stop the discord gateway": (
+        DISCORD_API, "tests.test_discord_hold",
+        "            if deferred is not None and not self._queue and self._ws is None:\n",
+        "            if deferred is not None and not self._queue:\n"),
+    "a late heartbeat stays lapsed": (
+        DISCORD_API, "tests.test_discord_hold",
+        "        if now > self._heartbeat_due + self._heartbeat_interval:\n",
+        "        if False and now > self._heartbeat_due + self._heartbeat_interval:\n"),
 }
 
 MUTATIONS = {

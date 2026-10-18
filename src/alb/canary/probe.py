@@ -63,7 +63,17 @@ def run(sender, root):
     fixtures = root / "state" / "canary"
     fixtures.mkdir(parents=True, exist_ok=True)
 
-    letter_id = store.publish(fixtures, "canary fixture", {"chat_id": chat_id})
+    # Shaped as the sender's own platform writes letters. A raw chat id is
+    # how Telegram letters were written before correspondents, and only a
+    # Telegram sender may follow one; any other platform's fixture names an
+    # opaque correspondent, exactly as its inbound letters do.
+    platform = getattr(sender, "name", "telegram")
+    meta = {"chat_id": chat_id}
+    if platform != "telegram":
+        from alb.outbound import store as outbound
+        meta = {"correspondent": outbound.correspondent_key(
+            root / "state", chat_id, platform=platform)}
+    letter_id = store.publish(fixtures, "canary fixture", meta)
 
     # The claim is per letter and text, so a fixed body would make every run
     # after the first refuse as a replay and look like a failure.
