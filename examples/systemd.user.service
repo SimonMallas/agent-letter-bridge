@@ -27,6 +27,9 @@ ExecStart=/ABSOLUTE/PATH/TO/.alb/venv/bin/alb \
     --root /ABSOLUTE/PATH/TO/state
 
 # The notifier shells out to cmux, so its directory must be on PATH.
+# Integrated mode runs `letterbox` (usually ~/.local/bin) and your multiplexer
+# instead: add both directories, or set ALB_BUS_BINARY to letterbox's absolute
+# path in bridge.env.
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 
 # RESTART ON FAILURE ONLY.

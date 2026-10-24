@@ -76,7 +76,9 @@
        and a stale capability fails the same silent way - check the
        bridge's status rather than assuming (see INSTALL.md).
 
-       PATH must include the cmux binary either way. -->
+       PATH must include the cmux binary either way. Integrated mode also
+       runs `letterbox` (usually ~/.local/bin): add its directory, or set
+       ALB_BUS_BINARY to its absolute path in bridge.env. -->
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
