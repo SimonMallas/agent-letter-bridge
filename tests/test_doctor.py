@@ -76,6 +76,22 @@ class DoctorBoundary(unittest.TestCase):
                 {"ALB_BUS_BINARY": "bus.sh", "PATH": "/bin"})
         self.assertIn("helper does not emit doorbell-outcome v=1", text)
         self.assertIn("DOORBELL HELPER", text)
+        self.assertIn("`letterbox ring`", text)
+        self.assertNotIn("no public edition", text)
+
+    def test_an_integrated_config_without_a_helper_probes_letterbox(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = pathlib.Path(tmp.name)
+        env = root / "bridge.env"
+        env.write_text("ALB_TOKEN=1:secret\nALB_MAIL_ROOT=/tmp/mail\nALB_TO=agent\n",
+                       encoding="utf-8")
+        os.chmod(env, 0o600)
+        probed = []
+        with mock.patch("alb.helper_probe.inspect_helper",
+                        lambda binary: probed.append(binary) or ("ok", "ok")):
+            checks.summary([], 1, root, {"PATH": "/bin"})
+        self.assertEqual(probed, ["letterbox"])
 
     def test_doctor_names_a_helper_that_hangs_after_a_valid_line(self):
         nls = (

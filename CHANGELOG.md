@@ -5,6 +5,19 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+Integrated mode now rings through the public Letterbox editions. The default
+doorbell helper is `letterbox`, the command every edition installs, instead of
+a helper name no public edition ships; setup looks for `letterbox` on `PATH`,
+and `alb --doctor` probes it when `ALB_BUS_BINARY` is unset. When the helper
+fails the setup probe, setup and `alb --doctor` now name the Letterbox versions
+that ship `letterbox ring` (0.5.1 for cmux, tmux and Zellij; 0.6.2 for Herdr)
+and how to update, instead of saying no edition ships it. A config that sets
+`ALB_BUS_BINARY` is unchanged.
+
 ## [0.5.0] — 2026-10-18
 
 ### Added

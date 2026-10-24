@@ -221,11 +221,12 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     # integrated mode needs it and it is not already on PATH.
     helper = ""
     if integrated:
-        found = (helper_found or shutil.which)("bus.sh")
+        found = (helper_found or shutil.which)("letterbox")
         if not found:
             console.say()
             console.say("Integrated mode rings through your letterbox's own")
-            console.say("doorbell helper, and bus.sh is not on PATH here.")
+            console.say("doorbell helper, and letterbox is not on PATH here.")
+            console.say("Letterbox installs it as ~/.local/bin/letterbox.")
             helper = console.ask("  path to the helper", "").strip()
         probe_path = helper or found
         if probe_path:
@@ -234,12 +235,11 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
             if status != "ok":
                 console.say()
                 console.say(msg)
-                console.say("This Bridge requires a doorbell helper with a")
-                console.say("`ring <to> <type> <id>` command that prints one")
-                console.say("doorbell-outcome v=1 line. Letterbox 0.4.0 defines")
-                console.say("the format; no public edition ships `ring` yet.")
-                console.say("Installing now will record every ring")
-                console.say("as failing/unparseable until that helper ships.")
+                console.say("Integrated mode rings through `letterbox ring`:")
+                console.say("Letterbox 0.5.1 or later for cmux, tmux and Zellij,")
+                console.say("0.6.2 or later for Herdr. To update, run your")
+                console.say("edition's install command again. Installing now will")
+                console.say("record every ring as failing until it is updated.")
 
     # 3. The token. Never echoed, never an argument, never printed back.
     app_token = ""

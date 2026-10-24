@@ -498,6 +498,12 @@ class TheHelperIsAskedForOnlyWhenMissing(Base):
         self.assertFalse(any("helper" in q.lower() for q in console.asked))
         self.assertNotIn("ALB_BUS_BINARY", (self.root / "bridge.env").read_text())
 
+    def test_the_helper_looked_for_is_the_released_letterbox(self):
+        looked_for = []
+        self._integrated(["print", ""],
+                         which=lambda name: looked_for.append(name) or "/no-such/letterbox")
+        self.assertEqual(looked_for, ["letterbox"])
+
     def test_a_missing_helper_is_asked_for(self):
         console, _ = self._integrated(["/opt/bus.sh", "print", ""], which=lambda name: None)
         self.assertIn("ALB_BUS_BINARY=/opt/bus.sh",

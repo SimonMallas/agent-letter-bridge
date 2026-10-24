@@ -434,7 +434,7 @@ def summary(process_listing, self_pid, root, environ):
         try:
             cfg = bridge_run.load_config(pathlib.Path(root) / "bridge.env")
             binary = cfg.get("ALB_BUS_BINARY") or (
-                "bus.sh" if cfg.get("ALB_MAIL_ROOT") else "")
+                "letterbox" if cfg.get("ALB_MAIL_ROOT") else "")
         except (bridge_run.ConfigError, OSError) as exc:
             helper_note = (
                 f"config not loadable: {exc}; helper compatibility UNKNOWN"
@@ -448,11 +448,9 @@ def summary(process_listing, self_pid, root, environ):
         _status, msg = inspect_helper(binary)
         lines.append(f"  {msg}")
         if _status != "ok":
-            lines.append("  requires a doorbell helper with a `ring <to> <type> <id>`")
-            lines.append("  command that prints doorbell-outcome v=1. Letterbox 0.4.0")
-            lines.append("  defines the format; no public edition ships `ring` yet.")
-            lines.append("  Do not cut over this Bridge")
-            lines.append("  onto a seat whose helper still prints prose.")
+            lines.append("  integrated mode rings through `letterbox ring`: Letterbox 0.5.1")
+            lines.append("  or later for cmux, tmux and Zellij, 0.6.2 or later for Herdr.")
+            lines.append("  To update, run your edition's install command again.")
     lines.append("")
     lines.append("DAEMON CONTEXT")
     lines.append(f"  interpreter now : {context['interpreter']}")

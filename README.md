@@ -217,15 +217,14 @@ On Herdr, a read-only popup shows `alb --status` for one bridge:
 `PATH`) in `alb-plugin.env` under `herdr plugin config-dir agent-letter-bridge`.
 It reads state files only: no token, no network, no letters.
 
-Integrated mode **requires a doorbell helper with a `ring <to> <type> <id>`
-command that prints one `doorbell-outcome v=1` line**. Letterbox 0.4.0
-defines that format and its fixtures. The public Herdr edition ships a compatible
-`letterbox ring` dispatcher; point `ALB_BUS_BINARY` at its absolute path for
-Herdr integrated mode, with `LETTERBOX_DIR` set to the shared letterbox containing
-`ALB_MAIL_ROOT`'s recipient inbox. The public cmux, tmux and Zellij editions do not ship
-that dispatcher yet; those integrated deployments need a separate compatible
-helper. A helper that still prints prose will make every ring `failing` /
-`unparseable`. `alb --doctor` reports
+Integrated mode **rings through Letterbox's own `letterbox ring <to> <type> <id>`**,
+which prints one `doorbell-outcome v=1` line. It ships in Letterbox 0.5.1 and
+later for cmux, tmux and Zellij, and 0.6.2 and later for Herdr; to update an
+older install, run its install command again. Setup finds `letterbox` on
+`PATH`; if it is not there, setup asks for its path (normally
+`~/.local/bin/letterbox`) and records it as `ALB_BUS_BINARY`. Start the bridge with `LETTERBOX_DIR` set to the letterbox
+containing `ALB_MAIL_ROOT`'s recipient inbox. An older `letterbox` without
+`ring` makes every ring `failing` / `unparseable`; `alb --doctor` reports
 `helper does not emit doorbell-outcome v=1` instead of waiting for a silent
 ring-health failure after cutover.
 

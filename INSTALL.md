@@ -226,7 +226,7 @@ those files say now, which is not proof of what a running process loaded.
 | `ALB_TO` | who the letter is addressed to | `agent` |
 | `ALB_FROM` | who the letter is from | `telegram-bridge` |
 | `ALB_MAIL_ROOT` | **[integrated]** the inbox to deliver into | none |
-| `ALB_BUS_BINARY` | **[integrated]** your doorbell helper | `bus.sh` |
+| `ALB_BUS_BINARY` | **[integrated]** your doorbell helper | `letterbox` |
 
 An unknown key — including a typo like `ALB_NOTIFER` — is **refused by name**
 rather than ignored. So is an `ALB_SURFACE` still set to a placeholder from

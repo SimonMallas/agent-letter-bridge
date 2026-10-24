@@ -9,6 +9,7 @@ These are the pins they said they would look for.
 import contextlib
 import io
 import json
+import os
 import pathlib
 import stat
 import subprocess
@@ -113,6 +114,16 @@ class MailRootIsLettersOnly(unittest.TestCase):
     def test_the_standalone_notifier_is_not_used_in_integrated_mode(self):
         """Two injects is two Enters."""
         self._cycle(FakePlatform([update(1, "111", "hi")]))  # NoTransport asserts
+
+
+class TheDefaultHelperIsTheReleasedLetterbox(unittest.TestCase):
+    def test_no_alb_bus_binary_rings_through_letterbox(self):
+        env = {k: v for k, v in os.environ.items() if k != "ALB_BUS_BINARY"}
+        env["PYTHONPATH"] = str(ROOT / "src")
+        out = subprocess.run(
+            [sys.executable, "-c", "from alb.bridge import run; print(run.BUS_BINARY)"],
+            env=env, capture_output=True, text=True, check=True)
+        self.assertEqual(out.stdout.strip(), "letterbox")
 
 
 class ReplyFindsLettersWhereTheyLive(unittest.TestCase):

@@ -224,7 +224,7 @@ def _check_platform(config):
 # because a directory made with the default umask is 0755 and nobody notices
 # until they look.
 # The letterbox helper, overridable because this is not everyone's path.
-BUS_BINARY = os.environ.get("ALB_BUS_BINARY", "bus.sh")
+BUS_BINARY = os.environ.get("ALB_BUS_BINARY", "letterbox")
 
 DIR_MODE = 0o700
 FILE_MODE = 0o600
