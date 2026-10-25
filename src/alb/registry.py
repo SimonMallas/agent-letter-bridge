@@ -8,8 +8,10 @@ and --reply-to finds the one whose mailbox holds the letter.
 
 Trust boundary. This file is per-user configuration, written only by a bridge
 that has loaded its own config. A letter never contributes a path or a
-command: its id is a lookup key, and the letter must name this bridge's own
-sender and recipient. That does not authenticate who wrote the letter. A
+command: its id is a lookup key, the letter must name this bridge's own
+sender and recipient, and the bridge's private message index must show it
+published that letter. The reply then goes only to the chat that index
+recorded. That does not authenticate who wrote the words. A
 same-user agent that elects to run --reply-to can send one answer to the
 correspondent of a validated, registered letter - exactly what it could do
 with explicit flags.
@@ -23,6 +25,7 @@ import re
 import secrets
 import stat
 
+from alb import msgindex
 from alb.letter import store
 
 FIELD = re.compile(r"[A-Za-z][A-Za-z0-9_-]*\Z")
@@ -111,9 +114,18 @@ def register(root, config, mail_root, platform, sender, recipient):
             and os.path.isdir(entry["mail_root"])):
         raise RegistryError("root, config and mail root must exist to register")
     folder = _private_dir(create=True)
-    lock = os.open(folder / "bridges.lock",
-                   os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     try:
+        lock = os.open(folder / "bridges.lock",
+                       os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise RegistryError("the reply registry lock is a link; refusing") from None
+        raise
+    try:
+        st = os.fstat(lock)
+        if not stat.S_ISREG(st.st_mode):
+            raise RegistryError("the reply registry lock is not a regular file")
+        _check_private(st, "the reply registry lock")
         fcntl.flock(lock, fcntl.LOCK_EX)
         table = _read(folder)
         table[entry["root"]] = entry
@@ -194,9 +206,13 @@ def resolve(letter_id):
             fields = _envelope(os.path.join(entry["mail_root"], name), letter_id)
             if fields is None:
                 continue
+            # And this bridge must have published it: a letter that only
+            # looks like one of its letters has no owner.
             if (fields.get("id") == letter_id
                     and fields.get("from") == entry["from"]
-                    and fields.get("to") == entry["to"]):
+                    and fields.get("to") == entry["to"]
+                    and msgindex.origins_of(os.path.join(entry["root"], "state"),
+                                            entry["platform"], letter_id)):
                 owners.append(entry)
             break
     if len(owners) == 1:

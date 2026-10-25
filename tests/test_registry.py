@@ -21,11 +21,12 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from alb import cli, registry  # noqa: E402
+from alb import cli, msgindex, registry  # noqa: E402
 from alb.adapters.telegram import api  # noqa: E402
 from alb.bridge import run  # noqa: E402
 from alb.letter import store  # noqa: E402
-from fake_platform import FakePlatform, update  # noqa: E402
+from alb.outbound import store as outbound  # noqa: E402
+from fake_platform import FakePlatform  # noqa: E402
 
 
 class Base(unittest.TestCase):
@@ -60,7 +61,12 @@ class Base(unittest.TestCase):
         return mail
 
     def letter(self, folder, letter_id, sender="telegram-bridge", to="builder",
-               extra=""):
+               extra="", published_by=None, platform="telegram"):
+        """A letter on disk; published_by=root also records it in that
+        bridge's private message index, as a real publish does."""
+        if published_by is not None:
+            msgindex.record(pathlib.Path(published_by) / "state", platform, "111",
+                            f"m-{letter_id}", letter_id)
         path = pathlib.Path(folder) / f"{letter_id}.md"
         path.write_text(f"---\nid: {letter_id}\nfrom: {sender}\nto: {to}\n"
                         f"type: info\n{extra}---\nwhat is 7 times 8?\n",
@@ -124,6 +130,18 @@ class TheRegistryFile(Base):
         with self.assertRaises(registry.RegistryError):
             self.bridge("other", mail)
 
+    def test_a_lock_open_to_others_or_linked_is_refused(self):
+        mail = self.mailbox()
+        self.bridge("alb", mail)
+        lock = registry.directory() / "bridges.lock"
+        lock.chmod(0o644)
+        with self.assertRaises(registry.RegistryError):
+            self.bridge("other", mail)
+        lock.unlink()
+        lock.symlink_to(self.base / "elsewhere.lock")
+        with self.assertRaises(registry.RegistryError):
+            self.bridge("other", mail)
+
     def test_concurrent_starts_keep_every_entry(self):
         mail = self.mailbox()
         envs = [self.bridge(f"r{i}", mail, register=False) for i in range(6)]
@@ -144,36 +162,46 @@ class FindingTheOwner(Base):
     def test_the_letter_names_its_bridge(self):
         mail = self.mailbox()
         root, _ = self.bridge("alb", mail)
-        self.letter(mail / "inbox", self.ID)
+        self.letter(mail / "inbox", self.ID, published_by=root)
         self.assertEqual(registry.resolve(self.ID)["root"], str(root))
+
+    def test_a_letter_this_bridge_never_published_has_no_owner(self):
+        """Right folder, right sender and recipient, but no publish record:
+        a forged letter, refused."""
+        mail = self.mailbox()
+        self.bridge("alb", mail)
+        self.letter(mail / "inbox", self.ID)
+        self.refused(self.ID, "no registered Agent Letter Bridge")
 
     def test_a_filed_letter_is_still_found(self):
         mail = self.mailbox()
         root, _ = self.bridge("alb", mail)
-        self.letter(mail / "processed", self.ID)
+        self.letter(mail / "processed", self.ID, published_by=root)
         self.assertEqual(registry.resolve(self.ID)["root"], str(root))
 
     def test_two_platforms_sharing_a_mailbox_split_by_sender(self):
         mail = self.mailbox()
         tg, _ = self.bridge("tg", mail)
         sl, _ = self.bridge("sl", mail, platform="slack", sender="slack-bridge")
-        self.letter(mail / "inbox", self.ID, sender="slack-bridge")
+        self.letter(mail / "inbox", self.ID, sender="slack-bridge", published_by=sl,
+                    platform="slack")
         self.assertEqual(registry.resolve(self.ID)["root"], str(sl))
 
     def test_the_same_id_under_two_bridges_is_refused(self):
         a, b = self.mailbox("a"), self.mailbox("b")
-        self.bridge("ra", a, recipient="a")
-        self.bridge("rb", b, recipient="b")
-        self.letter(a / "inbox", self.ID, to="a")
-        self.letter(b / "inbox", self.ID, to="b")
+        ra, _ = self.bridge("ra", a, recipient="a")
+        rb, _ = self.bridge("rb", b, recipient="b")
+        self.letter(a / "inbox", self.ID, to="a", published_by=ra)
+        self.letter(b / "inbox", self.ID, to="b", published_by=rb)
         message = self.refused(self.ID, "2 registered bridges", "refusing to guess")
         self.assertNotIn(str(self.base), message, "never a map of config paths")
 
     def test_a_stale_entry_that_still_matches_is_ambiguity_not_a_guess(self):
         mail = self.mailbox()
-        self.bridge("old", mail)
-        self.bridge("new", mail)
-        self.letter(mail / "inbox", self.ID)
+        old, _ = self.bridge("old", mail)
+        new, _ = self.bridge("new", mail)
+        self.letter(mail / "inbox", self.ID, published_by=old)
+        msgindex.record(new / "state", "telegram", "111", "m2", self.ID)
         self.refused(self.ID, "2 registered bridges")
 
     def test_a_deleted_root_is_skipped(self):
@@ -182,16 +210,22 @@ class FindingTheOwner(Base):
         old, _ = self.bridge("old", mail)
         new, _ = self.bridge("new", mail)
         shutil.rmtree(old)
-        self.letter(mail / "inbox", self.ID)
+        self.letter(mail / "inbox", self.ID, published_by=new)
         self.assertEqual(registry.resolve(self.ID)["root"], str(new))
 
     def test_a_forged_sender_or_recipient_has_no_owner(self):
         mail = self.mailbox()
-        self.bridge("alb", mail)
-        self.letter(mail / "inbox", self.ID, sender="someone-else")
+        root, _ = self.bridge("alb", mail)
+        self.letter(mail / "inbox", self.ID, sender="someone-else", published_by=root)
         message = self.refused(self.ID, "no registered Agent Letter Bridge")
         self.assertNotIn(str(self.base), message)
         self.letter(mail / "inbox", self.ID, to="planner")
+        self.refused(self.ID, "no registered Agent Letter Bridge")
+
+    def test_a_publish_record_for_another_platform_does_not_count(self):
+        mail = self.mailbox()
+        root, _ = self.bridge("alb", mail)
+        self.letter(mail / "inbox", self.ID, published_by=root, platform="slack")
         self.refused(self.ID, "no registered Agent Letter Bridge")
 
     def test_an_unregistered_letter_has_no_owner(self):
@@ -201,8 +235,8 @@ class FindingTheOwner(Base):
 
     def test_an_id_that_names_another_file_is_refused(self):
         mail = self.mailbox()
-        self.bridge("alb", mail)
-        path = self.letter(mail / "inbox", self.ID)
+        root, _ = self.bridge("alb", mail)
+        path = self.letter(mail / "inbox", self.ID, published_by=root)
         path.write_text(path.read_text().replace(f"id: {self.ID}", "id: other"))
         self.refused(self.ID, "no registered")
 
@@ -246,12 +280,25 @@ class TheCommandAnAgentRuns(Base):
         super().setUp()
         self.mail = self.mailbox()
         self.root, self.env = self.bridge("alb", self.mail)
+        (self.root / "allowlist.json").write_text(
+            json.dumps({"chats": ["111", "222"]}), encoding="utf-8")
+        # Every platform supplies a message id; the publish records it.
+        phone = {"update_id": 1, "chat_id": "111", "message_id": 5001,
+                 "text": "what is 7 times 8?"}
         with mock.patch.object(run, "_bus_ring"):
-            run.run_once(FakePlatform([update(1, "111", "what is 7 times 8?")]),
-                         None, "", self.root, mail_root=self.mail,
-                         recipient="builder")
-        [path] = (self.mail / "inbox").glob("*.md")
-        self.letter_id = path.stem
+            run.run_once(FakePlatform([phone]), None, "", self.root,
+                         mail_root=self.mail, recipient="builder")
+        [self.path] = (self.mail / "inbox").glob("*.md")
+        self.letter_id = self.path.stem
+
+    def _redirect(self):
+        """Rewrite the letter to name another permitted correspondent,
+        keeping id, from and to, as a mailbox writer could."""
+        other = outbound.correspondent_key(self.root / "state", "222", "telegram")
+        text = self.path.read_text(encoding="utf-8")
+        mine = [l for l in text.split("\n") if l.startswith("correspondent: ")][0]
+        self.path.write_text(text.replace(mine, f"correspondent: {other}"),
+                             encoding="utf-8")
 
     def _main(self, *argv):
         sent, err = [], io.StringIO()
@@ -266,6 +313,26 @@ class TheCommandAnAgentRuns(Base):
         code, sent, _ = self._main("--reply-to", self.letter_id, "--text", "56")
         self.assertEqual(code, 0)
         self.assertEqual(sent, [("111", "56")])
+
+    def test_a_letter_swapped_after_lookup_is_not_redirected(self):
+        real = registry.resolve
+
+        def resolve_then_swap(letter_id):
+            entry = real(letter_id)
+            self._redirect()
+            return entry
+
+        with mock.patch.object(registry, "resolve", resolve_then_swap):
+            code, sent, _ = self._main("--reply-to", self.letter_id, "--text", "56")
+        self.assertNotEqual(code, 0)
+        self.assertEqual(sent, [])
+
+    def test_an_edited_letter_is_refused_with_explicit_flags_too(self):
+        self._redirect()
+        code, sent, _ = self._main("--config", str(self.env), "--root", str(self.root),
+                                   "--reply-to", self.letter_id, "--text", "56")
+        self.assertNotEqual(code, 0)
+        self.assertEqual(sent, [])
 
     def test_explicit_flags_behave_as_before(self):
         code, sent, _ = self._main("--config", str(self.env), "--root", str(self.root),

@@ -88,3 +88,18 @@ def _write_private(path, text):
 def lookup(state, platform, origin, message_id):
     """Exact match or None. Never fuzzy, never cross-origin."""
     return _load(state).get(_key(platform, origin, message_id))
+
+
+def origins_of(state, platform, letter_id):
+    """The chats this bridge recorded publishing `letter_id` from, on
+    `platform`. Private state: a letter file can be edited or replaced by
+    anything that writes the mailbox, this record cannot."""
+    found = set()
+    for key, value in _load(state).items():
+        if value != letter_id:
+            continue
+        key_platform, sep, rest = key.partition("|")
+        origin, sep2, _message = rest.rpartition("|")
+        if key_platform == platform and sep and sep2 and origin:
+            found.add(origin)
+    return found

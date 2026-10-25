@@ -78,8 +78,11 @@ records its root, config and mailbox in a per-user registry
 `~/.config/...`), so `alb --reply-to <id>` works without flags. A same-user
 agent that elects to run it can send one answer to the correspondent of a
 validated, registered letter: one that sits in a registered bridge's mailbox,
-as a regular file, naming that bridge's sender and recipient. Nothing
-authenticates who wrote the letter. This is an agent-action authorization
+as a regular file, naming that bridge's sender and recipient, and that the
+bridge's private message index shows it published. Every reply, with or
+without flags, goes only to the chat that index recorded for the letter, so a
+letter edited or replaced to name another permitted chat is refused. Nothing
+authenticates who wrote the words. This is an agent-action authorization
 boundary, not verified sender identity, and it is what the same agent could
 already do with explicit flags. A letter never contributes a path or a
 command; its id is only a lookup key.

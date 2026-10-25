@@ -11,6 +11,7 @@ import os
 import pathlib
 import time
 
+from alb import msgindex
 from alb.allowlist import gate
 from alb.letter import store
 
@@ -233,6 +234,14 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
     platform = _platform_of(sender)
     chat_id = destination(stored.meta, state, platform)
 
+    # The letter names its correspondent, but a letter is a file anything
+    # that writes the mailbox can edit or replace. Where this bridge recorded
+    # the letter's origin when it published it, that record decides: a
+    # letter changed to name another permitted chat is refused, not sent.
+    recorded = msgindex.origins_of(state, platform, letter_id) if state else set()
+    if recorded and recorded != {str(chat_id)}:
+        raise NotPermitted("destination does not match where this letter came from")
+
     # Re-checked at send: the allowlist is enforced at BOTH ends.
     if not gate.allows(allowlist_path, chat_id):
         raise NotPermitted(f"destination not permitted at send time")
@@ -313,7 +322,6 @@ def send_reply(sender, inbox, state, allowlist_path, letter_id, text,
                           platform_message_id=str(platform_id))
     # Both directions in the index: a phone reply to the bot's own message
     # must resolve to the outbound letter it answers.
-    from alb import msgindex
     msgindex.record(state, platform, chat_id, str(platform_id), out_id)
     return out_id
 
@@ -431,7 +439,6 @@ def _resume_locked(sender, inbox, state, allowlist_path, out_id, outbox,
         raise AmbiguousOutcome(f"unclassified sender failure: {exc}") from exc
     outbound.record_event(state, out_id, "sent",
                           platform_message_id=str(platform_id))
-    from alb import msgindex
     msgindex.record(state, platform, chat_id, str(platform_id), out_id)
     return out_id
 
