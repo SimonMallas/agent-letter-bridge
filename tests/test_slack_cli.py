@@ -21,6 +21,10 @@ from alb.adapters.slack import outbound as slack_out  # noqa: E402
 from alb.adapters.telegram import api as telegram_api  # noqa: E402
 from alb.bridge import run  # noqa: E402
 from alb.letter import store  # noqa: E402
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import registry_isolation  # noqa: E402
+
+setUpModule, tearDownModule = registry_isolation.start, registry_isolation.stop
 
 BOT = "xoxb-" + "fixture"
 APP = "xapp-" + "fixture"

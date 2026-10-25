@@ -84,9 +84,12 @@ already recognise. Nothing above applies: no second directory, no new line to
 learn. A letter from the bridge is identifiable by its `from:` field.
 
 **Do not reply through the letterbox.** The sender is not a participant there,
-so a reply would be addressed to something that cannot receive it. Outbound is
-`alb --reply-to`, which is operator-side and needs the token. Being woken and
-reading mail does not.
+so a reply would be addressed to something that cannot receive it. Answer the
+person with `alb --reply-to <letter-id> --text "..."`. A running bridge
+registers itself, so the id alone finds it; add `--config` and `--root` for a
+bridge older than 0.5.2 or one run under another HOME. The reply uses the
+bridge's own token from the config the operator set up, and goes where the
+letter came from: nothing in the letter chooses either.
 
 ## Commands
 
@@ -98,8 +101,8 @@ alb --canary    is the send path alive? sends to the operator's own chat
 alb --reply-to <letter-id> --text "..."
 ```
 
-Replying needs the token, so it is an operator-side action. Being woken and
-reading mail does not.
+Replying uses the bridge's token through its config; the agent never handles
+the token itself. Being woken and reading mail needs neither.
 
 ## Replying on Slack and Discord
 

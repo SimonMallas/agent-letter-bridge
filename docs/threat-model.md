@@ -72,6 +72,18 @@ installer.
 
 ## Stated limitations
 
+**Any same-user agent can answer a registered letter.** A running bridge
+records its root, config and mailbox in a per-user registry
+(`$XDG_CONFIG_HOME/agent-letter-bridge/bridges.json`, else
+`~/.config/...`), so `alb --reply-to <id>` works without flags. A same-user
+agent that elects to run it can send one answer to the correspondent of a
+validated, registered letter: one that sits in a registered bridge's mailbox,
+as a regular file, naming that bridge's sender and recipient. Nothing
+authenticates who wrote the letter. This is an agent-action authorization
+boundary, not verified sender identity, and it is what the same agent could
+already do with explicit flags. A letter never contributes a path or a
+command; its id is only a lookup key.
+
 **A compromised or modified poller can send.** One bot token serves both
 directions; there is no credential separation. The guarantee is that the shipped
 poller has no supported send path, enforced by test. It is code discipline, not a

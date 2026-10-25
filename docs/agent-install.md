@@ -528,9 +528,10 @@ knows, so there is no new grammar to teach — but that is not the same as
 nothing to hand over. It still does not know this tool exists. Give it three
 things:
 
-- `alb --config <root>/bridge.env --root <root> --reply-to <letter-id> --text "..."`
-  is how it answers. **Both flags**: integrated keeps letters in the agent's
-  mailbox and private state under the root. The destination
+- `alb --reply-to <letter-id> --text "..."` is how it answers. The running
+  bridge registers its root and config in a per-user registry, so the id alone
+  finds it. For a bridge older than 0.5.2, or one run under another HOME, give
+  **both flags**: `--config <root>/bridge.env --root <root>`. The destination
   comes from the letter; it never picks one. A letter can be answered once.
 - `alb --check --root <root>` is what it runs when it wakes: `0` nothing to do,
   `2` silent past the threshold and here is how to restart it, `3` something a

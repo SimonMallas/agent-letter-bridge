@@ -23,6 +23,10 @@ from alb.bridge import run  # noqa: E402
 from alb.doctor import checks  # noqa: E402
 from alb.letter import store  # noqa: E402
 from alb.setup import wizard  # noqa: E402
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import registry_isolation  # noqa: E402
+
+setUpModule, tearDownModule = registry_isolation.start, registry_isolation.stop
 
 APP_ID = "100000000000000042"
 TOKEN = ".".join([base64.urlsafe_b64encode(APP_ID.encode()).decode().rstrip("="),

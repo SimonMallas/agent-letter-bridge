@@ -30,7 +30,8 @@ WHEN SOMETHING IS WRONG
                  confirm it arrived - nothing here can prove that for you
 
 REPLY TO A STORED LETTER
-  alb --reply-to <letter-id> --text "..."
+  alb --reply-to <letter-id> --text "..."    finds the bridge that holds it;
+                 or pass --config and --root as for any command
   alb --reply-to <letter-id> --photo <path> [--text "..."]
 
 SEND FIRST (operator grant + label; never a raw chat id)
@@ -55,7 +56,9 @@ from alb.adapters.herdr import transport as herdr_transport
 from alb.adapters.tmux import transport as tmux_transport
 from alb.adapters.telegram import api
 from alb.bridge import run, singleton
+from alb.letter import store
 from alb.poller import loop
+from alb import registry
 from alb.send import reply
 
 
@@ -92,7 +95,8 @@ def main(argv=None):
     parser.add_argument("--version", action="version",
                         version=f"agent-letter-bridge {_version()}")
     parser.add_argument("--config", default="", help="path to the env file (mode 600)")
-    parser.add_argument("--root", required=True, help="private state directory")
+    parser.add_argument("--root", help="private state directory (required, "
+                        "except --reply-to may find it from the reply registry)")
     parser.add_argument("--mail-root", default=None,
                         help="publish letters here instead (integrated mode); "
                              "private state always stays under --root")
@@ -180,6 +184,18 @@ def main(argv=None):
         print(f"alb: unsupported --platform {args.platform!r}. Available: "
               f"{', '.join(run.PLATFORMS)}.", file=sys.stderr)
         return 2
+    if not args.root:
+        if not args.reply_to or args.config or args.mail_root:
+            parser.error("the following arguments are required: --root")
+        # An agent knows the letter id, not where its bridge lives. The
+        # running bridge recorded that; nothing here comes from the letter.
+        try:
+            entry = registry.resolve(args.reply_to)
+        except (registry.RegistryError, store.UnsafeIdentifier) as exc:
+            print(f"alb: {exc}", file=sys.stderr)
+            return 2
+        args.root, args.config = entry["root"], entry["config"]
+        args.mail_root = entry["mail_root"]
 
     # Setup runs before there is a config to load, which is the whole point:
     # it is what creates one. It never reads a token from anywhere, and never
@@ -498,6 +514,7 @@ def main(argv=None):
         return 4
 
     with lock_guard(lock):
+        _register(args, config, root)
         try:
             return _poll_forever(platform, transport, surface, root, args,
                                  config, generation=generation)
@@ -841,6 +858,24 @@ def _transient_reason(exc):
     if text.startswith("network:"):
         return "network"
     return "upstream_5xx"
+
+
+def _register(args, config, root):
+    """Record where this bridge lives, so `alb --reply-to <id>` finds it.
+
+    Never fatal: mail still flows without it. The reason is logged, and an
+    agent can still reply with explicit --config and --root.
+    """
+    platform = run.platform_of(config)
+    try:
+        registry.register(root, args.config,
+                          args.mail_root or config.get("ALB_MAIL_ROOT") or root,
+                          platform, config.get("ALB_FROM", f"{platform}-bridge"),
+                          config.get("ALB_TO", "agent"))
+    except (registry.RegistryError, OSError) as exc:
+        log(root, f"reply registry not updated: {exc}")
+        print(f"alb: reply registry not updated ({exc}); agents must pass "
+              f"--config and --root to reply", file=sys.stderr)
 
 
 def _poll_forever(platform, transport, surface, root, args, config,

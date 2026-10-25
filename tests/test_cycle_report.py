@@ -29,6 +29,9 @@ from fake_platform import FakePlatform  # noqa: E402
 from alb import cli  # noqa: E402
 from alb.adapters.telegram import api  # noqa: E402
 from alb.bridge import run  # noqa: E402
+import registry_isolation  # noqa: E402
+
+setUpModule, tearDownModule = registry_isolation.start, registry_isolation.stop
 
 
 def update(uid, chat, text):

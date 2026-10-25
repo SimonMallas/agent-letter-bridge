@@ -5,6 +5,19 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+An agent can answer the person who wrote with `alb --reply-to <letter-id>
+--text "..."` and no other flags. A running bridge records its root, config
+and mailbox in a private per-user registry (0700 folder, 0600 file, locked
+writes), and `--reply-to` finds the one bridge whose mailbox holds that
+letter, addressed from its sender to its recipient. Zero or several owners is
+a refusal that names no path. Before this, an agent that had not been handed
+`--config` and `--root` answered with `letterbox reply`, which cannot reach a
+phone, and the answer never left its terminal. Explicit flags work as before.
+
 ## [0.5.1] — 2026-10-24
 
 ### Fixed

@@ -24,6 +24,9 @@ from alb.adapters.herdr import transport  # noqa: E402
 from alb.adapters.telegram import api  # noqa: E402
 from alb.bridge import run  # noqa: E402
 from alb.notifier import ring  # noqa: E402
+import registry_isolation  # noqa: E402
+
+setUpModule, tearDownModule = registry_isolation.start, registry_isolation.stop
 
 
 def refused(code):
