@@ -19,7 +19,7 @@ Varying these is how people hurt themselves.
 - Atomic publish
 - Two-fence parsing
 - Exact-id letter resolution — substring globs misdeliver
-- Destination chat read from the letter on disk
+- Destination chat read from the letter on disk, and checked against the bridge's private record of where it published that letter
 - Allowlist fail-closed at **both** inbound and send
 - Claim-before-send `O_EXCL` ledger
 - Ambiguous outcome dead-letters and never auto-retries

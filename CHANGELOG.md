@@ -17,7 +17,8 @@ letter, addressed from its sender to its recipient. Zero or several owners is
 a refusal that names no path. A reply, with or without flags, now goes only
 to the chat this bridge recorded when it published the letter: a letter
 edited or replaced to name another permitted chat is refused rather than
-sent. Before this, an agent that had not been handed
+sent. A letter published before the bridge kept that record (before 0.2.0)
+has none to check, and is bounded by the allowlist alone, as before. Before this, an agent that had not been handed
 `--config` and `--root` answered with `letterbox reply`, which cannot reach a
 phone, and the answer never left its terminal. Explicit flags work as before.
 

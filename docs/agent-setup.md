@@ -74,8 +74,10 @@ An `info` letter with `requires_ack: false`. **A text message from a person is
 not a task delegated to you.** File it when handled; do not acknowledge it as
 though it were work assigned by another agent.
 
-The destination for any reply is in the letter itself. It is never remembered,
-configured, or inferred.
+The destination for any reply comes from the letter, checked against the
+bridge's own record of where it published that letter. It is never
+remembered, configured, or inferred, and a letter changed to name another chat
+is refused.
 
 ## If you were set up in integrated mode
 

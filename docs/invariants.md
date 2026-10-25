@@ -92,7 +92,11 @@ Zero matches and many matches are both refusals. This is what prevents a reply
 reaching the wrong chat. Substring globs misdeliver.
 
 **The destination chat is read from the stored letter on disk** — never
-remembered, never configured, never inferred.
+remembered, never configured, never inferred — **and checked against the
+bridge's private message index.** Where the bridge recorded the chat it
+published that letter from, a letter naming any other chat is refused. A
+letter from before that record existed has none to check, and is bounded by
+the allowlist alone.
 
 ## Outbound
 
