@@ -245,7 +245,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     app_token = ""
     if platform == "slack":
         from alb.setup import slack_wizard
-        slack_wizard.explain(console)
+        slack_wizard.explain(console, recipient)
         console.say()
         token, app_token = slack_wizard.tokens(
             console, _consume_token_file, bot_token_file=token_file,

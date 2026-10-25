@@ -20,7 +20,7 @@ def _web_call():
     return web.call
 
 
-def explain(console):
+def explain(console, participant=""):
     """Creating the app. Said once, in the order Slack asks for things."""
     console.say()
     console.say("Slack setup. The Slack app is your own, in your workspace -")
@@ -35,7 +35,7 @@ def explain(console):
     console.say("   Copy and paste it before you take any screenshot - a")
     console.say("   screenshot replaces what you copied.")
     console.say()
-    console.say(manifest.render())
+    console.say(manifest.render(participant))
     console.say()
     console.say("   Do not screenshot or share the Basic Information page: it")
     console.say("   shows the app's secrets. This bridge needs only the two")

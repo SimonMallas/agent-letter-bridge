@@ -102,6 +102,20 @@ class Manifest(unittest.TestCase):
     def test_render_is_the_manifest_as_json(self):
         self.assertEqual(json.loads(manifest.render()), manifest.MANIFEST)
 
+    def test_the_bot_is_named_after_its_participant(self):
+        """Two apps both called "letterbox" left the person guessing which
+        agent each reached."""
+        m = json.loads(manifest.render("builder"))
+        self.assertEqual(m["features"]["bot_user"]["display_name"], "letterbox-builder")
+        self.assertEqual(m["oauth_config"], manifest.MANIFEST["oauth_config"])
+        self.assertEqual(manifest.MANIFEST["features"]["bot_user"]["display_name"],
+                         "letterbox", "the shared default is not mutated")
+
+    def test_a_name_slack_would_refuse_keeps_the_default(self):
+        for name in ("", "Builder", "has space", "x" * 71):
+            m = json.loads(manifest.render(name))
+            self.assertEqual(m["features"]["bot_user"]["display_name"], "letterbox")
+
 
 class Base(unittest.TestCase):
     def setUp(self):
@@ -251,6 +265,12 @@ class Discovery(Base):
 
 
 class Words(Base):
+    def test_the_printed_manifest_names_the_bot_after_the_participant(self):
+        mailbox = pathlib.Path(self.tmp.name) / "box" / "builder"
+        (mailbox / "inbox").mkdir(parents=True)
+        console, _ = self.run_init(answers=["y", str(mailbox), "builder", "print", ""])
+        self.assertIn('"display_name": "letterbox-builder"', console.transcript)
+
     def test_first_time_user_is_told_what_matters(self):
         console, _ = self.run_init(answers=["n", "print"])
         text = console.transcript

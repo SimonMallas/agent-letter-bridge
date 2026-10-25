@@ -140,9 +140,11 @@ send the app one message.
 
 ![The app, letterbox, under Apps in Slack's sidebar](images/slack/11-find-app.png)
 
-In Slack, find the app under **Apps** in the left-hand sidebar. There it is
-called **letterbox** (the app is named Agent Letter Bridge; letterbox is its
-bot's name). If you do not see it, search Slack for `letterbox`.
+In Slack, find the app under **Apps** in the left-hand sidebar. The app is
+named Agent Letter Bridge; its bot is named after the agent it reaches, such
+as **letterbox-builder**, so two apps never look the same. A bridge set up
+without a participant calls its bot **letterbox**, as in these screenshots.
+If you do not see it, search Slack for `letterbox`.
 
 ![A first DM to the app saying hello](images/slack/12-first-dm.png)
 
@@ -194,8 +196,8 @@ In a channel, the app answers only messages that **@mention** it.
 
 ![Typing /invite @letterbox in a channel](images/slack/13-invite.png)
 
-1. In the channel, type `/invite @letterbox`, pick the app from the list,
-   and send it.
+1. In the channel, type `/invite @` and your bot's name (for example
+   `/invite @letterbox-builder`), pick the app from the list, and send it.
 2. Find the channel's ID: choose the channel's name at the top. The ID
    (it starts `C`) is at the bottom of the **About** tab.
 
@@ -209,7 +211,7 @@ In a channel, the app answers only messages that **@mention** it.
    {"chats": ["D0123ABCD/U0456EFGH", "C0789IJKL/U0456EFGH"]}
    ```
 
-4. Mention the app: `@letterbox can you check the build?` The reply arrives
+4. Mention the app: `@letterbox-builder can you check the build?` The reply arrives
    in a thread under your message.
 
 To let a teammate reach the agent in that channel, add their own pair for it.

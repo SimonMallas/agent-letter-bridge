@@ -17,7 +17,12 @@ Least privilege, scope by scope:
 No `always_online`: a bot shown online while the bridge is stopped tells the
 person deciding whether to send something untrue.
 """
+import copy
 import json
+import re
+
+# Slack's rule for a bot's display name: lowercase letters, digits, - _ and .
+BOT_NAME = re.compile(r"[a-z0-9._-]{1,70}\Z")
 
 MANIFEST = {
     "display_information": {
@@ -61,6 +66,15 @@ MANIFEST = {
 }
 
 
-def render():
-    """The manifest as Slack's "From a manifest" box expects it."""
-    return json.dumps(MANIFEST, indent=2)
+def render(participant=""):
+    """The manifest as Slack's "From a manifest" box expects it.
+
+    The bot is named after the participant it serves when there is one. Every
+    app used to call its bot "letterbox", so a person with two looked at two
+    identical names and had to guess which agent each one reached (live test,
+    25 Oct).
+    """
+    manifest = copy.deepcopy(MANIFEST)
+    if BOT_NAME.match(participant or ""):
+        manifest["features"]["bot_user"]["display_name"] = f"letterbox-{participant}"
+    return json.dumps(manifest, indent=2)

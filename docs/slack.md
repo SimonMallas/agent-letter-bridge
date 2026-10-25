@@ -98,7 +98,7 @@ the deny path working.
 - **In a channel, @mention the bot every time**, including follow-ups in a
   thread. A channel message that does not mention the bot is not for the
   agent and never becomes a letter. Invite the bot first:
-  `/invite @letterbox`.
+  `/invite @letterbox-<participant>`, the name setup gave it.
 
 The bridge answers a channel mention in a thread under it, and answers a DM
 at the top level unless your message was itself in a thread.
