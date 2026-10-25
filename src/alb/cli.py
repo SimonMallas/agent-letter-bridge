@@ -332,7 +332,12 @@ def main(argv=None):
             lines = [l for l in canary_log.read_text(encoding="utf-8").splitlines() if l]
             print(f"canary : {lines[-1] if lines else 'log is empty'}")
         else:
-            print("canary : never run - the send path is unproven")
+            # A reply the platform accepted proves the send path as well as a
+            # canary does; saying "unproven" after one confused an agent.
+            sent = health.last_sent_report(state / "receipts")
+            print("canary : never run - " + (
+                f"but a reply was accepted by the platform {sent} ago" if sent
+                else "the send path is unproven"))
 
         print(f"ring   : {health.ring_report(state / 'ring-health.json')}")
         for line in _checks.slack_advisories(pathlib.Path(args.root)):

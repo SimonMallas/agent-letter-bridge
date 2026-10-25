@@ -169,6 +169,21 @@ def _age_label(seconds):
     return f"{seconds // 86400}d"
 
 
+def last_sent_report(receipts):
+    """Age of the newest send the platform accepted, or "" if none.
+    Passive: reads receipt files, never sends."""
+    newest = None
+    for path in pathlib.Path(receipts).glob("*/*-sent.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            at = float(data["at"])
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+            continue
+        if data.get("event") == "sent" and math.isfinite(at):
+            newest = at if newest is None else max(newest, at)
+    return "" if newest is None else _age_label(now() - newest)
+
+
 def ring_report(path):
     """Last doorbell-ring outcome, with age. Passive: never rings.
 

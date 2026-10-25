@@ -21,6 +21,10 @@ The bridge waits 15s for `letterbox ring`, up from 10s. Letterbox 0.5.3 and
 Herdr 0.6.4 pause before the doorbell's Enter (default 2s, up to 5s), and a
 slow but healthy ring must not be reported as unconfirmed.
 
+`alb --status` counts a reply the platform accepted as evidence that the
+send path works. It used to say "canary: never run - the send path is
+unproven" right after replies had gone out.
+
 `alb --status` says a ring was "typed into the agent's pane" instead of
 "delivered". That is what the helper can know: not that the agent's app
 submitted the line, or that anyone read it.

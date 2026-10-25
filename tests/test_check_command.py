@@ -98,6 +98,41 @@ class TheCommandAnAgentRunsOnWaking(unittest.TestCase):
         self.assertRegex(status.stdout, r"3d|72h|[2-4]d")
 
 
+class StatusCountsASentReplyAsSendEvidence(unittest.TestCase):
+    """An agent saw "canary: never run - the send path is unproven" right
+    after its replies had been sent. A reply the platform accepted is proof."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "state").mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def status(self):
+        return subprocess.run([*ALB, "--status", "--root", str(self.root)],
+                              capture_output=True, text=True).stdout
+
+    def test_no_send_is_still_unproven(self):
+        self.assertIn("canary : never run - the send path is unproven", self.status())
+
+    def test_an_accepted_reply_is_named(self):
+        receipt = self.root / "state" / "receipts" / "reply-x"
+        receipt.mkdir(parents=True)
+        (receipt / "3-sent.json").write_text(json.dumps(
+            {"event": "sent", "at": time.time() - 120, "platform_message_id": "1"}),
+            encoding="utf-8")
+        self.assertIn("but a reply was accepted by the platform 2m ago", self.status())
+
+    def test_a_refused_send_is_not_evidence(self):
+        receipt = self.root / "state" / "receipts" / "reply-y"
+        receipt.mkdir(parents=True)
+        (receipt / "3-refused.json").write_text(json.dumps(
+            {"event": "refused", "at": time.time()}), encoding="utf-8")
+        self.assertIn("the send path is unproven", self.status())
+
+
 class TheAdviceNamesOnlyThingsThatExist(unittest.TestCase):
     """Kimi's block. The restart verdict told an agent to run `alb --stop`,
     which does not exist - so obeying the instruction failed at the exact
