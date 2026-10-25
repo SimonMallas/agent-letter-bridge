@@ -651,7 +651,10 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running,
     # which now differs between the two states above. Reading blank as "no"
     # would have made enter refuse a start it was offering to make.
     answer = (console.ask(prompt, default).strip() or default)
-    if answer.lower() in ("n", "no"):
+    # Only an explicit yes starts it. A stray answer typed or buffered for an
+    # earlier question (an agent driving setup sent a user id here) counted
+    # as yes, and started a bridge the operator had declined.
+    if answer.lower() not in ("y", "yes"):
         console.say("Not started. Run the command above from a cmux pane when ready.")
         summary["resident"] = "printed"
         return

@@ -13,6 +13,18 @@ Slack setup names the bot after the agent it reaches (`letterbox-builder`)
 instead of calling every bot `letterbox`. A person with two apps saw two
 identical names and had to guess which agent each one reached.
 
+Setup starts the bridge only on an explicit yes. Any answer other than `n`
+used to count as yes, so a stray answer meant for an earlier question (an agent
+driving setup sent a user id) started a bridge the operator had declined.
+
+The bridge waits 15s for `letterbox ring`, up from 10s. Letterbox 0.5.3 and
+Herdr 0.6.4 pause before the doorbell's Enter (default 2s, up to 5s), and a
+slow but healthy ring must not be reported as unconfirmed.
+
+`alb --status` says a ring was "typed into the agent's pane" instead of
+"delivered". That is what the helper can know: not that the agent's app
+submitted the line, or that anyone read it.
+
 ## [0.5.2] — 2026-10-25
 
 ### Fixed

@@ -312,7 +312,10 @@ def prepare_mail_root(mail_root):
 # provable, because the number would describe a path with no ceiling - and a
 # bridge stuck in a subprocess looks exactly like the death a supervisor
 # exists to detect. A bounded ring can fail; an unbounded one can hang.
-RING_TIMEOUT = 10
+# Letterbox's ring wrapper allows 4 x step + 5s + its pause before Enter
+# (LETTERBOX_DOORBELL_ENTER_DELAY, 0-5s, default 2): 11s at the defaults and
+# 14s at the largest pause. The ring must not be cut off before that.
+RING_TIMEOUT = 15
 RING_ATTEMPTS = 3
 RING_RETRY_SLEEP = 0.05
 
@@ -443,7 +446,9 @@ def run_once(platform, transport, surface, root,
             except Exception as exc:
                 _record_ring(root, "failing", _ring_failure_reason(exc))
             else:
-                _record_ring(root, "ok", "delivered")
+                # What the helper can know: the doorbell was typed into the agent's
+                # pane. Not that the agent's app submitted it, or that anyone read it.
+                _record_ring(root, "ok", "typed into the agent's pane")
 
     # Tell the platform only now: every letter in this batch is durably on
     # disk, so it is safe for the platform to forget them. Acking internally

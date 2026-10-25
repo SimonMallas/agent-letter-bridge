@@ -592,6 +592,17 @@ class TheResidentOffer(Base):
         self.assertIn("SURFACE-NEW", out)
         self.assertIn("close", out.lower())
 
+    def test_a_stray_answer_does_not_start_it(self):
+        """An agent driving setup sent a user id at this prompt, and it
+        counted as yes. Only an explicit yes starts the bridge."""
+        for stray in ("687555211639914544", "print", "ok", "sure"):
+            console, _, started = self._init(["n", "print", "AGENT-PANE", stray])
+            self.assertEqual(started, [], stray)
+            self.assertIn("Not started", console.transcript)
+        for yes in ("y", "Y", "yes"):
+            _, _, started = self._init(["n", "print", "AGENT-PANE", yes])
+            self.assertEqual(len(started), 1, repr(yes))
+
     def test_no_prints_the_identical_command_instead(self):
         console, _, started = self._init(["n", "print", "AGENT-PANE", "no"])
         self.assertEqual(started, [])

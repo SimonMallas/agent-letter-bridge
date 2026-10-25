@@ -69,6 +69,14 @@ class EveryRingPathIsBounded(unittest.TestCase):
             lambda: run._bus_ring("codex", "info", "some-id", binary="/bin/true")))
 
 
+class TheIntegratedRingIsNotCutShort(unittest.TestCase):
+    def test_the_bridge_waits_out_letterboxs_largest_ring_budget(self):
+        """Letterbox's ring wrapper allows 4 x 1s steps + 5s + a pause before
+        Enter of up to 5s. A shorter bridge timeout would report a healthy,
+        slow ring as unconfirmed."""
+        self.assertGreaterEqual(run.RING_TIMEOUT, 4 * 1 + 5 + 5)
+
+
 class TheBoundActuallyBites(unittest.TestCase):
     """Pi drove real sleeping children rather than inspecting keywords - and
     then caught my attempt to preserve that from calling production at all.
