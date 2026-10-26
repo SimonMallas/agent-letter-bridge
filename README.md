@@ -220,7 +220,10 @@ It reads state files only: no token, no network, no letters.
 Integrated mode **rings through Letterbox's own `letterbox ring <to> <type> <id>`**,
 which prints one `doorbell-outcome v=1` line. It ships in Letterbox 0.5.1 and
 later for cmux, tmux and Zellij, and 0.6.2 and later for Herdr; to update an
-older install, run its install command again. Setup finds `letterbox` on
+older install, run its install command again. Use Letterbox 0.5.3 or later
+(Herdr 0.6.4): it pauses before the doorbell's Enter, and some agent apps take
+an Enter that arrives with the text as part of a paste, leaving the doorbell
+line unsent in their prompt. Setup finds `letterbox` on
 `PATH`; if it is not there, setup asks for its path (normally
 `~/.local/bin/letterbox`) and records it as `ALB_BUS_BINARY`. Start the bridge with `LETTERBOX_DIR` set to the letterbox
 containing `ALB_MAIL_ROOT`'s recipient inbox. An older `letterbox` without
