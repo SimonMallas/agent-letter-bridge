@@ -73,8 +73,12 @@ and you will need their answer to it either way.
 python3 --version
 ```
 
-Requires **3.11+**. If lower or missing, report it and stop — do not install a
-Python runtime unless the human asks.
+Requires **3.11+**. If `python3` is older, look for a newer one that is
+already installed (`python3.13 --version`, `python3.12 --version`,
+`python3.11 --version`; on a Mac, `python3` is often Apple's 3.9 while a newer
+Python sits beside it) and use that name wherever this guide says `python3`
+(with pipx: `pipx install --python python3.12 …`). If none is 3.11+, report it
+and stop — do not install a Python runtime unless the human asks.
 
 No other dependencies exist. This tool is stdlib-only, and that is a security
 property rather than a preference: report it if you are asked what it pulls in.
@@ -573,21 +577,44 @@ code, and the running process keeps the code it started with until it restarts.
    (`running 0.5.3 from <python>`). For an older bridge, read the process
    list: `ps -eo args | grep -- '--root <root>'` shows the executable. The
    `venv` path in Step 8.5 is an example, not a promise of where yours is.
-2. **Install the new version beside it**, in a new venv, for example
-   `python3 -m venv <root>/venv-<version>` then
+2. **Install the new version beside it**, in a new venv whose name is not
+   already in use, for example
+   `python3 -m venv <root>/venv-<version>` (a 3.11+ Python, Step 1) then
    `<root>/venv-<version>/bin/pip install agent-letter-bridge==<version>`.
    Do not install over the running venv, and leave a shared `alb` on `PATH`
    alone: other bridges may run it.
-3. **Stop the running bridge** with `<old alb> --stop --root <root>` and check
-   that its process is gone.
+3. **Note where it runs, then stop it.** `ps -o tty= -p <pid>` names its
+   terminal; find that terminal in your multiplexer (cmux: `cmux tree --all`
+   shows each pane's `tty=`; tmux:
+   `tmux list-panes -a -F '#{pane_tty} #{pane_id}'`). That is the pane the new
+   one starts in. `?` or `??` means it has no terminal; look at its parent,
+   `ps -o comm= -p "$(ps -o ppid= -p <pid>)"`. `launchd` or `systemd` means a
+   service: restart the service instead. Anything else, such as an agent's
+   session, means it was started in the background: start the new one in a
+   dedicated pane instead (Step 8.5). Then stop it with
+   `<old alb> --stop --root <root>` and check that its process is gone.
 4. **Start the new one the way the old one ran**: same `--config` and `--root`,
-   in the same dedicated pane or service. Not as a background task of your own
-   session (Step 8.5).
+   in that pane or service. Not as a background task of your own session
+   (Step 8.5). Type the command into that pane: cmux:
+   `cmux send --surface <surface> '<command>\n'`; tmux:
+   `tmux send-keys -t <pane> '<command>' Enter`. If your session cannot reach
+   the multiplexer (some agent apps cannot), give the human the exact start
+   command to run there; do not start it from your own session instead. If
+   that pane closed when the old bridge stopped (it ran the bridge as its own
+   command, for example with `exec`), open a new dedicated pane and start it
+   there.
 5. **Check** `<new alb> --status --root <root>`: the new version is named and
-   the heartbeat is fresh. Then ask the human to send a message, as in Step 8.5.
+   the heartbeat is fresh. The `ring` line keeps the old bridge's wording
+   until the new one rings. Then ask the human to send a message, as in
+   Step 8.5.
 
 Do not re-run `init` and do not edit the allowlist. To roll back, stop the new
 one and start the old executable again; its venv is still there.
+
+The ring runs whatever `ALB_BUS_BINARY` names. If that is the `letterbox` in
+your Letterbox install, updating Letterbox updates the ring. If it names a copy
+somewhere else, a Letterbox update does not reach it; leave it unless you mean
+to change it.
 
 ### Moving an agent onto a Letterbox
 
@@ -604,7 +631,10 @@ restarting as above:
 The agent's pane must be registered for the ring: start the agent with
 `letterbox <multiplexer> run <agent> -- <command>`, or run
 `letterbox <multiplexer> register <agent>` from its pane and set
-`LETTERBOX_AGENT=<agent>` where its commands run.
+`LETTERBOX_AGENT=<agent>` where its commands run. `letterbox` uses
+`LETTERBOX_DIR`, or else the Letterbox that `setup` recorded as the default; if
+the agent's Letterbox is a different one, export `LETTERBOX_DIR=<letterbox>`
+first, or the pane is registered in the wrong Letterbox.
 
 ## If you get stuck
 

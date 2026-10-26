@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.3] — 2026-10-25
+## [0.5.3] — 2026-10-26
 
 ### Fixed
 
@@ -27,7 +27,8 @@ unproven" right after replies had gone out.
 
 `alb --status` says a ring was "typed into the agent's pane" instead of
 "delivered". That is what the helper can know: not that the agent's app
-submitted the line, or that anyone read it.
+submitted the line, or that anyone read it. A ring recorded by an older bridge
+keeps its "delivered" wording until the upgraded bridge rings.
 
 The bridge refuses a mail root that is not the recipient's own mailbox.
 Pointed at a whole letterbox (`~/.agent-letterbox` instead of
@@ -48,7 +49,15 @@ The agent install guide has an upgrade path for a bridge already in service
 (find the running install, install beside it, stop, start the new one the same
 way, no re-init), says how to move an existing bridge onto a Letterbox, and
 says never to start the bridge as a background task of the agent's own
-session, where it stops when the session ends.
+session, where it stops when the session ends. It says how to find the pane the
+old bridge ran in and how to type the start command into it, to hand the
+human the command when the agent cannot reach the multiplexer, what to do when
+that pane closed with the old bridge, and how to tell a service from a bridge
+started in the background; that a Letterbox update does not reach a ring
+helper pinned to a copy; and to set `LETTERBOX_DIR` before `register` when the
+agent's Letterbox is not the default one. Both install guides say to use an
+installed `python3.11` or newer by name when `python3` is older (on a Mac,
+`python3` is often Apple's 3.9).
 
 ## [0.5.2] — 2026-10-25
 

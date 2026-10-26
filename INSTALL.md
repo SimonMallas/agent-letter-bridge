@@ -53,7 +53,12 @@ change afterwards, so settle them now.
 python3 --version
 ```
 
-Older, or "command not found"? Install Python 3.11+ first — from
+Older? On a Mac, `python3` is often Apple's 3.9 even when a newer Python is
+installed: try `python3.12 --version` and `python3.11 --version`, and if one
+works, use that name in place of `python3` below (with pipx:
+`pipx install --python python3.12 …`).
+
+Still older, or "command not found"? Install Python 3.11+ first — from
 [python.org](https://www.python.org/downloads/), `brew install python@3.12`, or
 `uv python install 3.12`. Nothing else is required: this tool has **zero
 third-party runtime dependencies**.
