@@ -291,8 +291,17 @@ def local_consumers(process_listing, self_pid, our_bot=None, bot_of=None):
                 # made by omission is a wrong clear nobody can see.
                 verdict = "different"
         found.append({"pid": pid, "command": " ".join(argv[:6]),
-                      "bot": verdict})
+                      "bot": verdict, "root": _flag(argv, "--root")})
     return found
+
+
+def _same_root(candidate, root):
+    if not candidate:
+        return False
+    try:
+        return pathlib.Path(candidate).resolve() == pathlib.Path(root).resolve()
+    except OSError:
+        return False
 
 
 def lock_state(root):
@@ -402,6 +411,13 @@ def summary(process_listing, self_pid, root, environ):
     lines.append("LOCAL SINGLE-CONSUMER PROBE")
     contenders = [c for c in competing if c["bot"] in ("same", "unknown")]
     cleared = [c for c in competing if c["bot"] == "different"]
+    # The one bridge running on THIS root is this bridge, not another one. Run
+    # while it was up, the report named it as its own competitor. Two on this
+    # root stay contenders: the second one is the conflict.
+    here = [c for c in contenders if _same_root(c["root"], root)]
+    if len(here) == 1:
+        contenders.remove(here[0])
+        lines.append(f"  this bridge is running: pid {here[0]['pid']} (on this root)")
     # EVERY HEADING NAMES ITS EVIDENCE. Identity here is read from each
     # candidate's config as it stands now; a live process loaded its config at
     # startup and the file may have changed since. That is an inference about

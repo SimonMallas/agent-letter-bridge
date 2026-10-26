@@ -40,6 +40,16 @@ the bridge itself recorded them, and notes when the `alb` you ran is a
 different version. An agent that upgraded its bridge into a new venv could not
 tell which install was running, because another `alb` came first on PATH.
 
+`alb --doctor`, run while the bridge on the same root is up, names that process
+as this bridge. It used to say another bridge may be holding the bot and then
+name the bridge itself. Two processes on one root are still a warning.
+
+The agent install guide has an upgrade path for a bridge already in service
+(find the running install, install beside it, stop, start the new one the same
+way, no re-init), says how to move an existing bridge onto a Letterbox, and
+says never to start the bridge as a background task of the agent's own
+session, where it stops when the session ends.
+
 ## [0.5.2] — 2026-10-25
 
 ### Fixed

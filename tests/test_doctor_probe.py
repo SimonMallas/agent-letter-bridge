@@ -69,6 +69,37 @@ class LocalConsumerProbe(unittest.TestCase):
             self.assertIn("no lock", checks.lock_state(pathlib.Path(tmp)).lower())
 
 
+class TheBridgeOnThisRootIsNotAnotherBridge(unittest.TestCase):
+    """Run while its bridge was up, the doctor said another bridge may be
+    holding the bot, then named that same bridge (26 Oct)."""
+
+    def summary(self, root, *roots):
+        listing = [f"501 {900 + i} /usr/bin/python3 /v/bin/alb --root {r}"
+                   for i, r in enumerate(roots)]
+        return checks.summary(listing, self_pid=1, root=root,
+                              environ={"PATH": "/bin"})
+
+    def test_the_one_process_on_this_root_is_named_as_this_bridge(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            text = self.summary(root, root)
+        self.assertNotIn("ANOTHER BRIDGE MAY BE HOLDING", text)
+        self.assertIn("this bridge is running: pid 900", text)
+
+    def test_two_processes_on_this_root_are_still_a_warning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            text = self.summary(root, root, root)
+        self.assertIn("ANOTHER BRIDGE MAY BE HOLDING", text)
+
+    def test_a_bridge_on_another_root_is_still_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            text = self.summary(root, root / "elsewhere")
+        self.assertIn("ANOTHER BRIDGE MAY BE HOLDING", text)
+        self.assertNotIn("this bridge is running", text)
+
+
 class DeliverabilityIsNotHealth(unittest.TestCase):
     """A bridge with no allowlist runs perfectly and delivers nothing, ever.
 

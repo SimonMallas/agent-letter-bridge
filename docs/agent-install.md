@@ -20,6 +20,10 @@ Work through the steps in order. **Stop at each `ASK` and wait for a human
 answer.** Guessing at any of them produces a bridge that looks installed and
 delivers nothing.
 
+**Upgrading a bridge that is already running?** The steps below are for a new
+install: its token, chat id and ring are already answered, so do not re-ask
+them or re-run `init`. Go to [Upgrading a running bridge](#upgrading-a-running-bridge).
+
 ---
 
 ## What you may do, and what you may not
@@ -504,6 +508,11 @@ Foreground is acceptable for a first live hour:
 ~/.alb/venv/bin/alb --config ~/.alb/bridge.env --root ~/.alb
 ```
 
+**Never start it as a background task of your own agent session.** A bridge
+started that way is a child of your CLI: when your session ends or restarts,
+the bridge stops and the phone goes quiet. Run that command in its own pane, or
+under the service unit, where it outlives you.
+
 `alb --status --root ~/.alb` shows the heartbeat moving while nobody runs
 `--once`, and `--doctor` reports the lock file. Neither is proof: a heartbeat is
 what the last cycle wrote, and a lock file is left behind by a crash too.
@@ -511,8 +520,8 @@ what the last cycle wrote, and a lock file is left behind by a crash too.
 **Only observation proves the bell.** Ask the human to send a message while you
 poll nothing by hand, and confirm two things happened: a letter appeared, and
 the line was typed into the intended pane. `--status` reporting the ring as
-`delivered` says the helper returned success, not that the right pane received
-it — the human is the one who can see that, so ask them.
+`typed into the agent's pane` says the helper typed it, not that the right pane
+received it — the human is the one who can see that, so ask them.
 
 ---
 
@@ -553,6 +562,49 @@ and which of the three tests actually passed. **Name any you did not run** —
 an unrun test is not a passed one.
 
 ---
+
+## Upgrading a running bridge
+
+The config, allowlist and state carry forward untouched. What changes is the
+code, and the running process keeps the code it started with until it restarts.
+
+1. **Find the install that is running**, not the one on your `PATH`; they are
+   often different. `alb --status --root <root>` names it from 0.5.3 on
+   (`running 0.5.3 from <python>`). For an older bridge, read the process
+   list: `ps -eo args | grep -- '--root <root>'` shows the executable. The
+   `venv` path in Step 8.5 is an example, not a promise of where yours is.
+2. **Install the new version beside it**, in a new venv, for example
+   `python3 -m venv <root>/venv-<version>` then
+   `<root>/venv-<version>/bin/pip install agent-letter-bridge==<version>`.
+   Do not install over the running venv, and leave a shared `alb` on `PATH`
+   alone: other bridges may run it.
+3. **Stop the running bridge** with `<old alb> --stop --root <root>` and check
+   that its process is gone.
+4. **Start the new one the way the old one ran**: same `--config` and `--root`,
+   in the same dedicated pane or service. Not as a background task of your own
+   session (Step 8.5).
+5. **Check** `<new alb> --status --root <root>`: the new version is named and
+   the heartbeat is fresh. Then ask the human to send a message, as in Step 8.5.
+
+Do not re-run `init` and do not edit the allowlist. To roll back, stop the new
+one and start the old executable again; its venv is still there.
+
+### Moving an agent onto a Letterbox
+
+An existing bridge can switch from its own inbox, or another mailbox, to a
+Letterbox (integrated mode) by changing three keys in `bridge.env`, then
+restarting as above:
+
+- `ALB_MAIL_ROOT` is the agent's own mailbox inside the Letterbox,
+  `<letterbox>/<agent>` (for example `~/.agent-letterbox/builder`), never the
+  Letterbox itself. The bridge refuses the Letterbox itself.
+- `ALB_TO` is that agent's name.
+- `ALB_BUS_BINARY` is the absolute path of `letterbox`, so a service finds it.
+
+The agent's pane must be registered for the ring: start the agent with
+`letterbox <multiplexer> run <agent> -- <command>`, or run
+`letterbox <multiplexer> register <agent>` from its pane and set
+`LETTERBOX_AGENT=<agent>` where its commands run.
 
 ## If you get stuck
 
