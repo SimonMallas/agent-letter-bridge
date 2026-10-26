@@ -133,6 +133,47 @@ class StatusCountsASentReplyAsSendEvidence(unittest.TestCase):
         self.assertIn("the send path is unproven", self.status())
 
 
+class StatusNamesTheRunningBridge(unittest.TestCase):
+    """An agent upgraded its bridge in a new venv (26 Oct). The alb on PATH was
+    another install, an older version, so "installed" and "running" could not
+    be told apart. The heartbeat now says who wrote it; status repeats it."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "state").mkdir()
+        self.this_alb = subprocess.run([*ALB, "--version"], capture_output=True,
+                                       text=True).stdout.split()[-1]
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def beat(self, **extra):
+        (self.root / "state" / "health.json").write_text(json.dumps(
+            {"heartbeat": time.time(), "state": "running", **extra}),
+            encoding="utf-8")
+        return subprocess.run([*ALB, "--status", "--root", str(self.root)],
+                              capture_output=True, text=True).stdout
+
+    def test_the_running_version_and_interpreter_are_named(self):
+        out = self.beat(version="9.9.9", python="/opt/venv-9/bin/python")
+        self.assertIn("running 9.9.9 from /opt/venv-9/bin/python", out)
+
+    def test_a_different_alb_on_path_is_called_out(self):
+        out = self.beat(version="9.9.9", python="/opt/venv-9/bin/python")
+        self.assertIn(f"note   : this alb is {self.this_alb}; "
+                      f"the running bridge is 9.9.9", out)
+
+    def test_the_same_version_raises_no_note(self):
+        out = self.beat(version=self.this_alb, python="/opt/venv/bin/python")
+        self.assertNotIn("note   :", out)
+
+    def test_a_bridge_too_old_to_say_is_not_guessed_at(self):
+        out = self.beat()
+        self.assertNotIn("running ", out)
+        self.assertNotIn("note   :", out)
+
+
 class TheAdviceNamesOnlyThingsThatExist(unittest.TestCase):
     """Kimi's block. The restart verdict told an agent to run `alb --stop`,
     which does not exist - so obeying the instruction failed at the exact

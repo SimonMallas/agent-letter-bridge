@@ -11,6 +11,7 @@ retention window passes. That is the single defect this project exists to fix.
 import json
 import os
 import pathlib
+import sys
 import time
 
 from alb.allowlist import gate
@@ -113,9 +114,13 @@ def _write_heartbeat(path, state="running", reason=None,
     tmp = path.with_suffix(".tmp")
     # Created 0600 rather than chmod'd afterwards, so the contents are never
     # briefly readable by anyone else.
+    from alb.cli import _version
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        payload = {"heartbeat": time.time(), "state": state}
+        # And WHO is alive. An upgrade into a new venv left another install's
+        # alb on PATH, so "installed" could not be told from "running".
+        payload = {"heartbeat": time.time(), "state": state,
+                   "version": _version(), "python": sys.executable}
         if generation:
             # WHICH run this is. A stand-down that cannot say which run made
             # it cannot answer for any particular one, and recency is a proxy

@@ -274,7 +274,7 @@ class RingNotDelivered(Exception):
             super().__init__(classification)
 
 
-def prepare_mail_root(mail_root):
+def prepare_mail_root(mail_root, recipient):
     """Create ONLY what letters need, in a directory that may not be ours.
 
     Deliberately not prepare_root. That function chmods the root, inbox,
@@ -292,6 +292,10 @@ def prepare_mail_root(mail_root):
     would put every letter into a tree no agent sweeps while the doorbell sends
     the real agent to an inbox that stays empty - "ring lands, agent finds
     nothing", built out of one wrong character, with no error anywhere.
+
+    AND IT MUST BE THE RECIPIENT'S. A letterbox keeps each agent's mail at
+    <letterbox>/<agent>. Given the letterbox itself, letters went to
+    <letterbox>/inbox, which no agent sweeps, and the ring could not find them.
     """
     mail_root = pathlib.Path(mail_root)
     if not mail_root.is_dir():
@@ -301,6 +305,13 @@ def prepare_mail_root(mail_root):
             f"created - letters written into an invented directory would land "
             f"where nothing sweeps, silently. Check the path, or remove "
             f"--mail-root / ALB_MAIL_ROOT to run standalone."
+        )
+    if mail_root.name != recipient:
+        raise ConfigError(
+            f"mail root {mail_root} is not {recipient}'s mailbox. A letterbox "
+            f"keeps each agent's mail in a folder named after it, so for "
+            f"ALB_TO={recipient} this is usually {mail_root / recipient}. "
+            f"Set ALB_MAIL_ROOT (or --mail-root) to that mailbox."
         )
     for name in ("inbox", "processed", "outbox"):
         (mail_root / name).mkdir(exist_ok=True)
@@ -406,7 +417,7 @@ def run_once(platform, transport, surface, root,
 
     # Letters may live somewhere this bridge does not own. State never does.
     integrated = mail_root is not None and pathlib.Path(mail_root) != root
-    mail = prepare_mail_root(mail_root) if integrated else root
+    mail = prepare_mail_root(mail_root, recipient) if integrated else root
 
     published = loop.poll_once(
         platform,

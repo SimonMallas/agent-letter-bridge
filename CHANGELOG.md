@@ -29,6 +29,17 @@ unproven" right after replies had gone out.
 "delivered". That is what the helper can know: not that the agent's app
 submitted the line, or that anyone read it.
 
+The bridge refuses a mail root that is not the recipient's own mailbox.
+Pointed at a whole letterbox (`~/.agent-letterbox` instead of
+`~/.agent-letterbox/builder`), it wrote letters to a folder no agent reads, and
+the ring failed with only "unparseable". It now stops on its first cycle,
+before taking any message, and names the mailbox it expected.
+
+`alb --status` names the version and Python of the bridge that is running, as
+the bridge itself recorded them, and notes when the `alb` you ran is a
+different version. An agent that upgraded its bridge into a new venv could not
+tell which install was running, because another `alb` came first on PATH.
+
 ## [0.5.2] — 2026-10-25
 
 ### Fixed

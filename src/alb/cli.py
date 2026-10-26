@@ -323,7 +323,17 @@ def main(argv=None):
             print(f"DELIVERY: NOTHING WILL BE DELIVERED - {delivery['reason']}")
         state = pathlib.Path(args.root) / "state"
         bridge = health.status(state / "health.json", max_age=120)
-        print(f"bridge : {bridge.state} - {bridge.reason}")
+        # Which install is running, as the bridge itself recorded it: the alb
+        # answering this command may be a different one.
+        try:
+            beat = json.loads((state / "health.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            beat = {}
+        running = beat.get("version") if isinstance(beat, dict) else None
+        where = f" (running {running} from {beat.get('python')})" if running else ""
+        print(f"bridge : {bridge.state} - {bridge.reason}{where}")
+        if running and running != _version():
+            print(f"note   : this alb is {_version()}; the running bridge is {running}")
         # The canary is the only evidence the OUTBOUND path is alive, and its
         # last run is already a file. Without this line, --status answers
         # "should I worry" for inbound and the ring but not for sending.

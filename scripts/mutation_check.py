@@ -825,6 +825,9 @@ EXTRA = {
     "a missing mailbox is refused, not invented": (
         BRIDGE, "tests.test_mail_root",
         "    if not mail_root.is_dir():", "    if False:"),
+    "a mail root that is not the recipient's mailbox is refused": (
+        BRIDGE, "tests.test_mail_root",
+        "    if mail_root.name != recipient:", "    if False:"),
     "integrated mode rings through the letterbox helper": (
         BRIDGE, "tests.test_mail_root",
         '            _bus_ring(recipient, "info", published[-1], binary=bus_binary)',

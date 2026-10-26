@@ -114,6 +114,11 @@ does not exist is nobody's, so it is a typo. Creating it would put every letter
 into a tree nothing sweeps while the doorbell sends the real agent to an inbox
 that stays empty.
 
+**The mail root is the recipient's own mailbox.** A letterbox keeps each
+agent's mail at `<letterbox>/<agent>`, so a mail root whose last part is not
+`ALB_TO` is refused before anything is fetched. Given the whole letterbox, the
+bridge wrote letters to `<letterbox>/inbox`, which no agent reads.
+
 ## Operational
 
 **A platform conflict is a yield, not an error.**

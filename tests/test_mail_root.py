@@ -40,7 +40,7 @@ class MailRootIsLettersOnly(unittest.TestCase):
         base = pathlib.Path(self.tmp.name)
         self.root = run.prepare_root(base / "private")
         # A stand-in for a shared mailbox that already exists and is not ours.
-        self.mail = base / "shared" / "seat"
+        self.mail = base / "shared" / "research-bot"
         (self.mail / "inbox").mkdir(parents=True)
         self.mail.chmod(0o755)
         (self.root / "allowlist.json").write_text(
@@ -139,7 +139,7 @@ class ReplyFindsLettersWhereTheyLive(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         base = pathlib.Path(self.tmp.name)
         self.root = run.prepare_root(base / "private")
-        self.mail = base / "shared" / "seat"
+        self.mail = base / "shared" / "research-bot"
         (self.mail / "inbox").mkdir(parents=True)
         (self.mail / "processed").mkdir(parents=True)
         (self.root / "allowlist.json").write_text(
@@ -191,7 +191,7 @@ class ReplyThroughTheBinary(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         base = pathlib.Path(self.tmp.name)
         self.root = run.prepare_root(base / "private")
-        self.mail = base / "shared" / "seat"
+        self.mail = base / "shared" / "research-bot"
         (self.mail / "inbox").mkdir(parents=True)
         (self.mail / "processed").mkdir(parents=True)
         (self.root / "allowlist.json").write_text(
@@ -235,7 +235,7 @@ class TheHealthFileMustNotLie(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         base = pathlib.Path(self.tmp.name)
         self.root = run.prepare_root(base / "private")
-        self.mail = base / "shared" / "seat"
+        self.mail = base / "shared" / "research-bot"
         (self.mail / "inbox").mkdir(parents=True)
         (self.root / "allowlist.json").write_text(
             json.dumps({"chats": ["111"]}), encoding="utf-8")
@@ -377,7 +377,8 @@ class AMailboxIsNotInvented(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_a_missing_mail_root_is_refused_not_created(self):
-        ghost = self.base / "shared" / "no-such-seat"
+        # Named after its recipient, so only the existence check can refuse it.
+        ghost = self.base / "shared" / "an-agent"
         with self.assertRaises(run.ConfigError) as caught:
             run.run_once(FakePlatform([update(1, "111", "hi")]), None, "",
                          self.root, mail_root=ghost, recipient="an-agent")
@@ -388,10 +389,52 @@ class AMailboxIsNotInvented(unittest.TestCase):
         """The refusal is about the mailbox, not its subdirectories - those are
         ours to add, and requiring the agent to pre-create them would push our
         layout onto every letterbox."""
-        seat = self.base / "shared" / "seat"
+        seat = self.base / "shared" / "an-agent"
         seat.mkdir(parents=True)
         with mock.patch.object(run, "_bus_ring"):
             run.run_once(FakePlatform([update(1, "111", "hi")]), None, "",
                          self.root, mail_root=seat, recipient="an-agent")
         self.assertTrue((seat / "inbox").is_dir())
+        self.assertEqual(len(list((seat / "inbox").glob("*.md"))), 1)
+
+
+class TheMailRootIsTheRecipientsOwnMailbox(unittest.TestCase):
+    """Found when a team agent updated itself to 0.5.3 (26 Oct).
+
+    Pointed at the whole letterbox instead of its own mailbox inside it, the
+    bridge wrote the letter to <letterbox>/inbox, which no agent sweeps, and
+    `letterbox ring builder` found nothing in builder's inbox. Status said only
+    "unparseable". A letterbox keeps each agent's mail at <letterbox>/<agent>,
+    so a mail root whose last part is not the recipient cannot be its mailbox.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.base = pathlib.Path(self.tmp.name)
+        self.root = run.prepare_root(self.base / "alb")
+        (self.root / "allowlist.json").write_text(
+            json.dumps({"chats": ["111"]}), encoding="utf-8")
+        self.box = self.base / "letterbox"
+        (self.box / "builder").mkdir(parents=True)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_whole_letterbox_is_refused_and_the_message_is_not_taken(self):
+        platform = FakePlatform([update(1, "111", "hi")])
+        with mock.patch.object(run, "_bus_ring") as rang:
+            with self.assertRaises(run.ConfigError) as caught:
+                run.run_once(platform, None, "", self.root,
+                             mail_root=self.box, recipient="builder")
+        self.assertIn(str(self.box / "builder"), str(caught.exception))
+        self.assertFalse((self.box / "inbox").exists(), "nothing is written")
+        self.assertEqual(platform.fetch_count, 0, "nothing is fetched")
+        self.assertIsNone(platform.confirmed, "the message stays with the platform")
+        rang.assert_not_called()
+
+    def test_the_recipients_own_mailbox_is_accepted(self):
+        seat = self.box / "builder"
+        with mock.patch.object(run, "_bus_ring"):
+            run.run_once(FakePlatform([update(1, "111", "hi")]), None, "",
+                         self.root, mail_root=seat, recipient="builder")
         self.assertEqual(len(list((seat / "inbox").glob("*.md"))), 1)

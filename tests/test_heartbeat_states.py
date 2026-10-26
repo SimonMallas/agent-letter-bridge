@@ -41,6 +41,15 @@ class TheHeartbeatSaysWhatKindOfAlive(unittest.TestCase):
         loop._write_heartbeat(self.path)
         self.assertEqual(self.read()["state"], "running")
 
+    def test_it_names_the_version_and_interpreter_that_wrote_it(self):
+        """An agent that upgraded in a new venv could not tell which install
+        the running bridge was, because ~/.local/bin/alb was another one."""
+        from alb import cli
+        loop._write_heartbeat(self.path)
+        got = self.read()
+        self.assertEqual(got["version"], cli._version())
+        self.assertEqual(got["python"], sys.executable)
+
     def test_a_starting_bridge_says_so_before_its_first_poll(self):
         """Otherwise the first thing a restarted bridge does is look dead."""
         loop._write_heartbeat(self.path, state="starting")
