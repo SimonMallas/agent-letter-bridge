@@ -169,7 +169,24 @@ def main(argv=None):
                         help="image for --send or --reply-to; path must sit under "
                              "a root listed in <root>/state/attach-roots.json")
     parser.add_argument("--interval", type=float, default=2.0)
+    parser.add_argument("command", nargs="?", choices=["file"],
+                        help="file a standalone root's own letter locally")
+    parser.add_argument("letter_id", nargs="?")
     args = parser.parse_args(argv)
+    if args.command or args.letter_id:
+        if args.command != "file" or not args.letter_id or not args.root:
+            parser.error("usage: alb file <id> --root ROOT [--config PATH]")
+        from alb import filing
+        try:
+            filed = filing.file_letter(args.root, args.letter_id,
+                                       args.config, args.mail_root)
+        except (filing.FilingError, run.ConfigError, OSError,
+                store.UnsafeIdentifier, store.NoSuchLetter,
+                store.MalformedLetter) as exc:
+            print(f"alb: refused: {exc}", file=sys.stderr)
+            return 2
+        print(f"alb: filed {filed}")
+        return 0
 
     if args.send and args.reply_to:
         print("alb: --send and --reply-to cannot be combined", file=sys.stderr)
@@ -312,8 +329,8 @@ def main(argv=None):
         print("action: none")
         return 0
 
-    # Status reads files only: no config, no token, no network. It is the
-    # thing you run when you want to know whether to worry.
+    # Status reads local files only, never the network. The unfiled count
+    # loads the private config to identify the mailbox and its own seat.
     if args.status:
         from alb.doctor import checks as _checks
         from alb.watchdog import health
@@ -350,6 +367,13 @@ def main(argv=None):
                 else "the send path is unproven"))
 
         print(f"ring   : {health.ring_report(state / 'ring-health.json')}")
+        from alb import filing
+        try:
+            print(filing.unfiled(args.root, args.config, args.mail_root))
+        except (filing.FilingError, run.ConfigError, OSError,
+                store.UnsafeIdentifier, store.NoSuchLetter,
+                store.MalformedLetter, UnicodeError):
+            print("unfiled: unknown (mailbox/config unreadable or unsafe)")
         for line in _checks.slack_advisories(pathlib.Path(args.root)):
             print(f"slack  : {line}")
         for line in _checks.discord_advisories(pathlib.Path(args.root)):
