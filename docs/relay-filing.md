@@ -3,12 +3,20 @@
 `alb file <full-letter-id> --root <root> [--config <path>]`
 
 This is local filing, not a reply or acknowledgement to the platform. It moves
-exactly `<root>/inbox/<id>.md` to `<root>/processed/<id>.md`, preserving bytes.
+exactly `<root>/inbox/<id>.md` to `<root>/processed/<id>.md`, without rewriting
+the linked file's bytes.
 It never constructs an extra agent mailbox under the state directory.
 The default config is `<root>/bridge.env`. The root must be inside the current
 HOME; root, config, inbox, source letter and processed directory must be owned
 by the current OS user, owner-only, and not symlinks. This is an OS-user/HOME
 boundary, not isolation between agents sharing the same user and HOME.
+
+The source check and the later hardlink are not one snapshot: the command does
+not bind the validated source inode to the link operation. A same-user process
+can replace the source in that window, and the replacement may be filed instead
+of the checked file. Such concurrent same-user replacement is outside this
+boundary; byte preservation is not a guarantee that the filed inode is the one
+whose envelope was validated.
 
 Only a letter whose `to:` matches `ALB_TO` (default `agent`) can be filed.
 Path-shaped IDs, mismatched envelope IDs and existing destinations are refused.

@@ -182,7 +182,7 @@ def main(argv=None):
                                        args.config, args.mail_root)
         except (filing.FilingError, run.ConfigError, OSError,
                 store.UnsafeIdentifier, store.NoSuchLetter,
-                store.MalformedLetter) as exc:
+                store.MalformedLetter, UnicodeError) as exc:
             print(f"alb: refused: {exc}", file=sys.stderr)
             return 2
         print(f"alb: filed {filed}")

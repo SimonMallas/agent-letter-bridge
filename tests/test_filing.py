@@ -38,6 +38,19 @@ class FilingTests(unittest.TestCase):
         self.assertFalse(p.exists())
         self.assertEqual((self.root / "processed/test-1.md").read_bytes(), data)
 
+    def test_extra_invalid_utf8_file_refuses_cleanly(self):
+        source = self.letter()
+        data = b"---\nid: test-1\nto: builder\n---\n\xff\n"
+        source.write_bytes(data)
+        error = io.StringIO()
+        with contextlib.redirect_stderr(error):
+            result = cli.main(["file", "test-1", "--root", str(self.root)])
+        self.assertEqual(result, 2)
+        self.assertIn("alb: refused:", error.getvalue())
+        self.assertNotIn("Traceback", error.getvalue())
+        self.assertEqual(source.read_bytes(), data)
+        self.assertFalse((self.root / "processed/test-1.md").exists())
+
     def test_cli(self):
         self.letter()
         with contextlib.redirect_stdout(io.StringIO()):
