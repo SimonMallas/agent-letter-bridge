@@ -43,6 +43,31 @@ inbox yields `oldest: none`. Unsafe/unreadable config or malformed letters yield
 `unfiled: unknown`, not a misleading zero. Status reads the private config for
 mailbox/seat identity but does not send, poll, or print its credential.
 
+## Automatic close-out after a proven-sent reply
+
+After a successful `alb --reply-to` (including an explicitly resumed throttled
+reply), the CLI checks the durable receipt history and files the source. The
+latest numbered receipt must record `sent` in both filename and JSON content;
+the outbound letter must name the same source and seat. Ambiguous, dead,
+refused, deferred, missing or malformed receipts do not authorize filing.
+Platform acceptance is not proof that the human read the reply.
+
+This internal close-out also operates inside the configured integrated seat's
+mailbox, inbox to processed. Manual `alb file` still refuses integrated mode:
+`letterbox file` remains the only agent-facing manual filing path there. The
+same owner/private-path, envelope and no-clobber checks apply; no permissions
+are silently changed to make a move succeed. Success prints `alb: filed <id>`;
+the next mailbox scan sees the letter in processed. Already processed sources
+are validated and left alone.
+
+If filing fails after sending, the CLI reports `reply sent; source not
+auto-filed` and retains send success. Never resend to repair a filing problem:
+the outbound claim still prevents duplicate sends. Tidy using the normal manual
+filing path. A crash between receipt persistence and close-out can leave the
+source unfiled; this change does not sweep historical receipts at startup or
+retroactively migrate the backlog. Direct Python send-library calls without
+the CLI do not perform this owner/config-aware close-out.
+
 ## Denied mail
 
 Verified in `src/alb/poller/loop.py`: the allowlist gate precedes media processing,

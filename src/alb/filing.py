@@ -1,5 +1,6 @@
 """Local, owner-only relay filing. No platform calls or message mutation."""
 import datetime as dt
+import json
 import os
 import pathlib
 import stat
@@ -37,8 +38,12 @@ def file_letter(root, letter_id, config_path=None, mail_root=None):
     root, mail, seat = context(root, config_path, mail_root)
     if mail.resolve() != root.resolve():
         raise FilingError("integrated mailbox: use letterbox file <id>")
+    return _move(mail, seat, letter_id)
+
+
+def _move(mail, seat, letter_id):
     store._check_id(letter_id)
-    inbox, processed = root / "inbox", root / "processed"
+    inbox, processed = mail / "inbox", mail / "processed"
     _private(inbox, directory=True)
     source = inbox / (letter_id + ".md")
     _private(source)
@@ -54,6 +59,56 @@ def file_letter(root, letter_id, config_path=None, mail_root=None):
     source.unlink()
     store._fsync_dir(inbox)
     return letter_id
+
+
+def file_sent_reply(root, letter_id, out_id, config_path=None, mail_root=None):
+    """Close out only a reply with a private, durable, latest sent receipt.
+
+    A failure here is a filing failure, never permission to resend the reply.
+    """
+    root, mail, seat = context(root, config_path, mail_root)
+    # Internal receipt-driven close-out also covers the configured integrated
+    # seat mailbox. The manual file_letter entry point still refuses it.
+    _private(mail, directory=True)
+    store._check_id(letter_id)
+    store._check_id(out_id)
+    if out_id != "reply-" + letter_id:
+        raise FilingError("reply does not bind this source")
+    _private(mail / "outbox", directory=True)
+    _private(mail / "outbox" / (out_id + ".md"))
+    outbound = store.resolve(mail / "outbox", out_id)
+    if outbound.meta.get("re") != letter_id or outbound.meta.get("from") != seat:
+        raise FilingError("outbound envelope does not bind this source/seat")
+    receipts = root / "state" / "receipts"
+    for directory in (root / "state", receipts, receipts / out_id):
+        info = directory.lstat()
+        # Receipt directories historically use mkdir's default mode; the
+        # private root above is their access boundary. Do not chmod live state.
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+            raise FilingError("unsafe receipt directory")
+    events = []
+    for path in (receipts / out_id).iterdir():
+        sequence, sep, event = path.name.partition("-")
+        if not sep or not sequence.isdigit() or not event.endswith(".json"):
+            raise FilingError("unrecognised receipt")
+        _private(path)
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict) or payload.get("event") != event[:-5]:
+            raise FilingError("invalid receipt")
+        events.append((int(sequence), payload["event"]))
+    if (not events or len({n for n, _ in events}) != len(events)
+            or max(events)[1] != "sent"):
+        raise FilingError("reply has no current proven-sent receipt")
+    # A previously filed source needs no mutation. Never replace a destination.
+    source = mail / "inbox" / (letter_id + ".md")
+    if not source.exists() and not source.is_symlink():
+        _private(mail / "processed", directory=True)
+        _private(mail / "processed" / source.name)
+        filed = store.resolve(mail / "processed", letter_id)
+        if filed.meta.get("id") != letter_id or filed.meta.get("to") != seat:
+            raise FilingError("processed source does not match this seat/id")
+        return letter_id
+    return _move(mail, seat, letter_id)
 
 
 def unfiled(root, config_path=None, mail_root=None, now=None):
