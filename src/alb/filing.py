@@ -18,7 +18,9 @@ def _private(path, directory=False, shared_read=False):
     if (stat.S_ISLNK(st.st_mode) or st.st_uid != os.getuid()
             or st.st_mode & (0o022 if shared_read else 0o077)
             or not (stat.S_ISDIR(st.st_mode) if directory else stat.S_ISREG(st.st_mode))):
-        raise FilingError("expected an owner-only, non-symlink " + str(path))
+        rule = "owner uid, no symlinks, not shared-writable" if shared_read else "owner-only, no symlinks"
+        kind = "directory" if directory else "regular file"
+        raise FilingError(f"expected {kind} ({rule}): {path}")
 
 
 def context(root, config_path=None, mail_root=None):
@@ -72,7 +74,8 @@ def file_sent_reply(root, letter_id, out_id, config_path=None, mail_root=None):
     shared_read = mail.resolve() != root.resolve()
     _private(mail, directory=True, shared_read=shared_read)
     config = run.load_config(config_path or root / "bridge.env")
-    sender = config.get("ALB_FROM", config.get("ALB_PLATFORM", "telegram") + "-bridge")
+    from alb.outbound.store import reply_recipient
+    sender = reply_recipient(run.platform_of(config))
     store._check_id(letter_id)
     store._check_id(out_id)
     if out_id != "reply-" + letter_id:

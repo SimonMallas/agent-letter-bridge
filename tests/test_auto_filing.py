@@ -115,6 +115,28 @@ class AutoFilingTests(unittest.TestCase):
         filing.file_sent_reply(self.root, self.ident, "reply-" + self.ident)
         self.assertEqual(self.dest.stat().st_mode & 0o777, 0o644)
 
+    def test_custom_inbound_sender_keeps_canonical_reply_route(self):
+        with self.config.open("a") as f:
+            f.write("ALB_FROM=custom-bridge\n")
+        self.source.write_text(self.source.read_text().replace(
+            "from: telegram-bridge\n", "from: custom-bridge\n"))
+        rc, out, err = self.call()
+        self.assertEqual(rc, 0, err)
+        self.assertIn("alb: filed", out)
+        self.assertFalse(self.source.exists())
+        sent = store.resolve(self.root / "outbox", "reply-" + self.ident)
+        self.assertEqual(sent.meta["to"], outbound.reply_recipient("telegram"))
+
+    def test_shared_write_refusal_names_actual_rule(self):
+        directory = self.home / "seat"
+        directory.mkdir(mode=0o755)
+        filing._private(directory, directory=True, shared_read=True)
+        directory.chmod(0o775)
+        with self.assertRaisesRegex(filing.FilingError, "not shared-writable") as caught:
+            filing._private(directory, directory=True, shared_read=True)
+        self.assertNotIn("owner-only", str(caught.exception))
+        self.assertEqual(directory.stat().st_mode & 0o777, 0o775)
+
     def test_outbound_identity_and_recipient_are_bound(self):
         self.call()
         self.dest.rename(self.source)

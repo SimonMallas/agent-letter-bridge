@@ -49,7 +49,10 @@ After a successful `alb --reply-to` (including an explicitly resumed throttled
 reply), the CLI checks the durable receipt history and files the source. The
 latest numbered receipt must record `sent` in both filename and JSON content;
 the outbound letter must name the same source (`re`), seat (`from`), own reply
-ID (`id`) and configured bridge sender identity (`to`). Ambiguous, dead,
+ID (`id`) and canonical platform reply route (`to`, e.g. `telegram-bridge`).
+Producer and validator share that route definition. `ALB_FROM` customizes the
+inbound sender label, not the outbound recipient; existing outbound envelopes
+remain compatible and recipient binding is still enforced. Ambiguous, dead,
 refused, deferred, missing or malformed receipts do not authorize filing.
 Platform acceptance is not proof that the human read the reply.
 

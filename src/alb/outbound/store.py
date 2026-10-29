@@ -190,6 +190,11 @@ def origin_chat_for(state, correspondent, platform="telegram"):
     return chat
 
 
+def reply_recipient(platform):
+    """Canonical outbound route; ALB_FROM labels inbound letters only."""
+    return f"{platform}-bridge"
+
+
 def compose(outbox, state, source_id, origin_chat, sender, body,
             platform="telegram", thread=""):
     """Write the outbound letter; its O_EXCL create is the claim.
@@ -209,7 +214,7 @@ def compose(outbox, state, source_id, origin_chat, sender, body,
 
     key = correspondent_key(state, origin_chat, platform)
     meta = letters.envelope(
-        sender=sender, recipient=f"{platform}-bridge",
+        sender=sender, recipient=reply_recipient(platform),
         extra={"correspondent": key},
     )
     meta["id"] = letter_id
