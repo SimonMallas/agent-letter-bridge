@@ -82,8 +82,9 @@ on refusal, so the agent sees the close-out outcome with the send outcome.
 The next mailbox scan sees a successfully filed letter in processed. Already
 processed sources are validated and left alone.
 
-If filing fails after sending, the CLI reports `reply sent; source not
-auto-filed` and retains send success. Never resend to repair a filing problem:
+If filing fails after sending, the CLI reports
+`alb: sent <reply-id>; source not auto-filed: <reason>` and retains send success.
+Never resend to repair a filing problem:
 the outbound claim still prevents duplicate sends. Tidy using the normal manual
 filing path. A crash between receipt persistence and close-out can leave the
 source unfiled; this change does not sweep historical receipts at startup or
