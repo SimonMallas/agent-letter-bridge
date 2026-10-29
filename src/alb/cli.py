@@ -529,7 +529,6 @@ def main(argv=None):
         except Exception as exc:
             print(f"alb: refused: {type(exc).__name__}: {exc}", file=sys.stderr)
             return 1
-        print(f"alb: sent {rid}")
         from alb import filing
         try:
             filing.file_sent_reply(root, args.reply_to, rid, args.config, mail)
@@ -538,9 +537,9 @@ def main(argv=None):
                 store.MalformedLetter) as exc:
             # The reply is already sent: a tidy failure must never be
             # represented as a failed send or trigger an automatic resend.
-            print(f"alb: reply sent; source not auto-filed: {exc}", file=sys.stderr)
+            print(f"alb: sent {rid}; source not auto-filed: {exc}")
         else:
-            print(f"alb: filed {args.reply_to}")
+            print(f"alb: sent {rid}; alb: filed {args.reply_to}")
         return 0
 
     platform = run.make_poller(config, root)

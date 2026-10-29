@@ -48,17 +48,36 @@ mailbox/seat identity but does not send, poll, or print its credential.
 After a successful `alb --reply-to` (including an explicitly resumed throttled
 reply), the CLI checks the durable receipt history and files the source. The
 latest numbered receipt must record `sent` in both filename and JSON content;
-the outbound letter must name the same source and seat. Ambiguous, dead,
+the outbound letter must name the same source (`re`), seat (`from`), own reply
+ID (`id`) and configured bridge sender identity (`to`). Ambiguous, dead,
 refused, deferred, missing or malformed receipts do not authorize filing.
 Platform acceptance is not proof that the human read the reply.
 
 This internal close-out also operates inside the configured integrated seat's
 mailbox, inbox to processed. Manual `alb file` still refuses integrated mode:
 `letterbox file` remains the only agent-facing manual filing path there. The
-same owner/private-path, envelope and no-clobber checks apply; no permissions
-are silently changed to make a move succeed. Success prints `alb: filed <id>`;
-the next mailbox scan sees the letter in processed. Already processed sources
-are validated and left alone.
+same envelope and no-clobber checks apply. For the configured integrated seat
+only, mailbox/inbox/outbox/processed directories and letters must have our uid,
+be real directories or regular files (no symlinks), and have no group/other
+write bits (`mode & 0022` must be zero). Shared readability is accepted: 0755
+directories and 0644 letters are valid. Standalone mailboxes, bridge root,
+credentials/config, receipt state directories and receipt files remain strict
+owner-only. No existing permissions are changed to make a move succeed; newly
+created receipt directories are 0700. Older nonprivate receipt directories
+cause a visible refusal and require an operator's explicit migration decision.
+
+0755 permits other local accounts to list/traverse where ancestor access also
+permits it; 0644 permits reading contents. These modes are not isolation among
+agents sharing one uid. Paths must have owner-controlled ancestors and no ACL
+grants permitting others to replace them; mode-bit checks do not audit ACLs.
+If another local account is introduced, reconsider the read exposure/0700
+policy. Never make a different user's mailbox writable to pass these checks.
+
+The reply outcome is one stdout line containing `sent <reply-id>; alb: filed
+<source-id>` on success, or `sent <reply-id>; source not auto-filed: <reason>`
+on refusal, so the agent sees the close-out outcome with the send outcome.
+The next mailbox scan sees a successfully filed letter in processed. Already
+processed sources are validated and left alone.
 
 If filing fails after sending, the CLI reports `reply sent; source not
 auto-filed` and retains send success. Never resend to repair a filing problem:

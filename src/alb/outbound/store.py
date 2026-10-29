@@ -239,8 +239,10 @@ def record_event(state, letter_id, event, **fields):
     """One immutable file per transition; history is append-only even when
     the caller stutters - a repeated transition is a new numbered file, never
     a rewrite."""
-    d = pathlib.Path(state) / "receipts" / letter_id
-    d.mkdir(parents=True, exist_ok=True)
+    receipts = pathlib.Path(state) / "receipts"
+    receipts.mkdir(mode=0o700, parents=True, exist_ok=True)
+    d = receipts / letter_id
+    d.mkdir(mode=0o700, exist_ok=True)
     payload = {"event": event, "at": time.time(), **fields}
     path = _event_path(d, event)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)

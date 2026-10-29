@@ -78,7 +78,8 @@ class AutoFilingTests(unittest.TestCase):
         self.dest.write_text("do not overwrite")
         rc, out, err = self.call()
         self.assertEqual(rc, 0)
-        self.assertIn("source not auto-filed", err)
+        self.assertIn("source not auto-filed", out)
+        self.assertEqual(len(out.strip().splitlines()), 1)
         self.assertEqual(self.source.read_bytes(), self.before)
         self.assertEqual(self.dest.read_text(), "do not overwrite")
         # Still no retry: composed reply remains claimed.
@@ -86,9 +87,9 @@ class AutoFilingTests(unittest.TestCase):
 
     def test_integrated_closeout_but_manual_file_refuses(self):
         mail = self.home / "seat"
-        mail.mkdir(mode=0o700)
+        mail.mkdir(mode=0o755)
         for name in ("inbox", "processed", "outbox"):
-            (mail / name).mkdir(mode=0o700)
+            (mail / name).mkdir(mode=0o755)
         self.source.rename(mail / "inbox" / self.source.name)
         self.source = mail / "inbox" / self.source.name
         self.dest = mail / "processed" / self.source.name
@@ -102,6 +103,46 @@ class AutoFilingTests(unittest.TestCase):
         self.assertFalse(self.source.exists())
         self.assertEqual(self.dest.read_bytes(), self.before)
         self.assertEqual(filing.unfiled(self.root), "unfiled: 0 (oldest: none)")
+        self.dest.rename(self.source)
+        self.source.chmod(0o644)
+        for directory in (mail, mail / "inbox", mail / "processed", mail / "outbox"):
+            self.assertEqual(directory.stat().st_mode & 0o777, 0o755)
+            directory.chmod(0o775)
+            with self.assertRaises(filing.FilingError):
+                filing.file_sent_reply(self.root, self.ident, "reply-" + self.ident)
+            self.assertEqual(directory.stat().st_mode & 0o777, 0o775)
+            directory.chmod(0o755)
+        filing.file_sent_reply(self.root, self.ident, "reply-" + self.ident)
+        self.assertEqual(self.dest.stat().st_mode & 0o777, 0o644)
+
+    def test_outbound_identity_and_recipient_are_bound(self):
+        self.call()
+        self.dest.rename(self.source)
+        out_id = "reply-" + self.ident
+        path = self.root / "outbox" / (out_id + ".md")
+        original = path.read_text()
+        for old, new in ((f"id: {out_id}", "id: wrong"),
+                         ("to: telegram-bridge", "to: other-bridge")):
+            self.assertIn(old, original)
+            path.write_text(original.replace(old, new))
+            with self.assertRaises(filing.FilingError):
+                filing.file_sent_reply(self.root, self.ident, out_id)
+            self.assertTrue(self.source.exists())
+        path.write_text(original)
+
+    def test_shared_writable_and_receipt_state_refused(self):
+        self.call()
+        self.dest.rename(self.source)
+        out_id = "reply-" + self.ident
+        for path in (self.root / "state/receipts", self.root / "state/receipts" / out_id):
+            path.chmod(0o755)
+            with self.assertRaises(filing.FilingError):
+                filing.file_sent_reply(self.root, self.ident, out_id)
+            path.chmod(0o700)
+        self.source.chmod(0o666)
+        with self.assertRaises(filing.FilingError):
+            filing.file_sent_reply(self.root, self.ident, out_id)
+        self.assertTrue(self.source.exists())
 
     def test_invalid_receipt_contents_cannot_prove_sent(self):
         self.call()
