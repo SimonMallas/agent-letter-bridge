@@ -65,9 +65,15 @@ be real directories or regular files (no symlinks), and have no group/other
 write bits (`mode & 0022` must be zero). Shared readability is accepted: 0755
 directories and 0644 letters are valid. Standalone mailboxes, bridge root,
 credentials/config, receipt state directories and receipt files remain strict
-owner-only. No existing permissions are changed to make a move succeed; newly
-created receipt directories are 0700. Older nonprivate receipt directories
-cause a visible refusal and require an operator's explicit migration decision.
+owner-only. Newly created receipt directories are 0700. At operational startup
+(including a reply invocation), the bridge migrates only its own
+`<root>/state/receipts` directory from exactly 0755 to 0700 and prints
+`alb: migrated own state/receipts permissions 0755 -> 0700`. Already-0700
+is untouched. Other modes, other owners, symlinks and non-directories refuse
+startup; absent receipts are not created by the migration. No recursive chmod:
+existing child receipt directories/files and mailboxes are never changed by
+this migration. Nonprivate child receipt directories still require an explicit
+operator decision; this narrow migration does not silently repair them.
 
 0755 permits other local accounts to list/traverse where ancestor access also
 permits it; 0644 permits reading contents. These modes are not isolation among

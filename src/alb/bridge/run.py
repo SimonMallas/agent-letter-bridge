@@ -230,9 +230,44 @@ DIR_MODE = 0o700
 FILE_MODE = 0o600
 
 
+def migrate_receipts_permissions(root):
+    """Only our legacy state/receipts directory, exactly 0755 -> 0700.
+
+    Open each component without following symlinks; chmod the checked inode,
+    never a subsequently re-resolved pathname. No recursive migration.
+    """
+    descriptors = []
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        for component in (os.fspath(root), "state", "receipts"):
+            try:
+                fd = os.open(component, flags,
+                             dir_fd=descriptors[-1] if descriptors else None)
+            except FileNotFoundError:
+                return False  # Fresh root/state/receipts: nothing to migrate.
+            descriptors.append(fd)
+            info = os.fstat(fd)
+            if info.st_uid != os.getuid():
+                raise ConfigError("receipt migration refused: directory has another owner")
+        mode = stat.S_IMODE(info.st_mode)
+        if mode == 0o700:
+            return False
+        if mode != 0o755:
+            raise ConfigError("receipt migration refused: receipts mode must be 0700 or legacy 0755")
+        os.fchmod(fd, 0o700)
+        print("alb: migrated own state/receipts permissions 0755 -> 0700")
+        return True
+    except OSError as exc:
+        raise ConfigError("receipt migration refused: unsafe or inaccessible directory") from exc
+    finally:
+        for fd in reversed(descriptors):
+            os.close(fd)
+
+
 def prepare_root(root):
     """Create the state layout with private permissions from the first run."""
     root = pathlib.Path(root)
+    migrate_receipts_permissions(root)
     for path in (root, root / "inbox", root / "processed", root / "outbox", root / "state"):
         path.mkdir(parents=True, exist_ok=True)
         try:

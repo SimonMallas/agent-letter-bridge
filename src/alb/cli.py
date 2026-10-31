@@ -456,7 +456,11 @@ def main(argv=None):
 
     # Private from the first run: 0700 directories, not whatever the umask
     # happens to be.
-    root = run.prepare_root(args.root)
+    try:
+        root = run.prepare_root(args.root)
+    except run.ConfigError as exc:
+        print(f"alb: {exc}", file=sys.stderr)
+        return 2
 
     if args.canary:
         from alb.canary import probe
