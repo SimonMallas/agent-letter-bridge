@@ -258,7 +258,7 @@ def migrate_receipts_permissions(root):
             return False
         if mode != 0o755:
             print(f"alb: skipped state/receipts permission migration (mode {mode:04o}); "
-                  "polling/reply may continue; auto-filing requires 0700")
+                  "polling/reply may continue; auto-filing needs no group or other access")
             return False
         os.fchmod(fd, 0o700)
         print("alb: migrated own state/receipts permissions 0755 -> 0700")

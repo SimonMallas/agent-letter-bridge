@@ -153,6 +153,26 @@ class StartupMigrationTests(AutoFilingTests):
             poll.assert_called_once()
             self.assertEqual(receipts.stat().st_mode & 0o777, mode)
 
+    def test_sticky_private_receipts_notice_matches_filing(self):
+        self.assert_special_private_mode_files(0o1700)
+
+    def test_setgid_private_receipts_notice_matches_filing(self):
+        self.assert_special_private_mode_files(0o2700)
+
+    def assert_special_private_mode_files(self, mode):
+        receipts = self.root / "state/receipts"
+        receipts.mkdir(mode=0o700)
+        receipts.chmod(mode)
+        rc, out, err = self.call()
+        self.assertEqual(rc, 0, err)
+        self.assertIn("skipped state/receipts", out)
+        self.assertIn("auto-filing needs no group or other access", out)
+        self.assertNotIn("requires 0700", out)
+        self.assertIn("alb: filed", out)
+        self.assertTrue(self.dest.exists())
+        self.assertFalse(self.source.exists())
+        self.assertEqual(receipts.stat().st_mode & 0o7777, mode)
+
     def test_aliased_root_reply_and_autofile(self):
         original = self.root
         alias = self.home / "alias"
