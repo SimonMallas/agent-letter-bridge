@@ -73,8 +73,11 @@ is untouched. Other modes on an accessible, current-user-owned real directory
 skip migration with a notice: polling/reply continue, while auto-filing still
 refuses nonprivate receipt state. For example, legacy 0750/0775 directories
 are not upgrade startup blockers and are not silently chmodded. Wrong owners,
-symlinks, non-directories and inaccessible paths still refuse startup; absent
-receipts are not created by the migration. No recursive chmod:
+symlinks beneath the resolved root (at `state` or `state/receipts`),
+non-directories and inaccessible paths still refuse startup, naming the exact
+component in the error. The root itself may be an alias: operational startup
+resolves it once and proceeds with that resolved path. The manual `alb file`
+root restriction is unchanged. Absent receipts are not created by the migration. No recursive chmod:
 existing child receipt directories/files and mailboxes are never changed by
 this migration. Nonprivate child receipt directories still require an explicit
 operator decision; this narrow migration does not silently repair them.

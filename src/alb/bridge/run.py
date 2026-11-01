@@ -236,10 +236,14 @@ def migrate_receipts_permissions(root):
     Open each component without following symlinks; chmod the checked inode,
     never a subsequently re-resolved pathname. No recursive migration.
     """
+    root = pathlib.Path(root)  # prepare_root supplies the resolved startup path.
     descriptors = []
+    checked_path = root
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     try:
         for component in (os.fspath(root), "state", "receipts"):
+            if descriptors:
+                checked_path = checked_path / component
             try:
                 fd = os.open(component, flags,
                              dir_fd=descriptors[-1] if descriptors else None)
@@ -248,7 +252,7 @@ def migrate_receipts_permissions(root):
             descriptors.append(fd)
             info = os.fstat(fd)
             if info.st_uid != os.getuid():
-                raise ConfigError("receipt migration refused: directory has another owner")
+                raise ConfigError(f"receipt migration refused at {checked_path}: directory has another owner")
         mode = stat.S_IMODE(info.st_mode)
         if mode == 0o700:
             return False
@@ -260,7 +264,7 @@ def migrate_receipts_permissions(root):
         print("alb: migrated own state/receipts permissions 0755 -> 0700")
         return True
     except OSError as exc:
-        raise ConfigError("receipt migration refused: unsafe or inaccessible directory") from exc
+        raise ConfigError(f"receipt migration refused at {checked_path}: unsafe or inaccessible directory") from exc
     finally:
         for fd in reversed(descriptors):
             os.close(fd)
@@ -268,7 +272,10 @@ def migrate_receipts_permissions(root):
 
 def prepare_root(root):
     """Create the state layout with private permissions from the first run."""
-    root = pathlib.Path(root)
+    try:
+        root = pathlib.Path(root).resolve()
+    except (OSError, RuntimeError) as exc:
+        raise ConfigError(f"cannot resolve bridge root {root}") from exc
     migrate_receipts_permissions(root)
     for path in (root, root / "inbox", root / "processed", root / "outbox", root / "state"):
         path.mkdir(parents=True, exist_ok=True)

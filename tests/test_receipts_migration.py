@@ -40,6 +40,26 @@ class ReceiptMigrationTests(unittest.TestCase):
         self.assertEqual(letter.read_text(), "unchanged")
         self.assertEqual(mailbox.stat().st_mode & 0o777, 0o755)
 
+    def test_root_alias_resolves_before_migration(self):
+        alias = self.root / "alias"
+        alias.symlink_to(self.root, target_is_directory=True)
+        self.receipts.chmod(0o755)
+        with contextlib.redirect_stdout(io.StringIO()):
+            prepared = run.prepare_root(alias)
+        self.assertEqual(prepared, self.root.resolve())
+        self.assertTrue(alias.is_symlink())
+        self.assertEqual(self.receipts.stat().st_mode & 0o777, 0o700)
+
+    def test_alias_does_not_hide_symlinked_state(self):
+        alias = self.root / "alias"
+        alias.symlink_to(self.root, target_is_directory=True)
+        target = self.root / "actual-state"
+        self.state.rename(target)
+        self.state.symlink_to(target, target_is_directory=True)
+        with self.assertRaises(run.ConfigError) as caught:
+            run.prepare_root(alias)
+        self.assertIn(str(self.state), str(caught.exception))
+
     def test_private_is_untouched(self):
         before = self.receipts.stat()
         with patch("alb.bridge.run.os.fchmod") as chmod:
@@ -68,8 +88,9 @@ class ReceiptMigrationTests(unittest.TestCase):
         self.receipts.rename(target)
         target.chmod(0o755)
         self.receipts.symlink_to(target)
-        with self.assertRaises(run.ConfigError):
+        with self.assertRaises(run.ConfigError) as caught:
             run.migrate_receipts_permissions(self.root)
+        self.assertIn(str(self.receipts), str(caught.exception))
         self.assertEqual(target.stat().st_mode & 0o777, 0o755)
 
     def test_not_directory_refused(self):
@@ -131,6 +152,21 @@ class StartupMigrationTests(AutoFilingTests):
             self.assertEqual(rc, 0)
             poll.assert_called_once()
             self.assertEqual(receipts.stat().st_mode & 0o777, mode)
+
+    def test_aliased_root_reply_and_autofile(self):
+        original = self.root
+        alias = self.home / "alias"
+        alias.symlink_to(original, target_is_directory=True)
+        self.root = alias
+        receipts = original / "state/receipts"
+        receipts.mkdir(mode=0o755)
+        receipts.chmod(0o755)
+        rc, out, err = self.call()
+        self.assertEqual(rc, 0, err)
+        self.assertIn("alb: filed", out)
+        self.assertTrue(self.dest.exists())
+        self.assertFalse(self.source.exists())
+        self.assertEqual(receipts.stat().st_mode & 0o777, 0o700)
 
     def test_startup_symlink_refuses_before_send(self):
         target = self.home / "target"
