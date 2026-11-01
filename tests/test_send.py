@@ -342,11 +342,13 @@ class LetterFirstOutbound(unittest.TestCase):
         self.assertEqual(sent["platform_message_id"], "4242")
 
     def test_the_letter_never_carries_the_message_id(self):
+        # Not hex digits alone: the letter's own id ends in random hex, which
+        # can contain "4242" by chance.
         class MidSender:
-            def send(self, chat_id, text): return "4242"
+            def send(self, chat_id, text): return "message-4242"
         out_id = self._send(MidSender())
         text = next(self.outbox.glob(f"{out_id}.md")).read_text()
-        self.assertNotIn("4242", text)
+        self.assertNotIn("message-4242", text)
 
     def test_second_reply_to_same_source_refuses_even_with_new_text(self):
         self._send(FakeSender())
