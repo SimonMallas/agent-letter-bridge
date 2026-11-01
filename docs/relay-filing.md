@@ -69,8 +69,12 @@ owner-only. Newly created receipt directories are 0700. At operational startup
 (including a reply invocation), the bridge migrates only its own
 `<root>/state/receipts` directory from exactly 0755 to 0700 and prints
 `alb: migrated own state/receipts permissions 0755 -> 0700`. Already-0700
-is untouched. Other modes, other owners, symlinks and non-directories refuse
-startup; absent receipts are not created by the migration. No recursive chmod:
+is untouched. Other modes on an accessible, current-user-owned real directory
+skip migration with a notice: polling/reply continue, while auto-filing still
+refuses nonprivate receipt state. For example, legacy 0750/0775 directories
+are not upgrade startup blockers and are not silently chmodded. Wrong owners,
+symlinks, non-directories and inaccessible paths still refuse startup; absent
+receipts are not created by the migration. No recursive chmod:
 existing child receipt directories/files and mailboxes are never changed by
 this migration. Nonprivate child receipt directories still require an explicit
 operator decision; this narrow migration does not silently repair them.

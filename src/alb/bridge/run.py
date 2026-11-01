@@ -253,7 +253,9 @@ def migrate_receipts_permissions(root):
         if mode == 0o700:
             return False
         if mode != 0o755:
-            raise ConfigError("receipt migration refused: receipts mode must be 0700 or legacy 0755")
+            print(f"alb: skipped state/receipts permission migration (mode {mode:04o}); "
+                  "polling/reply may continue; auto-filing requires 0700")
+            return False
         os.fchmod(fd, 0o700)
         print("alb: migrated own state/receipts permissions 0755 -> 0700")
         return True
