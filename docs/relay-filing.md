@@ -32,16 +32,20 @@ No registry auto-discovery is provided for filing; specify the root explicitly.
 `alb --status --root <root> [--config <path>]` also reports:
 
 ```
-unfiled: 3 (oldest: PT86400S)
+unfiled: 3 in builder's inbox · oldest 2d · 1 with no sent time · next: letterbox check, then letterbox file <id> for each one handled
 ```
 
-The count includes only inbox letters addressed to the configured seat, including
-in integrated mode; processed letters and other seats are excluded. Age uses
-`sent:` with a timezone and is expressed as an ISO-8601 duration in seconds.
-Missing/invalid times yield `oldest: unknown`, never an invented age. An empty
-inbox yields `oldest: none`. Unsafe/unreadable config or malformed letters yield
-`unfiled: unknown`, not a misleading zero. Status reads the private config for
-mailbox/seat identity but does not send, poll, or print its credential.
+The count includes only inbox letters addressed to the configured seat
+(`ALB_TO`), including in integrated mode; processed letters and other seats are
+excluded. Age uses `sent:` with a timezone and reads in minutes, hours or days.
+A letter with a missing or invalid time is counted as `with no sent time`,
+never given an invented age, and the oldest age covers the letters that have
+one. The next step names the filing path for the mode: `letterbox check` and
+`letterbox file` for an integrated mailbox, `alb --list` and `alb file` for a
+standalone root. An empty inbox prints only the count. Unsafe/unreadable config
+or malformed letters yield `unfiled: unknown`, not a misleading zero. Status
+reads the private config for mailbox/seat identity but does not send, poll, or
+print its credential.
 
 ## Automatic close-out after a proven-sent reply
 

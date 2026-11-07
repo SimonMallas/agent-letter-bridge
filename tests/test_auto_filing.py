@@ -102,7 +102,7 @@ class AutoFilingTests(unittest.TestCase):
         self.assertIn("alb: filed", out)
         self.assertFalse(self.source.exists())
         self.assertEqual(self.dest.read_bytes(), self.before)
-        self.assertEqual(filing.unfiled(self.root), "unfiled: 0 (oldest: none)")
+        self.assertEqual(filing.unfiled(self.root), "unfiled: 0 in builder's inbox")
         self.dest.rename(self.source)
         self.source.chmod(0o644)
         for directory in (mail, mail / "inbox", mail / "processed", mail / "outbox"):

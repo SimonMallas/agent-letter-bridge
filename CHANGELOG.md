@@ -9,7 +9,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - After `alb --reply-to` records a reply as sent (a durable `sent` receipt), it files the letter that reply answered. The reply must name the same letter, seat and platform route. If the receipt is ambiguous, refused, deferred or missing, or filing fails, the letter stays unfiled and the CLI says so; the reply is not resent. This works in a standalone root and in the configured Letterbox seat's own mailbox. It doesn't sweep older answered letters. A sent receipt is not proof that a person read the reply.
 - `alb file <id> --root <root>` files a standalone relay letter by hand. In an integrated mailbox it refuses and points to `letterbox file`.
-- `alb --status` reports `unfiled: N (oldest: …)` for the seat's own inbox, and `unknown` rather than a misleading zero when it can't tell.
+- `alb --status` reports the unfiled letters in the seat's own inbox: the count, which inbox, the oldest age in minutes, hours or days, how many have no sent time, and the next step for filing them. It says `unknown` rather than a misleading zero when it can't tell.
 - At startup the Bridge makes its own legacy `state/receipts` folder owner-only (exactly 0755 to 0700) and prints a line when it does. Folders inside it are not changed, so letters answered before the upgrade still need filing by hand. Other modes on a folder you own are left alone with a notice, and sending, polling and replying carry on; auto-filing still refuses receipt state with group or other access. A wrong owner, a symlink at `state` or `state/receipts`, a non-directory or an unreadable path stops startup and names the path. The root itself may be a symlink.
 
 ## [0.5.3] — 2026-10-26

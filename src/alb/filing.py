@@ -115,11 +115,20 @@ def file_sent_reply(root, letter_id, out_id, config_path=None, mail_root=None):
     return _move(mail, seat, letter_id, shared_read=shared_read)
 
 
+def _age(seconds):
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    if seconds < 86400:
+        return f"{seconds // 3600}h"
+    return f"{seconds // 86400}d"
+
+
 def unfiled(root, config_path=None, mail_root=None, now=None):
-    _, mail, seat = context(root, config_path, mail_root)
+    root, mail, seat = context(root, config_path, mail_root)
     inbox = mail / "inbox"
+    scope = f"unfiled: {{}} in {seat}'s inbox"
     if not inbox.exists():
-        return "unfiled: 0 (oldest: none)"
+        return scope.format(0)
     if inbox.is_symlink() or not inbox.is_dir():
         raise FilingError("unsafe inbox")
     now = now or dt.datetime.now(dt.timezone.utc)
@@ -140,5 +149,16 @@ def unfiled(root, config_path=None, mail_root=None, now=None):
             ages.append(max(0, int((now - sent).total_seconds())))
         except ValueError:
             unknown += 1
-    oldest = "unknown" if unknown else (f"PT{max(ages)}S" if ages else "none")
-    return f"unfiled: {count} (oldest: {oldest})"
+    if not count:
+        return scope.format(0)
+    # A letter with no sent time has no age; it is counted, never guessed.
+    parts = [scope.format(count)]
+    if ages:
+        parts.append(f"oldest {_age(max(ages))}")
+    if unknown:
+        parts.append(f"{unknown} with no sent time")
+    if mail.resolve() != root.resolve():
+        parts.append("next: letterbox check, then letterbox file <id> for each one handled")
+    else:
+        parts.append("next: alb --list, then alb file <id> --root <root> for each one handled")
+    return " · ".join(parts)

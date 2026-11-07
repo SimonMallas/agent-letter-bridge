@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 from alb import cli, filing
 
+STANDALONE_NEXT = "next: alb --list, then alb file <id> --root <root> for each one handled"
+INTEGRATED_NEXT = "next: letterbox check, then letterbox file <id> for each one handled"
 
 class FilingTests(unittest.TestCase):
     def setUp(self):
@@ -98,13 +100,31 @@ class FilingTests(unittest.TestCase):
         self.letter()
         self.letter("other-1", to="other")
         now = dt.datetime(2026, 1, 1, 0, 1, tzinfo=dt.timezone.utc)
-        self.assertEqual(filing.unfiled(self.root, now=now), "unfiled: 1 (oldest: PT60S)")
+        self.assertEqual(filing.unfiled(self.root, now=now),
+                         "unfiled: 1 in builder's inbox · oldest 1m · " + STANDALONE_NEXT)
         filing.file_letter(self.root, "test-1")
-        self.assertEqual(filing.unfiled(self.root, now=now), "unfiled: 0 (oldest: none)")
+        self.assertEqual(filing.unfiled(self.root, now=now), "unfiled: 0 in builder's inbox")
+
+    def test_age_reads_in_minutes_hours_and_days(self):
+        self.letter()
+        start = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+        for later, age in ((dt.timedelta(seconds=59), "0m"),
+                           (dt.timedelta(hours=5, minutes=1), "5h"),
+                           (dt.timedelta(days=3, hours=2), "3d")):
+            self.assertIn(f" · oldest {age} · ", filing.unfiled(self.root, now=start + later))
 
     def test_unknown_time_not_zero(self):
         self.letter(sent="")
-        self.assertEqual(filing.unfiled(self.root), "unfiled: 1 (oldest: unknown)")
+        self.assertEqual(filing.unfiled(self.root),
+                         "unfiled: 1 in builder's inbox · 1 with no sent time · " + STANDALONE_NEXT)
+
+    def test_unknown_time_keeps_the_known_age(self):
+        self.letter()
+        self.letter("test-2", sent="")
+        now = dt.datetime(2026, 1, 3, tzinfo=dt.timezone.utc)
+        self.assertEqual(filing.unfiled(self.root, now=now),
+                         "unfiled: 2 in builder's inbox · oldest 2d · 1 with no sent time · "
+                         + STANDALONE_NEXT)
 
     def test_integrated_status_counts_configured_mailbox(self):
         mail = self.home / "mail"
@@ -113,7 +133,9 @@ class FilingTests(unittest.TestCase):
         self.letter().rename(mail / "inbox/test-1.md")
         with self.config.open("a") as f:
             f.write(f"ALB_MAIL_ROOT={mail}\n")
-        self.assertIn("unfiled: 1", filing.unfiled(self.root))
+        now = dt.datetime(2026, 1, 1, 0, 1, tzinfo=dt.timezone.utc)
+        self.assertEqual(filing.unfiled(self.root, now=now),
+                         "unfiled: 1 in builder's inbox · oldest 1m · " + INTEGRATED_NEXT)
         with self.assertRaisesRegex(filing.FilingError, "letterbox file"):
             filing.file_letter(self.root, "test-1")
 
@@ -122,7 +144,7 @@ class FilingTests(unittest.TestCase):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             cli.main(["--status", "--root", str(self.root)])
-        self.assertIn("unfiled: 1 (oldest: PT", output.getvalue())
+        self.assertIn("unfiled: 1 in builder's inbox · oldest ", output.getvalue())
         self.assertNotIn("ALB_TOKEN", output.getvalue())
 
     def test_processed_symlink_refused(self):
