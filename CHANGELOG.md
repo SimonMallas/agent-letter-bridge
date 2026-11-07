@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.0] — 2026-11-07
 
 - After `alb --reply-to` records a reply as sent (a durable `sent` receipt), it files the letter that reply answered. The reply must name the same letter, seat and platform route. If the receipt is ambiguous, refused, deferred or missing, or filing fails, the letter stays unfiled and the CLI says so; the reply is not resent. This works in a standalone root and in the configured Letterbox seat's own mailbox. It doesn't sweep older answered letters. A sent receipt is not proof that a person read the reply.
 - `alb file <id> --root <root>` files a standalone relay letter by hand. In an integrated mailbox it refuses and points to `letterbox file`.
