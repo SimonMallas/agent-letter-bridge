@@ -62,7 +62,7 @@ back for confirmation, or include it in a summary.
 
 **Do not decide this by inspecting the filesystem.** An inbox existing does not
 mean the operator wants letters delivered into it. There is deliberately no
-detector in the tool for the same reason — `alb init` asks this question too,
+detector in the tool for the same reason — `alb --init` asks this question too,
 and you will need their answer to it either way.
 
 ---
@@ -185,7 +185,7 @@ So, for an agent like this:
    bot only when you mean the messenger's own route. If you want one, keep the bridge
    and stop or clearly label the other — the human's call, not the agent's.
 5. On the agent's side the reply verb is the bridge's (`alb --reply-to <letter-id>`),
-   not the letterbox's (`bus reply`). Mixing them acknowledges a human on the internal
+   not the letterbox's (`letterbox reply`). Mixing them acknowledges a human on the internal
    bus, or files a letter without sending anything.
 
 ---
@@ -289,7 +289,7 @@ the wrong prompt or the wrong pane is how a token lands in a transcript.
 
 ## Step 4 — ASK: how the human wants their chat id obtained
 
-`alb init` offers two routes and both are legitimate. Put the choice to them:
+`alb --init` offers two routes and both are legitimate. Put the choice to them:
 
 > "Setup can read your chat id itself — one `getUpdates` call with your token,
 > which consumes nothing — or it can print the command for you to run. Reading
@@ -310,7 +310,7 @@ safe on a bot nothing else is polling.
 
 ---
 
-## Step 5 — Run `alb init`
+## Step 5 — Run `alb --init`
 
 Recommended (agent-driven token handoff):
 
@@ -389,7 +389,7 @@ only thing between a stranger and the agents on this machine.
 > "Do you want a ring typed into a terminal pane when mail arrives? If so, I
 > need the pane id of the agent's terminal."
 
-`alb init` lists them for you. To list them again:
+`alb --init` lists them for you. To list them again:
 
 ```sh
 cmux --id-format uuids tree --all                                       # cmux

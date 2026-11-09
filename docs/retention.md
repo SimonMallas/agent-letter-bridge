@@ -20,7 +20,7 @@ Receipts and claim ledgers under `--root` are the private account of
 what this bridge attempted. They are not the letter. They do not travel
 with mail.
 
-`alb export` (v0.2, lands with the retrieval CLI) is how you take a
+`alb --export` (v0.2, the retrieval flag) is how you take a
 copy **you** can keep. It does not change the live store.
 
 ### Spec names and shipped CLI flags
@@ -65,7 +65,7 @@ Use the flag forms above. There are no positional retrieval subcommands.
 
 ---
 
-## What `alb export` gives you (v0.2 contract)
+## What `alb --export` gives you (v0.2 contract)
 
 Non-destructive. It does not delete, rewrite, or tombstone anything.
 
@@ -126,7 +126,7 @@ is possible if you also throw away `delivered.json`.
 ## 3am
 
 1. Is the letter on disk? Then the crash did not lose it.
-2. Need a copy? `alb export` (or copy the mailbox files). Leave the
+2. Need a copy? `alb --export` (or copy the mailbox files). Leave the
    live store alone unless you mean to.
 3. Want it gone tonight? You can delete files. You cannot make
    Telegram forget, and you cannot make last week's backup forget.

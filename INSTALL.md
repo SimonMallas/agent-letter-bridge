@@ -34,7 +34,7 @@ other agents on this machine?**
 **If in doubt, choose standalone.** It owns everything it touches, so it cannot
 disturb something already running. You can switch later by adding one setting.
 
-`alb init` asks you this in Step 4. It does **not** work it out by looking: an
+`alb --init` asks you this in Step 4. It does **not** work it out by looking: an
 inbox existing on your disk is not you asking for letters to be put in it.
 
 Steps marked **[integrated]** or **[standalone]** apply to one mode only.
@@ -141,7 +141,7 @@ to exist for the next step.
 
 ---
 
-## Step 4 — Run `alb init`
+## Step 4 — Run `alb --init`
 
 ```sh
 alb --init --root ~/.alb
@@ -276,7 +276,7 @@ reports what the helper RETURNED — `delivered` means the call succeeded, not
 that the pane you meant received anything. Watching the intended pane while a
 message arrives is the only thing that shows the second.
 
-`alb init` lists your panes in Step 4. To find them again yourself:
+`alb --init` lists your panes in Step 4. To find them again yourself:
 
 ```sh
 cmux --id-format uuids tree --all                                       # cmux
@@ -308,7 +308,7 @@ instead — that is who the doorbell is addressed to.
 
 ## Step 7 — First run, and the tests that matter
 
-**[integrated]** `alb init` already wrote `ALB_MAIL_ROOT` into your config, so no
+**[integrated]** `alb --init` already wrote `ALB_MAIL_ROOT` into your config, so no
 extra flag is needed. If you ever pass `--mail-root` by hand, give it the
 directory that CONTAINS the inbox (the mailbox), not the inbox itself — the
 bridge creates `inbox/` and `processed/` inside it.
@@ -489,8 +489,10 @@ a conversation is different: it needs a grant, which is operator permission
 to originate, bound to a label rather than typed as a chat id.
 
 ```text
-alb --grant-create --as owner --platform telegram --chat-id <id>
-alb --send --to owner --id <stable-intent> --text "..." --reason "..."
+alb --config ~/.alb/bridge.env --root ~/.alb \
+    --grant-create --as owner --platform telegram --chat-id <id>
+alb --config ~/.alb/bridge.env --root ~/.alb \
+    --send --to owner --id <stable-intent> --text "..." --reason "..."
 ```
 
 The defaults are 30 an hour and 300 a day. A grant without its own numbers

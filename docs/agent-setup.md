@@ -57,7 +57,7 @@ integrated section below.)
 
 ## What NOT to do
 
-**This is not a letterbox and `bus check` will not find it.** If you already have
+**This is not a letterbox and `letterbox check` will not find it.** If you already have
 a doorbell convention for inter-agent mail, that convention does not apply here:
 different store, different ring, different handling. Running your usual sweep
 after an ALB ring will report nothing and you will conclude the bridge is
