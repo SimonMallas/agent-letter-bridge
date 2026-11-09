@@ -7,8 +7,10 @@
 **Message the CLI agents on your machine from your phone, via Telegram, Slack
 or Discord — and every message becomes part of their memory.**
 
-**New in 0.5.0: Slack and Discord join Telegram.** Use one, or run all three
-side by side with one letterbox behind them. Setup:
+**New in 0.7.0: a reply files its own letter.** Once the platform accepts your
+answer, the bridge files the letter you answered — no cleanup step, and the
+unfiled count with ages shows in `--status`. Receipts lock to owner-only at
+startup. Slack and Discord join Telegram since 0.5.0; setup:
 [Telegram](INSTALL.md) · [Slack, step by step](docs/slack-setup.md) ·
 [Discord, step by step](docs/discord-setup.md).
 
@@ -53,8 +55,9 @@ app: text them from anywhere, and they can answer.
 
 The added edge is what arrives. A letter is more than the message. It
 carries its origin — the chat it came from, verified against the allowlist —
-when it was received, its platform addressing and an exactly-once
-guarantee — a record, in
+when it was received, its platform addressing and a duplicate check — each
+message is written to disk before it is acknowledged, and a repeat is dropped.
+A record, in
 plain Markdown, that everything downstream can trust: the agent reading it
 now, the memory system ingesting it later, the search that asks what was
 said last month. Replies are addressed to the letter, which knows its own
@@ -106,7 +109,7 @@ forgets, the inbox still knows.
 Memory systems get the same service. Underneath every one of them —
 vault-based, RAG, graph, whatever comes next — sits the same need: durable,
 addressable, re-readable records of what was actually said. A letter already
-is one. Point any memory system at the inbox and it has its ground truth: no
+is one. Point any memory system at the inbox and it has its record: no
 scraper, no export, no plugin. We are deliberately only the storage half —
 the records are ours, the librarian can be anyone's.
 
@@ -258,8 +261,11 @@ how mail crosses in from outside.
 
 ## Status
 
-**v0.4.1.** Across releases, inbound delivery, ringing and bounded replies
-have been exercised live against real bots on macOS and Linux, cmux and tmux. v0.2 adds
+**v0.7.0.** Inbound delivery, ringing and bounded replies have been exercised
+live against real bots on macOS and Linux, cmux, tmux and Herdr — and 0.7.0 ran
+for a week across a seven-seat agent team before release, auto-filing every
+phone reply. `--status` reports the unfiled count and the oldest letter's age.
+v0.2 adds
 durable outbound letters, correspondent
 identity and threading, and read-only retrieval (`--list`, `--show`, `--search`,
 `--thread`, `--export`); those are covered by the suite and reviewed, but have
@@ -301,7 +307,8 @@ or reload a running bridge.
 
 - **Python 3.11+.** Standard library only, zero third-party runtime
   dependencies.
-- **A terminal multiplexer — cmux or tmux** — selected with `ALB_NOTIFIER`.
+- **A terminal multiplexer — cmux, tmux or Herdr** — selected with `ALB_NOTIFIER`.
+  (Zellij rings through integrated mode: `letterbox ring`.)
   The ring types a line into a pane, so a pane must exist to type into.
   Expect to want this: without it mail lands durably and *nobody is told*.
   The bridge runs regardless, and `alb --status` reports the ring as
