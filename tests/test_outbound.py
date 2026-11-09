@@ -313,6 +313,13 @@ class RestartReconciliation(Base):
                               platform_message_id="1")
         self.assertEqual(outbound.reconcile(self.root / "state"), {})
 
+    def test_a_stray_file_among_the_receipts_is_ignored(self):
+        """Finder leaves .DS_Store wherever it looks; that must not stop startup."""
+        letter_id = self.compose()
+        (self.root / "state" / "receipts" / ".DS_Store").write_bytes(b"\x00")
+        self.assertEqual(outbound.reconcile(self.root / "state"),
+                         {letter_id: "unsent"})
+
 
 class ReconcileRunsAtStartup(Base):
     """Grok's hostile-review flag 1: reconcile existed, was pinned, and was

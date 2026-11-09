@@ -346,6 +346,8 @@ def reconcile(state, outbox=None):
     # below still has to run, so the first-ever letter that crashed before its
     # first receipt is not missed. The loop body is unchanged.
     for d in (receipts.iterdir() if receipts.is_dir() else []):
+        if not d.is_dir():
+            continue  # a stray file (.DS_Store) is not a letter's history
         events = _history(d)
         if any(e in TERMINAL for e in events):
             continue

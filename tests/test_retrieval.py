@@ -77,6 +77,13 @@ class Listing(Base):
         self.assertEqual(rows[0]["direction"], "in")
         self.assertEqual(rows[1]["direction"], "out")
 
+    def test_files_that_are_not_letters_are_skipped(self):
+        [a] = self.poll([update(1, "111", "hello", message_id=1)])
+        (self.root / "inbox" / "my notes.md").write_text("notes", encoding="utf-8")
+        (self.root / "inbox" / "._x.md").write_bytes(b"\x00\x05\x16\x07")
+        (self.root / "inbox" / "latin1.md").write_bytes(b"---\nid: caf\xe9\n---\n")
+        self.assertEqual([r["id"] for r in retrieval.list_letters(self.mail())], [a])
+
     def test_filter_by_correspondent(self):
         self.allow.write_text(json.dumps({"chats": ["111", "222"]}))
         [a] = self.poll([update(1, "111", "one", message_id=1)])
