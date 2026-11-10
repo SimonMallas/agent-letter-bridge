@@ -200,7 +200,10 @@ class PollerIsStructurallyIncapable(unittest.TestCase):
              "processed", "sender", "recipient",
              # state: a directory path for private bookkeeping (threads,
              # correspondents, message index) - not a capability either.
-             "state"},
+             "state",
+             # into: the list the published ids are added to, so the caller
+             # can still ring what landed if a later item raises. Data only.
+             "into"},
             "the poller's signature changed - if it now receives a transport, "
             "surface or credential, ringing became constructible inside it",
         )

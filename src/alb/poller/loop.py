@@ -196,12 +196,15 @@ def _inbound_text_and_media(platform, state, item):
 
 def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
               processed=None, sender="telegram-bridge", recipient="agent",
-              state=None):
+              state=None, into=None):
     """Fetch pending updates and durably record the permitted ones.
 
     Returns the ids of letters published, which may be fewer than the updates
     fetched: a denied sender produces silence, and a redelivered update
     produces nothing.
+
+    `into`, when given, is the Cycle the ids are added to as each letter lands,
+    so a caller still holds the letters already on disk if a later item raises.
     """
     # Letters travel: an inbox is swept. The durable dedup lookup must cover
     # everywhere they land, or a late redelivery republishes a letter that was
@@ -215,7 +218,7 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
     # Discord set name, and that name is what the index and correspondent use.
     name = getattr(platform, "name", "telegram")
 
-    result = Cycle()
+    result = into if into is not None else Cycle()
     for item in platform.fetch(offset=None):
         result.fetched += 1
         chat_id = item.get("chat_id")

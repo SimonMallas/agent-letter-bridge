@@ -328,6 +328,30 @@ class OneCycle(unittest.TestCase):
         self.assertEqual(len(transport.rung), 1)
         self.assertTrue((self.root / "state" / "health.json").exists())
 
+    def test_a_failure_later_in_the_batch_still_rings_the_letters_before_it(self):
+        """A text then a photo arrive together and the photo host fails. The
+        text is already on disk; the next cycle dedupes it to published=[],
+        so a ring skipped now is never made. Ring what landed, then fail."""
+        class PhotoFails(FakePlatform):
+            def download_photo(self, file_id):
+                raise TransientFailure("network: HTTP 502")
+
+        platform = PhotoFails([
+            {"update_id": 1, "chat_id": "111", "text": "look at this"},
+            {"update_id": 2, "chat_id": "111", "media_kind": "photo",
+             "photo_file_id": "abc"}])
+        transport = FakeTransport()
+        with self.assertRaises(TransientFailure):
+            self._cycle(platform, transport)
+        self.assertEqual(len(list((self.root / "inbox").glob("*.md"))), 1)
+        self.assertEqual(len(transport.rung), 1, "the landed letter never rang")
+        record = json.loads((self.root / "state" / "ring-health.json").read_text())
+        self.assertEqual(record["state"], "ok")
+        # The retry finds the text already delivered: no second ring for it.
+        with self.assertRaises(TransientFailure):
+            self._cycle(platform, transport)
+        self.assertEqual(len(transport.rung), 1)
+
     def test_a_quiet_cycle_still_confirms_and_heartbeats(self):
         platform = FakePlatform([])
         self._cycle(platform, FakeTransport())

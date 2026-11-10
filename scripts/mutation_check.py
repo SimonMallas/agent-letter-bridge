@@ -1343,11 +1343,11 @@ EXTRA = {
         "                raise\n"),
     "slack letter before ack": (
         BRIDGE, "tests.test_slack_poller",
-        "    published = loop.poll_once(\n",
+        "    published = loop.Cycle()\n",
         "    confirm = getattr(platform, \"confirm\", None)\n"
         "    if confirm is not None:\n"
         "        confirm()\n"
-        "    published = loop.poll_once(\n"),
+        "    published = loop.Cycle()\n"),
     "slack bookkeeping is dropped after confirm": (
         SLACK, "tests.test_slack_inbound",
         "        for update_id in acked:\n"

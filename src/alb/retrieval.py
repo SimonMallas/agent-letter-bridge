@@ -10,6 +10,7 @@ import tarfile
 
 from alb.letter import store
 from alb.letter.store import NoSuchLetter, MalformedLetter  # re-exported
+from alb.letter.store import UnsafeIdentifier
 
 
 def _rows(mail_dirs):
@@ -22,7 +23,7 @@ def _rows(mail_dirs):
         for path in d.glob("*.md"):
             try:
                 stored = store.resolve(d, path.stem)
-            except (NoSuchLetter, MalformedLetter):
+            except (NoSuchLetter, MalformedLetter, UnsafeIdentifier, UnicodeError):
                 # One bad file must not take the archive down with it - the
                 # same lesson the letterbox check learned this week. resolve
                 # already fail-closes per file; the walk skips and continues.
