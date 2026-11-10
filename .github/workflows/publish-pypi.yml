@@ -13,6 +13,8 @@ jobs:
   build:
     if: github.repository == 'SimonMallas/agent-letter-bridge' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      SOURCE_DATE_EPOCH: '1794337353'
     timeout-minutes: 10
     permissions:
       contents: read
