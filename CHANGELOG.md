@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.7.1] — unreleased
 
 - A letter that lands before a later item in the same batch fails (for example a photo host returning an error) now rings. Before, the cycle stopped before its ring, and the next cycle saw the letter as already delivered, so it never rang.
 - `--list`, `--show`, `--thread` and `--search` skip a `.md` file in the mailbox that is not a letter (a name with a space, an AppleDouble file, or bytes that are not UTF-8) instead of crashing.
