@@ -463,47 +463,22 @@ def run_once(platform, transport, surface, root,
     integrated = mail_root is not None and pathlib.Path(mail_root) != root
     mail = prepare_mail_root(mail_root, recipient) if integrated else root
 
-    published = loop.poll_once(
-        platform,
-        mail / "inbox",
-        # Under state/, with the other ledgers. It sat at the root while the
-        # operations guidance told operators to preserve "the state ledgers" on
-        # a machine move - so the one file that prevents republishing every
-        # letter was the one the instruction missed.
-        root / "state" / "delivered.json",
-        root / "allowlist.json",
-        # NOT here. The heartbeat is what a supervisor reads as "this process
-        # is working", and a poll is not a completed cycle: consumption is only
-        # transmitted afterwards. Writing it here meant a confirm failure left
-        # a fresh heartbeat behind, so a bridge that had consumed nothing
-        # looked healthy. The cycle claims liveness, below, once it is done.
-        health_path=None,
-        processed=mail / "processed",
-        sender=sender,
-        recipient=recipient,
-    )
+    published = loop.Cycle()
+    try:
+        _poll(platform, mail, root, sender, recipient, published)
+    except Exception:
+        # A later item failed (a photo host returning 502, a full disk). The
+        # letters before it are already on disk, and the next cycle dedupes
+        # them to published=[], so a ring skipped now is never made.
+        try:
+            _ring_new(published, transport, surface, root, mail, integrated,
+                      recipient, bus_binary)
+        except Exception:  # noqa: BLE001 - the poll failure is the one to report
+            pass
+        raise
 
-    # Newly durable mail gets its one bounded notify now, before confirm.
-    # Confirm can still fail the network after the letter is on disk; waiting
-    # for it left that letter silent forever (dedupe makes the next cycle
-    # published=[]). Replay of the same ids is not a new batch, so it does
-    # not ring again. Empty/denied batches still skip notify.
-    if published:
-        if not surface and not integrated:
-            _record_ring(root, "disabled",
-                         "no ALB_SURFACE configured; mail lands, nothing rings")
-        else:
-            try:
-                if integrated:
-                    _bus_ring(recipient, "info", published[-1], binary=bus_binary)
-                else:
-                    ring.notify(transport, surface, mail / "inbox", published[-1])
-            except Exception as exc:
-                _record_ring(root, "failing", _ring_failure_reason(exc))
-            else:
-                # What the helper can know: the doorbell was typed into the agent's
-                # pane. Not that the agent's app submitted it, or that anyone read it.
-                _record_ring(root, "ok", "typed into the agent's pane")
+    _ring_new(published, transport, surface, root, mail, integrated,
+              recipient, bus_binary)
 
     # Tell the platform only now: every letter in this batch is durably on
     # disk, so it is safe for the platform to forget them. Acking internally
@@ -525,3 +500,51 @@ def run_once(platform, transport, surface, root,
         )
 
     return published
+
+
+def _poll(platform, mail, root, sender, recipient, published):
+    loop.poll_once(
+        platform,
+        mail / "inbox",
+        # Under state/, with the other ledgers. It sat at the root while the
+        # operations guidance told operators to preserve "the state ledgers" on
+        # a machine move - so the one file that prevents republishing every
+        # letter was the one the instruction missed.
+        root / "state" / "delivered.json",
+        root / "allowlist.json",
+        # NOT here. The heartbeat is what a supervisor reads as "this process
+        # is working", and a poll is not a completed cycle: consumption is only
+        # transmitted afterwards. Writing it here meant a confirm failure left
+        # a fresh heartbeat behind, so a bridge that had consumed nothing
+        # looked healthy. The cycle claims liveness, below, once it is done.
+        health_path=None,
+        processed=mail / "processed",
+        sender=sender,
+        recipient=recipient,
+        into=published,
+    )
+
+
+def _ring_new(published, transport, surface, root, mail, integrated,
+              recipient, bus_binary):
+    # Newly durable mail gets its one bounded notify now, before confirm.
+    # Confirm can still fail the network after the letter is on disk; waiting
+    # for it left that letter silent forever (dedupe makes the next cycle
+    # published=[]). Replay of the same ids is not a new batch, so it does
+    # not ring again. Empty/denied batches still skip notify.
+    if published:
+        if not surface and not integrated:
+            _record_ring(root, "disabled",
+                         "no ALB_SURFACE configured; mail lands, nothing rings")
+        else:
+            try:
+                if integrated:
+                    _bus_ring(recipient, "info", published[-1], binary=bus_binary)
+                else:
+                    ring.notify(transport, surface, mail / "inbox", published[-1])
+            except Exception as exc:
+                _record_ring(root, "failing", _ring_failure_reason(exc))
+            else:
+                # What the helper can know: the doorbell was typed into the agent's
+                # pane. Not that the agent's app submitted it, or that anyone read it.
+                _record_ring(root, "ok", "typed into the agent's pane")
