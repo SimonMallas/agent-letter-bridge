@@ -61,6 +61,15 @@ class SharedMailbox(unittest.TestCase):
         self.assertEqual(self.poll("telegram", "42"), [])
         self.assertEqual(len(self.letters()), 1)
 
+    def test_normal_rollback_ledger_still_suppresses_candidate_update(self):
+        self.assertEqual(len(self.poll("telegram", "42")), 1)
+        ledger = self.root / "telegram" / "state" / "delivered.json"
+        # 0.7.1 knows only raw update ids. The candidate records that compatible
+        # key in the same private platform-root ledger alongside its new key.
+        self.assertIsNone(store.publish_once(self.mail / "inbox", ledger, "42", "again", {},
+                                             searched=[self.mail / "inbox", self.mail / "processed"]))
+        self.assertEqual(len(self.letters()), 1)
+
     def test_cross_platform_collision_after_filing_still_publishes(self):
         self.assertEqual(len(self.poll("telegram", "42")), 1)
         for path in (self.mail / "inbox").glob("*.md"):
@@ -79,12 +88,23 @@ class SharedMailbox(unittest.TestCase):
         self.assertEqual(self.poll("telegram", "42"), [])
         self.assertEqual(len(self.letters()), 1)
 
-    def test_unqualified_legacy_collision_refuses_without_publishing(self):
+    def test_unqualified_legacy_collision_publishes_qualified_update(self):
         store.publish_once(self.mail / "inbox", self.root / "old-ledger.json", "42", "old", {
             "from": "unknown-bridge", "to": "agent"}, searched=[self.mail / "inbox"])
-        with self.assertRaises(store.AmbiguousUpdate):
-            self.poll("discord", "42")
-        self.assertEqual(len(self.letters()), 1)
+        self.assertEqual(len(self.poll("discord", "42")), 1)
+        self.assertEqual(len(self.letters()), 2)
+
+    def test_ambiguous_legacy_does_not_hold_later_batch_messages(self):
+        store.publish_once(self.mail / "inbox", self.root / "old-ledger.json", "1", "old", {
+            "from": "unknown-bridge", "to": "agent"}, searched=[self.mail / "inbox"])
+        state = self.root / "discord" / "state"
+        state.mkdir(parents=True, exist_ok=True)
+        updates = [update("1", message="redelivery"), update("2", message="new")]
+        result = loop.poll_once(Platform("discord", updates), self.mail / "inbox",
+                                state / "delivered.json", self.allow,
+                                processed=self.mail / "processed", state=state)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(len(self.letters()), 3)
 
 
 if __name__ == "__main__":

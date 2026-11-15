@@ -135,16 +135,13 @@ def _legacy_platform(fields):
     return None
 
 
-class AmbiguousUpdate(Exception):
-    """A legacy source id cannot be assigned safely to one platform."""
-
-
 def find_by_update(update_id, searched, platform=None):
     """Return the letter for one platform update, or None.
 
     New letters verify source_platform plus source_id. Legacy raw-token letters
-    are accepted only where their envelope proves the same platform; an
-    unqualified legacy match refuses rather than silently crossing platforms.
+    are accepted only where their envelope proves the same platform. An
+    unqualified legacy candidate does not suppress a qualified update: the
+    safer result is a visible duplicate rather than withholding new mail.
     """
     raw = str(update_id)
     keys = [dedup_key(platform, raw)] if platform else [raw]
@@ -170,8 +167,10 @@ def find_by_update(update_id, searched, platform=None):
                 legacy = _legacy_platform(fields)
                 if legacy == platform:
                     return path
-                if legacy is None:
-                    raise AmbiguousUpdate(f"legacy source id {raw} has no platform evidence")
+                # No platform evidence: it might belong to this platform or
+                # another one. Do not silently match it; publishing a new,
+                # qualified record is safer than holding the person's update.
+                continue
     return None
 
 
@@ -278,8 +277,10 @@ def _load_delivered(ledger):
     return data if isinstance(data, list) else []
 
 
-def _record_delivered(ledger, delivered, update_id, cap):
-    delivered.append(update_id)
+def _record_delivered(ledger, delivered, update_ids, cap):
+    if isinstance(update_ids, str):
+        update_ids = [update_ids]
+    delivered.extend(update_ids)
     tmp = pathlib.Path(f"{ledger}.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -301,6 +302,7 @@ def publish_once(inbox, ledger, update_id, body, meta, cap=1000, searched=None, 
     """
     raw = str(update_id)
     key = dedup_key(platform, raw)
+    ledger_keys = [key, raw] if platform else [key]
     delivered = _load_delivered(ledger)
     # A pre-qualification ledger belongs to this bridge root, so retaining its
     # raw entry avoids republishing a single-platform seat on upgrade.
@@ -312,7 +314,7 @@ def publish_once(inbox, ledger, update_id, body, meta, cap=1000, searched=None, 
     # never learned about, and a ledger-only check would publish a second one.
     searched = list(searched) if searched else [inbox]
     if find_by_update(raw, searched, platform=platform) is not None:
-        _record_delivered(ledger, delivered, key, cap)
+        _record_delivered(ledger, delivered, ledger_keys, cap)
         return None
 
     # Preserve the platform's source id as provenance while qualifying the
@@ -323,5 +325,7 @@ def publish_once(inbox, ledger, update_id, body, meta, cap=1000, searched=None, 
         meta["source_platform"] = platform
 
     letter_id = publish(inbox, body, meta, update_id=key)
-    _record_delivered(ledger, delivered, key, cap)
+    # Keep the raw key beside the qualified key in this platform's private
+    # ledger so a normal rollback to an older Bridge will not republish it.
+    _record_delivered(ledger, delivered, ledger_keys, cap)
     return letter_id

@@ -1587,8 +1587,10 @@ MUTATIONS = {
         '        dest.write_text(_serialise(meta, body), encoding="utf-8")'),
     "ledger recorded AFTER the letter": (
         "    letter_id = publish(inbox, body, meta, update_id=key)\n"
-        "    _record_delivered(ledger, delivered, key, cap)",
-        "    _record_delivered(ledger, delivered, key, cap)\n"
+        "    # Keep the raw key beside the qualified key in this platform's private\n"
+        "    # ledger so a normal rollback to an older Bridge will not republish it.\n"
+        "    _record_delivered(ledger, delivered, ledger_keys, cap)",
+        "    _record_delivered(ledger, delivered, ledger_keys, cap)\n"
         "    letter_id = publish(inbox, body, meta, update_id=key)"),
     "durable update lookup closes the crash window": (
         "    if find_by_update(raw, searched, platform=platform) is not None:", "    if False:"),

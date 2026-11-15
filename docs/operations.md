@@ -146,7 +146,15 @@ platform-qualified, so equal raw platform IDs do not suppress one another. Do
 not run two consumers for one bot/app or one root: the platform may deliver the
 same update to both, and the per-root lock cannot coordinate another root.
 Putting a lock file in the shared mailbox would be the contamination this
-design exists to avoid.
+design exists to avoid. A legacy letter without platform evidence never
+suppresses a qualified update; it may leave a visible duplicate rather than
+withhold a new message. The qualified build records its platform root's raw
+update key too, so a normal rollback to an older Bridge remains deduplicated
+as long as that private `state/delivered.json` is kept. Do not downgrade after
+losing or replacing that state: an older Bridge cannot verify a qualified
+filename token and a platform redelivery can duplicate. Platform evidence in a
+letter is provenance, not authentication; do not treat an editable mailbox
+field as proof of who sent a platform update.
 
 `ALB_SURFACE` is not needed in integrated mode: the letterbox helper resolves
 the recipient's registered pane itself. `ALB_TO` must be the agent's exact
