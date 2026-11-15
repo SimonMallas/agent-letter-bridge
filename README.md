@@ -12,7 +12,8 @@ answer, the bridge files the letter you answered — no cleanup step, and the
 unfiled count with ages shows in `--status`. Receipts lock to owner-only at
 startup. Slack and Discord join Telegram since 0.5.0; setup:
 [Telegram](INSTALL.md) · [Slack, step by step](docs/slack-setup.md) ·
-[Discord, step by step](docs/discord-setup.md).
+[Discord, step by step](docs/discord-setup.md). New to it? Read the plain
+[Using Agent Letter Bridge guide](docs/using-it.md) first.
 
 Agent Letter Bridge connects a chat app to AI agents on your own machine. An
 incoming message becomes a durable file on disk **before** it is acknowledged and
