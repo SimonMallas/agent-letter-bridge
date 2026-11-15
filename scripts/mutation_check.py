@@ -1586,18 +1586,20 @@ MUTATIONS = {
         "        os.link(temp, dest)",
         '        dest.write_text(_serialise(meta, body), encoding="utf-8")'),
     "ledger recorded AFTER the letter": (
-        "    letter_id = publish(inbox, body, meta, update_id=update_id)\n"
-        "    _record_delivered(ledger, delivered, update_id, cap)",
-        "    _record_delivered(ledger, delivered, update_id, cap)\n"
-        "    letter_id = publish(inbox, body, meta, update_id=update_id)"),
+        "    letter_id = publish(inbox, body, meta, update_id=key)\n"
+        "    _record_delivered(ledger, delivered, key, cap)",
+        "    _record_delivered(ledger, delivered, key, cap)\n"
+        "    letter_id = publish(inbox, body, meta, update_id=key)"),
     "durable update lookup closes the crash window": (
-        "    if find_by_update(update_id, searched) is not None:", "    if False:"),
+        "    if find_by_update(raw, searched, platform=platform) is not None:", "    if False:"),
     "token match is VERIFIED, never trusted": (
-        '            if str(found.meta.get("source_id", "")) == str(update_id):\n'
-        "                return path",
-        "            return path"),
+        '                if str(fields.get("source_id", "")) != raw:\n'
+        "                    continue",
+        "                if False:\n                    continue"),
     "the letter records its own update id": (
-        '    meta["source_id"] = update_id', "    pass"),
+        '    meta["source_id"] = raw', "    pass"),
+    "the letter records its source platform": (
+        "        meta[\"source_platform\"] = platform", "        pass"),
 }
 
 

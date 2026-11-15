@@ -177,6 +177,13 @@ class DeliveredIdsLedger(unittest.TestCase):
         store.publish_once(self.inbox, self.ledger, "update-2", "two", {})
         self.assertEqual(len(list(self.inbox.glob("*.md"))), 2)
 
+    def test_platform_qualified_letter_records_platform_and_raw_source_id(self):
+        ident = store.publish_once(self.inbox, self.ledger, "42", "one", {},
+                                   platform="telegram")
+        stored = store.resolve(self.inbox, ident)
+        self.assertEqual((stored.meta["source_platform"], stored.meta["source_id"]),
+                         ("telegram", "42"))
+
     def test_a_crash_between_letter_and_ledger_does_not_duplicate(self):
         """THE CRASH WINDOW. The letter lands, then the process dies before the
         ledger records it. On redelivery the ledger is silent, so a ledger-only

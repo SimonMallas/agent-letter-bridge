@@ -277,6 +277,7 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
                     extra=extra,
                 ),
                 searched=searched,
+                platform=name,
             )
             if letter_id is not None:
                 result.append(letter_id)
@@ -301,7 +302,7 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
                 # allowlist, and an operator sent to the allowlist to explain a
                 # number the allowlist did not cause will widen it for nothing.
                 result.duplicate += 1
-                found = store.find_by_update(str(item["update_id"]), searched)
+                found = store.find_by_update(str(item["update_id"]), searched, platform=name)
                 if found is not None:
                     try:
                         stored = store.resolve(found.parent, found.stem)

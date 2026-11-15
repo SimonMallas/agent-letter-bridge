@@ -139,10 +139,14 @@ canary and dead letters. The mailbox receives **letters and nothing else** — n
 state directory, and its own permissions are left exactly as found, because it
 holds files belonging to something that is not this bridge.
 
-**One running bridge per mailbox.** The lock is per `--root`, so two bridges with
-different state directories pointed at one mailbox would both write to it. That
-is an operational rule, not something the lock can enforce — putting a lock file
-in a shared mailbox would be the contamination this design exists to avoid.
+**One running consumer per platform bot/app/root.** A Telegram, Slack and
+Discord bridge may use separate `--root` state directories and publish into one
+agent mailbox through the same `--mail-root`. Their stored update identities are
+platform-qualified, so equal raw platform IDs do not suppress one another. Do
+not run two consumers for one bot/app or one root: the platform may deliver the
+same update to both, and the per-root lock cannot coordinate another root.
+Putting a lock file in the shared mailbox would be the contamination this
+design exists to avoid.
 
 `ALB_SURFACE` is not needed in integrated mode: the letterbox helper resolves
 the recipient's registered pane itself. `ALB_TO` must be the agent's exact

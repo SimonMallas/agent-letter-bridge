@@ -114,41 +114,64 @@ def _serialise(meta, body):
     return "\n".join(lines) + "\n"
 
 
-def update_token(update_id):
-    """Stable, filename-safe token for a platform update id.
+def dedup_key(platform, update_id):
+    """Private identity for an update: platform plus opaque source id."""
+    return f"{platform}\0{update_id}" if platform else str(update_id)
 
-    Embedding this in the letter's filename makes "has this update already been
-    published?" answerable from the letters themselves, cheaply and exactly -
-    the ledger is a fast path, not the only evidence.
-    """
+
+def update_token(update_id):
+    """Stable, filename-safe token for a private dedup identity."""
     return hashlib.sha256(str(update_id).encode("utf-8")).hexdigest()[:12]
 
 
-def find_by_update(update_id, searched):
-    """Return the letter published for this exact update, or None.
+def _legacy_platform(fields):
+    """Platform evidence for records written before source_platform existed."""
+    if fields.get("telegram_update_id"):
+        return "telegram"
+    if fields.get("slack_team") or fields.get("slack_channel"):
+        return "slack"
+    if fields.get("discord_channel") or fields.get("discord_guild"):
+        return "discord"
+    return None
 
-    The filename token is a TRUNCATED digest, so it is an INDEX, not an
-    identity: two distinct updates can collide in its 48 bits. A collision that
-    suppressed publication would silently LOSE a message - strictly worse than
-    the duplicate this lookup exists to prevent. So the token narrows the
-    search cheaply, and the candidate is then VERIFIED against the update id
-    the letter itself recorded. Never believe the index alone.
 
-    Searched directories must include anywhere letters travel - an inbox that
-    is swept to `processed` still counts as published, or every swept letter
-    could be republished on a late redelivery.
+class AmbiguousUpdate(Exception):
+    """A legacy source id cannot be assigned safely to one platform."""
+
+
+def find_by_update(update_id, searched, platform=None):
+    """Return the letter for one platform update, or None.
+
+    New letters verify source_platform plus source_id. Legacy raw-token letters
+    are accepted only where their envelope proves the same platform; an
+    unqualified legacy match refuses rather than silently crossing platforms.
     """
-    pattern = f"*-u{update_token(update_id)}.md"
+    raw = str(update_id)
+    keys = [dedup_key(platform, raw)] if platform else [raw]
+    if platform:
+        keys.append(raw)  # legacy filename token, verified below
     for directory in searched:
-        for path in sorted(pathlib.Path(directory).glob(pattern)):
-            try:
-                found = resolve(path.parent, path.name[:-3])
-            except (MalformedLetter, NoSuchLetter, UnsafeIdentifier, OSError):
-                # An unreadable candidate proves nothing either way. Keep
-                # looking rather than assuming a match.
-                continue
-            if str(found.meta.get("source_id", "")) == str(update_id):
-                return path
+        for key in keys:
+            for path in sorted(pathlib.Path(directory).glob(f"*-u{update_token(key)}.md")):
+                try:
+                    found = resolve(path.parent, path.name[:-3])
+                except (MalformedLetter, NoSuchLetter, UnsafeIdentifier, OSError, UnicodeError):
+                    continue
+                fields = found.meta
+                if str(fields.get("source_id", "")) != raw:
+                    continue
+                recorded = fields.get("source_platform", "")
+                if recorded:
+                    if platform is None or recorded == platform:
+                        return path
+                    continue
+                if platform is None:
+                    return path
+                legacy = _legacy_platform(fields)
+                if legacy == platform:
+                    return path
+                if legacy is None:
+                    raise AmbiguousUpdate(f"legacy source id {raw} has no platform evidence")
     return None
 
 
@@ -264,7 +287,7 @@ def _record_delivered(ledger, delivered, update_id, cap):
     os.replace(tmp, ledger)
 
 
-def publish_once(inbox, ledger, update_id, body, meta, cap=1000, searched=None):
+def publish_once(inbox, ledger, update_id, body, meta, cap=1000, searched=None, platform=None):
     """Publish unless this platform update has already been delivered.
 
     ORDER IS THE INVARIANT, and it is not arbitrary:
@@ -276,32 +299,29 @@ def publish_once(inbox, ledger, update_id, body, meta, cap=1000, searched=None):
     platform's redelivery would be silently skipped and the message lost. This
     ordering fails toward duplicate-with-evidence instead. Do not "simplify" it.
     """
+    raw = str(update_id)
+    key = dedup_key(platform, raw)
     delivered = _load_delivered(ledger)
-    if update_id in delivered:
+    # A pre-qualification ledger belongs to this bridge root, so retaining its
+    # raw entry avoids republishing a single-platform seat on upgrade.
+    if key in delivered or (platform and raw in delivered):
         return None
 
     # The ledger is a FAST PATH, not the only evidence. A crash between the
     # hardlink and the ledger write leaves a letter on disk that the ledger
     # never learned about, and a ledger-only check would publish a second one.
-    # The letters themselves outlive that window, so consult them too.
     searched = list(searched) if searched else [inbox]
-    if find_by_update(update_id, searched) is not None:
-        _record_delivered(ledger, delivered, update_id, cap)
+    if find_by_update(raw, searched, platform=platform) is not None:
+        _record_delivered(ledger, delivered, key, cap)
         return None
 
-    # The letter must RECORD the identity the lookup verifies against. Relying
-    # on the caller to include it would make the dedup silently depend on a
-    # convention nothing enforces - and a missing field reads as "not a match",
-    # which republishes.
+    # Preserve the platform's source id as provenance while qualifying the
+    # store's own ledger, filename token and cross-mailbox lookup identity.
     meta = dict(meta or {})
-    # The store's OWN dedup identity, deliberately transport-neutral and
-    # deliberately not named after any platform. A Telegram letter also carries
-    # telegram_update_id; the values coincide today and the meanings do not -
-    # one is "what this store deduplicates on", the other is "what the platform
-    # called it". Reusing the platform's field would make the store know about
-    # Telegram.
-    meta["source_id"] = update_id
+    meta["source_id"] = raw
+    if platform:
+        meta["source_platform"] = platform
 
-    letter_id = publish(inbox, body, meta, update_id=update_id)
-    _record_delivered(ledger, delivered, update_id, cap)
+    letter_id = publish(inbox, body, meta, update_id=key)
+    _record_delivered(ledger, delivered, key, cap)
     return letter_id
