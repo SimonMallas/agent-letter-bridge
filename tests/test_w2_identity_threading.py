@@ -1,10 +1,9 @@
-"""W2: identity and threading, per the approved spec.
+"""W2: exact identity and real-link threading.
 
-Inbound letters gain telegram_message_id and a stable correspondent key;
-a private exact-match index maps (platform, origin, message id) -> letter id
-in BOTH directions; threads are one-per-correspondent, cut only by /new at
-position zero; platform reply-to links via the index without moving the
-current-thread pointer.
+Inbound letters gain telegram_message_id and a stable correspondent key; a
+private exact-match index maps platform references to stored letters in both
+directions. Ordinary inbound messages root themselves; only a resolved
+platform reply creates a local thread link.
 """
 import json
 import pathlib
@@ -18,7 +17,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from fake_platform import FakePlatform  # noqa: E402
 from alb.poller import loop  # noqa: E402
 from alb.letter import store  # noqa: E402
-from alb import msgindex  # noqa: E402
+from alb import msgindex, retrieval  # noqa: E402
 
 
 def update(uid, chat, text, message_id=None, reply_to=None):
@@ -44,7 +43,10 @@ class Base(unittest.TestCase):
         self.tmp.cleanup()
 
     def poll(self, updates):
-        return loop.poll_once(FakePlatform(updates), self.inbox, self.ledger,
+        return self.poll_with(FakePlatform(updates))
+
+    def poll_with(self, platform):
+        return loop.poll_once(platform, self.inbox, self.ledger,
                               self.allow, state=self.state)
 
     def letter(self, letter_id):
@@ -71,19 +73,19 @@ class InboundEnvelopeGrows(Base):
         self.assertNotEqual(self.letter(a).meta["correspondent"],
                             self.letter(b).meta["correspondent"])
 
-    def test_legacy_stored_correspondent_still_threads(self):
+    def test_legacy_correspondent_and_thread_pointer_are_untouched(self):
         (self.state / "correspondents.json").write_text(
             json.dumps({"telegram:111": "legacykey0000001"}), encoding="utf-8")
+        pointer = self.state / "threads.json"
+        pointer.write_text(json.dumps({"legacykey0000001": "old-root"}), encoding="utf-8")
+        before = pointer.read_bytes()
         [a] = self.poll([update(1, "111", "one", message_id=1)])
         [b] = self.poll([update(2, "111", "two", message_id=2)])
         self.assertEqual(self.letter(a).meta["correspondent"], "legacykey0000001")
         self.assertEqual(self.letter(b).meta["correspondent"], "legacykey0000001")
-        [c] = self.poll([update(3, "222", "new", message_id=3)])
-        self.assertNotEqual(self.letter(c).meta["correspondent"], "legacykey0000001")
-        threads = json.loads((self.state / "threads.json").read_text())
-        self.assertEqual(threads["legacykey0000001"], a)
-        self.assertEqual(self.letter(b).meta.get("thread"), a)
-        self.assertEqual(threads[self.letter(c).meta["correspondent"]], c)
+        self.assertEqual((self.letter(a).meta["thread"], self.letter(b).meta["thread"]),
+                         (a, b))
+        self.assertEqual(pointer.read_bytes(), before)
 
 
 class TheIndexIsExactAndTriple(Base):
@@ -105,62 +107,103 @@ class TheIndexIsExactAndTriple(Base):
 
 
 class ThreadingIsExplicitOnly(Base):
-    def test_first_letter_roots_its_own_thread(self):
-        [lid] = self.poll([update(1, "111", "hello", message_id=1)])
-        self.assertEqual(self.letter(lid).meta.get("thread"), lid)
-
-    def test_the_thread_continues_for_the_correspondent(self):
+    def test_plain_messages_each_root_themselves(self):
         [a] = self.poll([update(1, "111", "one", message_id=1)])
         [b] = self.poll([update(2, "111", "two", message_id=2)])
-        self.assertEqual(self.letter(b).meta["thread"], a)
+        self.assertEqual((self.letter(a).meta["thread"], self.letter(b).meta["thread"]),
+                         (a, b))
 
-    def test_slash_new_at_position_zero_cuts(self):
+    def test_slash_new_is_plain_body_text_and_roots_itself(self):
         [a] = self.poll([update(1, "111", "one", message_id=1)])
         [b] = self.poll([update(2, "111", "/new fresh start", message_id=2)])
-        [c] = self.poll([update(3, "111", "continues", message_id=3)])
-        self.assertEqual(self.letter(b).meta["thread"], b)
-        self.assertEqual(self.letter(c).meta["thread"], b)
-
-    def test_slash_new_stays_in_the_body(self):
-        """Letters are never rewritten - the token is content too."""
-        [b] = self.poll([update(1, "111", "/new fresh", message_id=1)])
-        self.assertIn("/new fresh", self.letter(b).body)
-
-    def test_slash_new_not_at_position_zero_is_just_text(self):
-        [a] = self.poll([update(1, "111", "one", message_id=1)])
-        [b] = self.poll([update(2, "111", "please /new nothing", message_id=2)])
-        self.assertEqual(self.letter(b).meta["thread"], a)
+        self.assertIn("/new fresh start", self.letter(b).body)
+        self.assertEqual((self.letter(a).meta["thread"], self.letter(b).meta["thread"]),
+                         (a, b))
 
     def test_correspondents_do_not_share_threads(self):
         [a] = self.poll([update(1, "111", "one", message_id=1)])
         [b] = self.poll([update(2, "222", "other person", message_id=2)])
-        self.assertEqual(self.letter(b).meta["thread"], b)
+        self.assertEqual((self.letter(a).meta["thread"], self.letter(b).meta["thread"]),
+                         (a, b))
+
+
+class PlatformRoutingDoesNotBecomeLocalThread(Base):
+    def test_native_platform_thread_metadata_is_kept_but_message_roots_locally(self):
+        class Slack(FakePlatform):
+            name = "slack"
+        item = update(1, "111", "channel root", message_id="100")
+        item["provenance"] = {"slack_channel": "C1", "slack_ts": "100"}
+        item["reply_thread"] = "100"
+        [lid] = self.poll_with(Slack([item]))
+        meta = self.letter(lid).meta
+        self.assertEqual((meta["thread"], meta["reply_thread"]), (lid, "100"))
 
 
 class PlatformReplyLinks(Base):
     def test_reply_to_maps_re_and_joins_that_thread(self):
         [a] = self.poll([update(1, "111", "question", message_id=10)])
-        [b] = self.poll([update(2, "111", "/new topic", message_id=11)])
-        [c] = self.poll([update(3, "111", "answer to old", message_id=12,
+        [c] = self.poll([update(2, "111", "answer to old", message_id=12,
                                 reply_to=10)])
         meta = self.letter(c).meta
-        self.assertEqual(meta.get("re"), a)
-        self.assertEqual(meta.get("thread"), a)
+        self.assertEqual((meta.get("re"), meta.get("thread")), (a, a))
 
-    def test_replying_into_an_old_thread_does_not_move_the_pointer(self):
+    def test_reply_does_not_change_later_plain_message_roots(self):
         [a] = self.poll([update(1, "111", "old", message_id=10)])
-        [b] = self.poll([update(2, "111", "/new current", message_id=11)])
-        self.poll([update(3, "111", "reply to old", message_id=12, reply_to=10)])
-        [d] = self.poll([update(4, "111", "plain continues current", message_id=13)])
-        self.assertEqual(self.letter(d).meta["thread"], b)
+        self.poll([update(2, "111", "reply to old", message_id=12, reply_to=10)])
+        [d] = self.poll([update(3, "111", "plain new message", message_id=13)])
+        self.assertEqual(self.letter(d).meta["thread"], d)
 
-    def test_unknown_reply_target_is_exact_match_only(self):
+    def test_unknown_reply_target_is_a_fresh_root_without_re(self):
         [a] = self.poll([update(1, "111", "one", message_id=10)])
         [b] = self.poll([update(2, "111", "reply to unseen", message_id=12,
                                 reply_to=999)])
         meta = self.letter(b).meta
-        self.assertEqual(meta.get("re", ""), "")
-        self.assertEqual(meta["thread"], a)
+        self.assertEqual((meta.get("re", ""), meta["thread"]), ("", b))
+
+    def _corrupt_index_target_roots_the_reply_fresh(self, folder, target, payload, platform_id):
+        directory = self.root / folder
+        directory.mkdir(exist_ok=True)
+        (directory / f"{target}.md").write_bytes(payload)
+        msgindex.record(self.state, "telegram", "111", str(platform_id), target)
+        [reply] = self.poll([update(2, "111", "follow-up", message_id=12,
+                                    reply_to=platform_id)])
+        meta = self.letter(reply).meta
+        self.assertEqual((meta.get("re", ""), meta["thread"]), ("", reply))
+
+    def test_malformed_inbox_reply_target_roots_fresh(self):
+        self._corrupt_index_target_roots_the_reply_fresh("inbox", "bad-inbox", b"not a letter", 777)
+
+    def test_malformed_outbox_reply_target_roots_fresh(self):
+        self._corrupt_index_target_roots_the_reply_fresh("outbox", "bad-outbox", b"not a letter", 778)
+
+    def test_unreadable_reply_target_roots_fresh(self):
+        self._corrupt_index_target_roots_the_reply_fresh("outbox", "bad-utf8", b"\xff", 779)
+
+    def _stored_target(self, folder, target, thread):
+        directory = self.root / folder
+        directory.mkdir(exist_ok=True)
+        meta = store.envelope(sender="telegram-bridge", recipient="agent",
+                              extra={"id": target, "thread": thread})
+        (directory / f"{target}.md").write_text(store._serialise(meta, "stored"),
+                                                   encoding="utf-8")
+
+    def test_conflicting_index_target_threads_root_fresh(self):
+        self._stored_target("inbox", "collision", "thread-a")
+        self._stored_target("outbox", "collision", "thread-b")
+        msgindex.record(self.state, "telegram", "111", "780", "collision")
+        [reply] = self.poll([update(2, "111", "follow-up", message_id=12,
+                                    reply_to=780)])
+        meta = self.letter(reply).meta
+        self.assertEqual((meta.get("re", ""), meta["thread"]), ("", reply))
+
+    def test_same_thread_duplicate_target_joins(self):
+        self._stored_target("inbox", "duplicate", "thread-a")
+        self._stored_target("processed", "duplicate", "thread-a")
+        msgindex.record(self.state, "telegram", "111", "781", "duplicate")
+        [reply] = self.poll([update(2, "111", "follow-up", message_id=12,
+                                    reply_to=781)])
+        meta = self.letter(reply).meta
+        self.assertEqual((meta.get("re"), meta["thread"]), ("duplicate", "thread-a"))
 
 
 class OutboundJoinsTheIndexAndThread(Base):
@@ -179,17 +222,20 @@ class OutboundJoinsTheIndexAndThread(Base):
         self.assertEqual(
             msgindex.lookup(self.state, "telegram", "111", "777"), out_id)
 
-    def test_a_phone_reply_to_the_bots_message_resolves_to_the_outbound_letter(self):
+    def test_a_phone_reply_to_the_bots_message_inherits_the_outbound_thread(self):
         from alb.send import reply as send_mod
         [a] = self.poll([update(1, "111", "q", message_id=10)])
+        outbox = self.root / "outbox"
         class Sender:
             def send(self, chat_id, text): return "777"
         out_id = send_mod.send_reply(
             Sender(), self.inbox, self.state, self.allow, a, "answer",
-            outbox=self.root / "outbox", agent="codex")
+            outbox=outbox, agent="codex")
         [c] = self.poll([update(2, "111", "thanks!", message_id=11, reply_to=777)])
         meta = self.letter(c).meta
-        self.assertEqual(meta.get("re"), out_id)
+        self.assertEqual((meta.get("re"), meta.get("thread")), (out_id, a))
+        self.assertEqual({row["id"] for row in retrieval.thread([self.inbox, outbox], a)},
+                         {a, out_id, c})
 
 
 class TheStampKeepsTheLettersMode(Base):

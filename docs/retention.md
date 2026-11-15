@@ -39,6 +39,16 @@ interfaces:
 
 Use the flag forms above. There are no positional retrieval subcommands.
 
+### Threads are explicit links
+
+An ordinary incoming message starts its own local thread. To continue a subject,
+reply to that message in the chat app; the Bridge then links the follow-up to
+the replied-to letter's thread. On Telegram, press and hold the message, then
+tap **Reply** before writing the follow-up. Slack calls the action **Reply in
+thread**; Discord has **Reply** on each message. Consecutive messages from one person are not implicitly
+grouped. `alb --list` remains the chronological way to read a chat; `alb
+--thread` returns only the explicit reply chain.
+
 ---
 
 ## What durable does not mean

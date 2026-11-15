@@ -32,33 +32,24 @@ class PlatformConflict(Exception):
 
 
 def _thread_of(searched, letter_id):
-    """The thread a stored letter belongs to - its own thread field, or
-    itself when it roots one."""
+    """Return a stored letter's local thread, or None when it is unavailable.
+
+    A message-index hit is only a platform reference. It joins a local thread
+    only after the referenced inbound or outbound letter is actually found.
+    """
+    threads = set()
     for directory in searched:
         try:
             stored = store.resolve(directory, letter_id)
-            return stored.meta.get("thread") or letter_id
-        except store.NoSuchLetter:
+            threads.add(stored.meta.get("thread") or letter_id)
+        except (store.NoSuchLetter, store.MalformedLetter,
+                store.UnsafeIdentifier, OSError, UnicodeError):
+            # A message-index hit names a candidate, not an authorization to
+            # let a corrupt or unreadable target suppress new incoming mail.
             continue
-    return letter_id
-
-
-def _current_thread(state, correspondent, letter_id, cut):
-    """Per-correspondent thread pointer: this letter roots a new thread when
-    the pointer is empty or /new cut it; otherwise the open thread continues."""
-    path = pathlib.Path(state) / "threads.json"
-    try:
-        table = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        table = {}
-    if cut or correspondent not in table:
-        table[correspondent] = letter_id
-        tmp = pathlib.Path(str(path) + ".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(json.dumps(table))
-        os.replace(tmp, path)
-    return table[correspondent]
+    # A filing overlap can expose the same thread in two directories. Different
+    # threads for one indexed id are ambiguous, not a link chosen by search order.
+    return threads.pop() if len(threads) == 1 else None
 
 
 def _stamp_thread(inbox, letter_id, thread):
@@ -210,6 +201,10 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
     # everywhere they land, or a late redelivery republishes a letter that was
     # already handled.
     searched = [inbox] + ([processed] if processed else [])
+    # An agent reply is stored in the mailbox outbox. A person can use the
+    # platform reply gesture on that agent message, so local thread resolution
+    # must search it too. It is not part of inbound deduplication.
+    thread_sources = searched + [pathlib.Path(inbox).parent / "outbox"]
     # W2: correspondent identity, threading, and the message-id index all
     # live in private state. Derived from the ledger's home when not given,
     # so existing callers keep working and everything private stays together.
@@ -262,8 +257,14 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
                 reply_target = msgindex.lookup(state, name, chat_id,
                                                rt_mid) or ""
             if reply_target:
-                extra["re"] = reply_target
-                extra["thread"] = _thread_of(searched, reply_target)
+                target_thread = _thread_of(thread_sources, reply_target)
+                if target_thread is not None:
+                    extra["re"] = reply_target
+                    extra["thread"] = target_thread
+                else:
+                    # The index alone is not a durable local link. A missing
+                    # target roots a fresh message without inventing re/thread.
+                    reply_target = ""
 
             letter_id = store.publish_once(
                 inbox,
@@ -289,17 +290,11 @@ def poll_once(platform, inbox, ledger, allowlist_path, health_path=None,
                 if message_id:
                     msgindex.record(state, name, chat_id, message_id,
                                     letter_id)
-                if not reply_target:
-                    # One open thread per correspondent, cut ONLY by /new at
-                    # position zero (structure, never interpretation - the
-                    # token stays in the stored body). A platform reply into
-                    # an old thread deliberately does not move this pointer.
-                    thread = _current_thread(
-                        state, extra["correspondent"], letter_id,
-                        cut=text.split(" ", 1)[0] == "/new" if text else False)
-                    _stamp_thread(inbox, letter_id, thread)
-                else:
-                    _stamp_thread(inbox, letter_id, extra["thread"])
+                # Ordinary messages root themselves. Only a resolved platform
+                # reply gesture creates a local link; /new is ordinary body
+                # text and old threads.json state is deliberately untouched.
+                _stamp_thread(inbox, letter_id,
+                              extra["thread"] if reply_target else letter_id)
             else:
                 # Already published, and dedup said so. Counted apart from a
                 # deny: both publish nothing, but only one of them is the

@@ -137,7 +137,9 @@ re-issuing makes it true by construction.
 conversation you are in.
 
 Then message your new bot once — anything, "hello" is fine. You need a message
-to exist for the next step.
+to exist for the next step. Each message starts its own conversation. To carry
+on a subject later, press and hold that message in Telegram, then tap **Reply**;
+you never have to use Reply for the agent to receive your message.
 
 ---
 

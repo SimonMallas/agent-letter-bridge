@@ -525,14 +525,14 @@ EXTRA = {
         MSGINDEX, "tests.test_w2_identity_threading",
         '    return f"{platform}|{origin}|{message_id}"',
         '    return f"{platform}|{message_id}"'),
-    "reply-to joins the targets thread without moving the pointer": (
+    "reply-to joins only a resolved stored target": (
         POLL, "tests.test_w2_identity_threading",
-        "            if not reply_target:",
-        "            if True:"),
-    "slash-new only cuts at position zero": (
+        "                if target_thread is not None:",
+        "                if False:"),
+    "ordinary messages root themselves, including slash-new": (
         POLL, "tests.test_w2_identity_threading",
-        'cut=text.split(" ", 1)[0] == "/new" if text else False',
-        'cut=("/new" in text) if text else False'),
+        '                              extra["thread"] if reply_target else letter_id)',
+        '                              extra["thread"])'),
     "search is exact substring, never everything": (
         RETRIEVAL, "tests.test_retrieval",
         "        if any(text in h for h in haystacks):",

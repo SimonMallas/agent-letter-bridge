@@ -57,9 +57,9 @@ def envelope(sender, recipient, kind="info", priority="now", extra=None):
         "to": recipient,
         "type": kind,
         "re": "",
-        # W2: thread linkage - blank at composition, stamped at publish for
-        # inbound (one thread per correspondent, /new cuts), carried from the
-        # source for outbound. Matches the letterbox v0.3 envelope.
+        # Thread linkage is blank at composition, stamped at inbound publish
+        # to the message itself or a resolved platform-reply target, and
+        # carried from the source for outbound.
         "thread": "",
         "priority": priority,
         "requires_ack": "false",

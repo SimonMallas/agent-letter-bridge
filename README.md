@@ -45,6 +45,14 @@ session, with its full working context — and hands it the message as a
 letter. When you reply from your phone, you are talking to the agent you
 left at the desk.
 
+## How conversations are grouped
+
+Each message you send starts its own conversation. To carry on one subject,
+reply to that message in your chat app: in Telegram, press and hold it, then
+tap **Reply**; in Slack use **Reply in thread**; in Discord use **Reply**. You
+never have to do this—the agent reads every message either way—but only an
+explicit reply links the follow-up to the earlier conversation.
+
 ## Why this exists
 
 CLI agents don't have phones. The most capable coding agents live in

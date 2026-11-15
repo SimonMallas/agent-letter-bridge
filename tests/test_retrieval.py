@@ -25,10 +25,12 @@ from alb.send import reply as send_mod  # noqa: E402
 from alb import retrieval  # noqa: E402
 
 
-def update(uid, chat, text, message_id=None):
+def update(uid, chat, text, message_id=None, reply_to=None):
     item = {"update_id": uid, "chat_id": chat, "text": text}
     if message_id is not None:
         item["message_id"] = str(message_id)
+    if reply_to is not None:
+        item["reply_to_message_id"] = str(reply_to)
     return item
 
 
@@ -117,7 +119,7 @@ class ThreadView(Base):
     def test_thread_returns_both_halves_in_order(self):
         [a] = self.poll([update(1, "111", "question", message_id=1)])
         out = self.send(a, "answer")
-        [c] = self.poll([update(2, "111", "follow-up", message_id=2)])
+        [c] = self.poll([update(2, "111", "follow-up", message_id=2, reply_to=701)])
         rows = retrieval.thread(self.mail(), a)
         self.assertEqual([r["id"] for r in rows], [a, out, c])
 

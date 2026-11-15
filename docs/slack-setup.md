@@ -140,7 +140,10 @@ send the app one message.
 
 ![The app, letterbox, under Apps in Slack's sidebar](images/slack/11-find-app.png)
 
-In Slack, find the app under **Apps** in the left-hand sidebar. The app is
+In Slack, find the app under **Apps** in the left-hand sidebar. Each message
+starts its own conversation. To carry on a subject, use **Reply in thread** on
+that message; you never have to do this for the agent to receive your message.
+The app is
 named Agent Letter Bridge; its bot is named after the agent it reaches, such
 as **letterbox-builder**, so two apps never look the same. A bridge set up
 without a participant calls its bot **letterbox**, as in these screenshots.

@@ -5,6 +5,10 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+- Ordinary incoming messages now start their own local thread. A follow-up joins a thread only when the person uses the platform reply gesture on a stored message (on Telegram: press and hold the message, then tap **Reply**); consecutive messages are no longer implicitly grouped. Replies to an agent outbound message resolve that outbound letter from the outbox and inherit its source thread. Native Slack and Discord thread routing is unchanged. Existing letters and legacy `threads.json` are left untouched.
+
 ## [0.7.1] — 2026-11-10
 
 - A letter that lands before a later item in the same batch fails (for example a photo host returning an error) now rings. Before, the cycle stopped before its ring, and the next cycle saw the letter as already delivered, so it never rang.
