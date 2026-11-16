@@ -445,10 +445,7 @@ alb --config ~/.alb/bridge.env --root ~/.alb --once
 **Test 1 — a listed sender produces a letter.** Ask the human to message the
 bot, run one cycle, and confirm both that the cycle reported
 `published 1` **and** that a `.md` file appeared in the inbox. Tell the human:
-each message starts its own conversation; to continue one subject they reply
-to that message in their chat app (Telegram: press and hold, then **Reply**;
-Slack: **Reply in thread**; Discord: **Reply**). They never need the gesture
-for the agent to receive the next message.
+replying to a message keeps the next message in that message's thread (Telegram: press and hold, then **Reply**; Slack: **Reply in thread**; Discord: **Reply**). Sending without Reply starts a new thread. Either way the agent receives the message, and starting a new thread is not a mistake; use Reply when one subject should stay together.
 
 If they already sent several messages before the first poll, expect
 `published N` and N letters. That is Telegram's backlog emptying, not

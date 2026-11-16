@@ -46,13 +46,14 @@ session, with its full working context — and hands it the message as a
 letter. When you reply from your phone, you are talking to the agent you
 left at the desk.
 
-## How conversations are grouped
+## Reply keeps you in the same thread
 
-Each message you send starts its own conversation. To carry on one subject,
-reply to that message in your chat app: in Telegram, press and hold it, then
-tap **Reply**; in Slack use **Reply in thread**; in Discord use **Reply**. You
-never have to do this—the agent reads every message either way—but only an
-explicit reply links the follow-up to the earlier conversation.
+There are two ways to send a message, and they do different things.
+
+- **Reply to a message** and your message joins that message's thread. The agent sees it as the same subject carrying on. In Telegram, press and hold the message, then tap **Reply**. In Slack use **Reply in thread**. In Discord use **Reply**.
+- **Send a message without Reply** and it starts a new thread.
+
+The agent receives and can answer your message either way. Starting a new thread is not a mistake. Use Reply when you want one subject kept together.
 
 ## Why this exists
 

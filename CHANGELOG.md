@@ -8,7 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 - Several platform bridges with separate state roots may publish into one mailbox. New inbound deduplication qualifies each source id with its platform, so equal raw IDs from different platforms do not suppress one another. An old unqualified legacy letter never silently matches a qualified update; it can yield a visible duplicate rather than withholding new mail. The candidate also records the raw update key in its private ledger, so a normal rollback to 0.7.1 remains deduplicated while that state is retained; losing the ledger before rollback can still duplicate a redelivery.
-- Ordinary incoming messages now start their own local thread. A follow-up joins a thread only when the person uses the platform reply gesture on a stored message (on Telegram: press and hold the message, then tap **Reply**); consecutive messages are no longer implicitly grouped. Replies to an agent outbound message resolve that outbound letter from the outbox and inherit its source thread. Native Slack and Discord thread routing is unchanged. Existing letters and legacy `threads.json` are left untouched.
+- **Reply keeps a subject together; sending without Reply starts a new thread.** A follow-up joins a thread only when the person uses the platform reply gesture on a stored message (on Telegram: press and hold the message, then tap **Reply**); consecutive messages are no longer implicitly grouped. Replies to an agent outbound message resolve that outbound letter from the outbox and inherit its source thread. Native Slack and Discord thread routing is unchanged. Existing letters and legacy `threads.json` are left untouched.
 
 ## [0.7.1] — 2026-11-10
 
