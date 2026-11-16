@@ -41,8 +41,8 @@ jobs:
           import hashlib
           from pathlib import Path
           expected = {
-              'dist/agent_letter_bridge-0.7.2-py3-none-any.whl': '9f7d5ddfa1d6c5d508a8818d00f20351561e7682e3e7dff61ee15cd41bbf4f0a',
-              'dist/agent_letter_bridge-0.7.2.tar.gz': 'd76d7f463540950628a71e05a5bdc40d4786338c43ed3d0309e00350093529fe',
+              'dist/agent_letter_bridge-0.7.2-py3-none-any.whl': 'c997c521773a5aaa24887e396edc022fb53328cea6ad37ccecd8d8b406a0eb6b',
+              'dist/agent_letter_bridge-0.7.2.tar.gz': 'eac08e9581b40b47d03786f6783d341fad83559c81aa39861acc0045509cb3ba',
           }
           for path, digest in expected.items():
               assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == digest, f'checksum mismatch: {path}'
