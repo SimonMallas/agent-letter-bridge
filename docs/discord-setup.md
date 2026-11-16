@@ -159,9 +159,9 @@ In Discord, click the bot in your server's member list, type a message in the
 **Message @Letterbox** box on its card, and press **Enter**. That opens your
 DM with the bot. Within a few seconds your agent's pane rings and the message
 is a letter on disk. Ask your agent to reply; the reply appears in the same
-DM. Each message starts its own conversation. To carry on one subject, use
-**Reply** on that message; you never have to do this for the agent to receive
-your next message.
+DM. **Reply** to a message keeps your next message in that message's thread;
+sending without Reply starts a new thread. The agent receives either way, and a
+new thread is not a mistake—use Reply when you want one subject kept together.
 
 If nothing arrives:
 

@@ -31,10 +31,11 @@ If you would rather do it by hand, follow [the full installation guide](../INSTA
   person. When your computer and the agent are running, it usually arrives
   within a few seconds. A busy agent or a network problem can take longer.
 - **Get an answer.** The agent can reply in the same chat.
-- **Carry on a subject.** Reply to the message you mean. On Telegram, press
+- **Stay in the same thread.** Reply to the message you mean. On Telegram, press
   and hold it, then tap **Reply**. In Slack use **Reply in thread**. In Discord
-  use **Reply**. You never have to do this: a plain message still arrives.
-- **Start something new.** Just send a new message.
+  use **Reply**. Your message joins that thread.
+- **Start a new thread.** Send a message without Reply. It still arrives; a new
+  thread is not a mistake.
 - **Photos.** Ask your agent whether your setup handles photos. For the agent
   to send one back, you must first approve a folder it may send from.
 
