@@ -25,8 +25,8 @@ alb --init --platform slack --root ~/.alb-slack
 The first question is about where letters go:
 
 ```text
-Does this agent already receive mail from other agents on
-this machine - an inbox it already sweeps?
+Do you already have a folder on this machine where messages
+for a program are delivered?
   y/N:
 ```
 
@@ -162,14 +162,14 @@ allowlist entry.
 
 ## 6. Connect the bell
 
-Setup lists the terminal panes it can see and asks for your agent's pane id:
+Setup lists the terminal panes it can see and asks for your pane id:
 
 ```text
-  your agent's pane id:
+  your pane id:
 ```
 
-Paste the id of the pane your agent runs in. Setup will not guess: a bell in
-the wrong pane lands in somebody else's session. Then it offers to start the
+Paste the id of the pane you are working in. Setup will not guess: a line in
+the wrong pane shows up in someone else's work. Then it offers to start the
 bridge in its own pane. Press **Enter** to start it.
 
 ## 7. Test it

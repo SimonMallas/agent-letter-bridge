@@ -177,27 +177,28 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     #    Three keys were then added by hand. Nothing errored at any point.
     #    A question that can be answered without knowing a path gets asked
     #    first; the path is only wanted once the answer is yes.
-    console.say("Does this agent already receive mail from other agents on")
-    console.say("this machine - an inbox it already sweeps?")
-    console.say("  yes - letters go there, and the doorbell is the doorbell it")
-    console.say("        already knows. Nothing new for it to learn.")
-    console.say("  no  - this bridge gets its own directory. Safe default.")
+    console.say("Do you already have a folder on this machine where messages")
+    console.say("for a program are delivered?")
+    console.say("  yes - messages will go into that folder. I will ask which")
+    console.say("        folder, and the name that folder already uses.")
+    console.say("  no  - the bridge keeps its own folder. Choose no if you are")
+    console.say("        setting this up for the first time.")
     integrated = _yes(console.ask("  y/N", "n"))
 
     mailbox = ""
     recipient = ""
     if integrated:
         console.say()
-        console.say("The directory that CONTAINS that inbox - not the inbox")
-        console.say("itself. A letterbox seat is <letterbox>/<name>.")
+        console.say("The folder that already receives those messages, not a")
+        console.say("folder inside it. The seat is a name inside that folder.")
         console.say("Example: ~/mail/agents/<agent-name>")
-        mailbox = console.ask("  mailbox directory", "").strip()
+        mailbox = console.ask("  folder", "").strip()
 
         console.say()
-        console.say("The doorbell is addressed by name, so this has to be the")
-        console.say("name the agent is registered under, not a display name.")
+        console.say("The name that folder already uses for this program.")
+        console.say("It has to match that registration, not a nickname.")
         console.say("Example: research-bot")
-        recipient = console.ask("  participant name", "").strip()
+        recipient = console.ask("  name", "").strip()
 
     # A ghost path is caught HERE, while the human is still present. The
     # runtime refuses to invent a mailbox, so a config naming one would fail at
@@ -260,6 +261,15 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
                 console.say(f"  doorbell helper: {helper}")
                 console.say("  recorded as ALB_BUS_BINARY, so a later PATH")
                 console.say("  cannot swap it.")
+
+    # Said here, after the folder and the helper, so "next" is the token
+    # and not a question that still sits in between.
+    if summary["mode"] == "integrated":
+        _noted(console, "messages will go to the folder you named.",
+               "the token. Nothing is sent until you ask.")
+    else:
+        _noted(console, "the bridge will keep its own folder.",
+               "the token. Nothing is sent until you ask.")
 
     # 3. The token. Never echoed, never an argument, never printed back.
     app_token = ""
@@ -372,6 +382,8 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     # disk after keep-or-write. Unreadable counts as denying, because a file
     # we cannot parse is not evidence that anything gets through.
     summary["delivers"] = _allowlist_delivers(allow_path)
+    _noted(console, "the files are written.",
+           "how you will be told that a message arrived.")
 
     # 5. The ring.
     #
@@ -390,9 +402,10 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     #    the runtime. Found by installing on the maintainer's own seat.
     if integrated:
         console.say()
-        console.say("The doorbell is your letterbox's own, addressed to")
+        console.say("A new message will be announced through the folder")
+        console.say("you named, to:")
         console.say(f"  {recipient}")
-        console.say("so there is no pane to choose and none to pin.")
+        console.say("There is no pane to pick.")
         summary["ring"] = "helper"
     else:
         # Listed, never chosen - but the operator may paste the id HERE, so
@@ -404,6 +417,16 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
         if surface:
             _persist_ring(console, env_path, env_path_existed, surface,
                           notifier, summary)
+
+    if summary.get("ring") == "helper":
+        _noted(console, "a new message is announced through the folder you named.",
+               "whether to start the bridge.")
+    elif summary.get("ring") == "configured":
+        _noted(console, "a new message will be typed into the pane you chose.",
+               "whether to start the bridge.")
+    else:
+        _noted(console, "nothing will announce a new message yet.",
+               "the bridge stays stopped until that is set.")
 
     # 6. The resident. Both real installs stalled at "--once looks fine" with
     #    nothing left running - so init finishes the job, or prints exactly
@@ -440,10 +463,22 @@ def _token_was_refused(exc):
     return code in (401, 404)
 
 
+def _noted(console, done, nxt):
+    """Say that a step finished, and name the next one.
+
+    No "step 2 of 5". The path branches (a folder, a helper, a platform,
+    panes), so a fixed total would be a lie on some of those paths.
+    """
+    console.say(f"  Done: {done}")
+    console.say(f"  Next: {nxt}")
+
+
 def _prompt_telegram_token(console):
     """Ask until the paste is one token, or the operator leaves it blank.
 
-    Echo stays off. The only confirmation is the character count.
+    Echo stays off. A good paste is accepted by this machine only. The
+    platform is not asked here: the opening line promised that nothing is
+    sent unless the operator asks.
     """
     while True:
         token = console.ask_secret("  token (not echoed): ").strip()
@@ -454,9 +489,14 @@ def _prompt_telegram_token(console):
             # it at 3am.
             console.say("  no token entered. The file is written without one, and the")
             console.say("  bridge will refuse to start until ALB_TOKEN is filled in.")
+            console.say("  Next: the chat question. A read cannot succeed without a token.")
             return ""
         if _TELEGRAM_TOKEN.fullmatch(token):
-            console.say(f"  got it ({len(token)} characters).")
+            console.say("  Thank you. This machine accepted that paste as one token")
+            console.say(f"  ({len(token)} characters). The platform has not been asked,")
+            console.say("  so this is not the platform accepting it.")
+            console.say("  Next: choose whether I ask the platform for your chat,")
+            console.say("  or you look that up yourself.")
             return token
         console.say(f"  that does not look like one token ({len(token)} characters).")
         console.say("  A bot token is digits, a colon, and about 35 characters.")
@@ -472,6 +512,9 @@ def _telegram_token(console, token_file):
     if token_file:
         token = _consume_token_file(token_file)
         console.say("  token read from file and the file was removed.")
+        console.say("  Done: the token is in. The platform has not been asked.")
+        console.say("  Next: choose whether I ask the platform for your chat,")
+        console.say("  or you look that up yourself.")
         return token
     console.say("  Nothing will appear as you paste. Paste the token once,")
     console.say("  then press enter.")
@@ -694,7 +737,7 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running,
         # disabled, not broken. That is grok's install.
         console.say("No ring is configured. The bridge will not be started.")
         console.say("A poller with nothing to ping is not an install.")
-        console.say("Re-run init from a cmux pane, paste your agent's pane id")
+        console.say("Re-run init from a cmux pane, paste your pane id")
         console.say("when asked, then start.")
         summary["resident"] = "incomplete"
         return
@@ -802,6 +845,11 @@ def _chat_ids(console, token, reader, ask_again=None):
 
     if choice != "read" or reader is None:
         console.say()
+        console.say("  Done: I did not contact the platform, so I cannot say")
+        console.say("  whether it accepts this token.")
+        console.say("  Next: run the command below, then put the number in")
+        console.say("  the allowlist.")
+        console.say()
         console.say("Run this, then put the number in allowlist.json:")
         console.say()
         console.say(CHAT_ID_COMMAND)
@@ -839,12 +887,16 @@ def _chat_ids(console, token, reader, ask_again=None):
             return [], token
 
         if not found:
+            console.say("  Done: the platform accepted this token. No chat came back.")
+            console.say("  Next: message the bot, then run the command below.")
             console.say("  nothing came back - that usually means the bot has not")
             console.say("  been messaged yet, or another process is polling it.")
             console.say("  run this when you have:")
             console.say(CHAT_ID_COMMAND)
             return [], token
 
+        console.say("  Done: the platform accepted this token.")
+        console.say("  Next: pick which chat is you.")
         console.say()
         for index, entry in enumerate(found, start=1):
             console.say(f"  {index}) {entry['chat_id']}  {entry.get('label', '')}".rstrip())
@@ -1038,9 +1090,9 @@ def _offer_ring(console, panes, summary):
     env. Blank is not a skip. Simon: there is no supported bell-less install.
     """
     console.say()
-    console.say("The ring types a line into a terminal pane when mail arrives -")
-    console.say("it is what makes the bridge feel alive. Without it, letters land")
-    console.say("and nobody is told. That is not an install.")
+    console.say("When a message arrives, this can type one line into a")
+    console.say("terminal pane so you notice it. Without that, the message")
+    console.say("is saved and nothing tells you. That is not an install.")
 
     if panes:
         console.say("Panes I can see:")
@@ -1048,10 +1100,10 @@ def _offer_ring(console, panes, summary):
             where = entry.get("notifier") or ""
             tag = f"[{where}] " if where else ""
             console.say(f"  {entry['id']}  {tag}{entry.get('label', '')}".rstrip())
-        console.say("I am not choosing one: a listing cannot tell me which pane")
-        console.say("holds your agent, and a doorbell in the wrong pane lands in")
-        console.say("somebody else's session. Paste the id of YOUR agent's pane.")
-        surface = console.ask("  your agent's pane id", "").strip()
+        console.say("I will not pick one. This list does not say which pane")
+        console.say("is yours, and a line in the wrong pane shows up in")
+        console.say("someone else's work. Paste the id of your pane.")
+        surface = console.ask("  your pane id", "").strip()
         if not surface:
             console.say("  no pane id. The ring will not be configured.")
             return "", ""
@@ -1064,9 +1116,9 @@ def _offer_ring(console, panes, summary):
         console.say("  that id is not in the list above - re-run to refresh.")
         return "", ""
 
-    console.say("No panes are visible, so the ring cannot be configured.")
-    console.say("Run init from inside a multiplexer with at least one pane,")
-    console.say("then paste your agent's pane id. A later ALB_SURFACE edit")
+    console.say("No panes are visible, so this cannot be set up yet.")
+    console.say("Run init again from a terminal that has at least one pane,")
+    console.say("then paste your pane id. Editing the config later")
     console.say("is not a supported install.")
     return "", ""
 
@@ -1105,3 +1157,13 @@ def _closing(console, root, summary):
         console.say(f"  {command}")
     else:
         console.say(f"  alb --config {root}/bridge.env --root {root}")
+    console.say()
+    if summary.get("resident") == "started":
+        console.say("The bridge process is running. That is not the same as working.")
+    elif summary.get("resident") == "already running":
+        console.say("A bridge for this folder is already running. That is not")
+        console.say("the same as working.")
+    else:
+        console.say("The bridge is not working yet. These files do not run it.")
+    console.say("You will know it is working when it is running and a message")
+    console.say("from you shows up. Until that message shows up, it is not.")

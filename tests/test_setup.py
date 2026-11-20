@@ -382,7 +382,10 @@ class TheSecretNeverLands(Base):
     def test_the_token_is_never_printed_back(self):
         console, _ = self.run_init(answers=["n", "print", ""])
         self.assertNotIn(FAKE_TOKEN, console.transcript)
-        self.assertIn(f"got it ({len(FAKE_TOKEN)} characters)", console.transcript)
+        self.assertIn("This machine accepted that paste as one token",
+                      console.transcript)
+        self.assertIn(f"({len(FAKE_TOKEN)} characters)", console.transcript)
+        self.assertIn("The platform has not been asked", console.transcript)
 
     def test_there_is_no_flag_that_would_put_a_token_in_shell_history(self):
         """Pi's constraint, pinned as a signature check: a --token flag is the
@@ -1602,7 +1605,11 @@ class FirstRunSaysWhatHappened(Base):
         self.assertNotIn(FAKE_TOKEN, console.transcript)
         self.assertIn(f"does not look like one token ({len(doubled)} characters)",
                       console.transcript)
-        self.assertIn(f"got it ({len(FAKE_TOKEN)} characters)", console.transcript)
+        self.assertIn("This machine accepted that paste as one token",
+                      console.transcript)
+        self.assertIn(f"({len(FAKE_TOKEN)} characters)", console.transcript)
+        self.assertIn("Thank you", console.transcript)
+        self.assertIn("or you look that up yourself", console.transcript)
 
     def test_a_refused_token_is_not_written_and_can_be_replaced(self):
         class Refused(Exception):
@@ -1684,6 +1691,31 @@ class FirstRunSaysWhatHappened(Base):
         self.assertLess(optional, finish)
         self.assertIn("second person", text)
         self.assertIn("alb --config", text[finish:])
+        verdict = text.index("The bridge is not working yet")
+        self.assertLess(finish, verdict)
+        self.assertIn("You will know it is working", text[verdict:])
+        self.assertTrue(text.rstrip().endswith("it is not."))
+        self.assertNotIn("step 2 of", text)
+
+    def test_the_opening_and_the_ring_are_plain(self):
+        console, _ = self.run_init(
+            answers=["n", "print", ""],
+            panes=[{"id": "pane-1", "label": "work", "notifier": "tmux"}])
+        text = console.transcript
+        self.assertIn("folder on this machine", text)
+        self.assertNotIn("inbox it already sweeps", text)
+        self.assertNotIn("feel alive", text)
+        self.assertIn("I will not pick one", text)
+        self.assertIn("I did not contact the platform", text)
+
+    def test_a_successful_read_says_the_platform_accepted_the_token(self):
+        def reader(token):
+            return [{"chat_id": "111", "label": "you"}]
+
+        console, _ = self.run_init(
+            answers=["n", "read", "", "1"], chat_id_reader=reader)
+        self.assertIn("the platform accepted this token", console.transcript)
+        self.assertNotIn(FAKE_TOKEN, console.transcript)
 
     def test_the_start_command_names_the_mailbox_parent(self):
         mailbox = pathlib.Path(self.tmp.name) / "letterbox" / "seat"

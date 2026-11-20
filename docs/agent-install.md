@@ -48,8 +48,8 @@ back for confirmation, or include it in a summary.
 
 ## Step 0 — ASK: standalone or integrated?
 
-> "Does the agent we are waking already receive mail from other agents on this
-> machine — an inter-agent inbox it already sweeps?"
+> "Do you already have a folder on this machine where messages for a program
+> are delivered?"
 
 - **No / don't know → standalone.** Letters go to a directory this bridge owns.
   Safe default: it cannot disturb anything already running. **Running inside

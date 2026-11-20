@@ -155,10 +155,10 @@ creates the state directory `0700`, writes `bridge.env` at `0600`, and writes
 
 It asks you four things:
 
-**1. Does this agent already receive mail from other agents on this machine?**
+**1. Do you already have a folder on this machine where messages for a program are delivered?**
 A yes/no — you do not need a path to answer it. `n` (the default) gives you
-standalone, which is the right answer unless you specifically want letters
-delivered into an existing inter-agent mailbox.
+standalone, which is the right answer unless you specifically want messages
+delivered into a folder that already receives them.
 
 Say yes and it asks two more: the directory containing that inbox, and the
 agent's registered participant name. **Both are required.** Leave either blank
@@ -169,8 +169,9 @@ something that looks integrated and is not. A letterbox seat is
 `PATH`.
 
 **2. Your bot token.** Nothing is shown as you paste. Paste it once and press
-enter. Setup says how many characters it accepted, and does not show the
-token again. It is never accepted as a command-line argument — a flag would
+enter. Setup thanks you, says this machine accepted the paste as one token,
+gives the character count, says the platform has not been asked, and names
+the next step. It does not show the token again. It is never accepted as a command-line argument — a flag would
 put your token in shell history. An agent installing for you should use
 `alb --init --token-file <mode-600-file>` instead: you write the token into
 that file; the wizard reads it and deletes it.
