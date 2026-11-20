@@ -456,8 +456,11 @@ EXTRA = {
         "                result.denied += 1"),
     "setup writes a deny-all allowlist": (
         WIZARD, "tests.test_setup",
-        '    chats = _chat_ids(console, token, chat_id_reader)',
-        '    chats = _chat_ids(console, token, chat_id_reader) or ["111"]'),
+        '        telegram_chats, token = _chat_ids(\n'
+        '            console, token, chat_id_reader, ask_again)',
+        '        telegram_chats, token = _chat_ids(\n'
+        '            console, token, chat_id_reader, ask_again)\n'
+        '        telegram_chats = ["111"]'),
     "setup never overwrites an existing file": (
         WIZARD, "tests.test_setup",
         "    if allow_path.exists():", "    if False:"),
@@ -481,7 +484,12 @@ EXTRA = {
         '        pass'),
     "the helper is asked for only when it is missing": (
         WIZARD, "tests.test_setup",
-        '        if not found:', '        if True:'),
+        '        if not found:\n'
+        '            console.say()\n'
+        '            console.say("Integrated mode rings through your letterbox\'s own")',
+        '        if True:\n'
+        '            console.say()\n'
+        '            console.say("Integrated mode rings through your letterbox\'s own")'),
     "the outbound letter create is the claim": (
         OUTBOUND, "tests.test_outbound",
         "    except FileExistsError:\n        raise AlreadyClaimed",

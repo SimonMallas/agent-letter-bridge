@@ -38,6 +38,7 @@ WHAT IT WILL NOT DO, and why each one is a refusal rather than an omission:
 import json
 import os
 import pathlib
+import re
 import shutil
 import stat
 
@@ -53,6 +54,11 @@ CHAT_ID_COMMAND = (
     "  | python3 -c 'import json,sys; "
     'print(json.load(sys.stdin)["result"][0]["message"]["chat"]["id"])\''
 )
+
+# One BotFather token: a short numeric id, one colon, then about 35
+# characters. A second paste in the same hidden prompt adds a second colon
+# or a length that is not one token. The check prints the length only.
+_TELEGRAM_TOKEN = re.compile(r"[0-9]{6,12}:[A-Za-z0-9_-]{30,50}")
 
 
 def _write_private(path, text):
@@ -183,7 +189,8 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     if integrated:
         console.say()
         console.say("The directory that CONTAINS that inbox - not the inbox")
-        console.say("itself. Example: ~/mail/agents/<agent-name>")
+        console.say("itself. A letterbox seat is <letterbox>/<name>.")
+        console.say("Example: ~/mail/agents/<agent-name>")
         mailbox = console.ask("  mailbox directory", "").strip()
 
         console.say()
@@ -216,19 +223,24 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
         console.say("  one was blank. Writing a STANDALONE config instead.")
         console.say("  Re-run init to set up the mailbox once you have both.")
 
-    # The letterbox helper. Not a flag: a flag is a thing every operator must
-    # consider, and almost none of them have to. It is asked for only when
-    # integrated mode needs it and it is not already on PATH.
+    # The letterbox helper. Not a flag. Asked for only when integrated mode
+    # needs it and it is not already on PATH. When it is on PATH, the absolute
+    # path is still recorded: leaving it unset rings through whichever
+    # `letterbox` a later shell finds, which may not be the one just checked.
     helper = ""
     if integrated:
         found = (helper_found or shutil.which)("letterbox")
+        typed = False
         if not found:
             console.say()
             console.say("Integrated mode rings through your letterbox's own")
             console.say("doorbell helper, and letterbox is not on PATH here.")
             console.say("Letterbox installs it as ~/.local/bin/letterbox.")
             helper = console.ask("  path to the helper", "").strip()
-        probe_path = helper or found
+            typed = bool(helper)
+        else:
+            helper = found
+        probe_path = helper
         if probe_path:
             from alb.helper_probe import inspect_helper
             status, msg = inspect_helper(probe_path)
@@ -240,6 +252,14 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
                 console.say("0.6.2 or later for Herdr. To update, run your")
                 console.say("edition's install command again. Installing now will")
                 console.say("record every ring as failing until it is updated.")
+                if not typed:
+                    console.say("  That helper was not recorded.")
+                    helper = ""
+            else:
+                helper = _helper_absolute(probe_path)
+                console.say(f"  doorbell helper: {helper}")
+                console.say("  recorded as ALB_BUS_BINARY, so a later PATH")
+                console.say("  cannot swap it.")
 
     # 3. The token. Never echoed, never an argument, never printed back.
     app_token = ""
@@ -262,12 +282,38 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
 
     env_path = root / "bridge.env"
     env_path_existed = env_path.exists()
-    if env_path.exists():
+    if env_path_existed:
         # Never clobber. Someone re-running this already has a working bridge
         # more often than not, and a silently replaced config is a morning.
+        # Do this before any platform read, so a refusal stops with the file
+        # untouched and without having asked the platform anything.
         summary["kept"].append(str(env_path))
         console.say(f"  kept {env_path} - it already exists, nothing was changed")
-    else:
+        if integrated and not _persist_mailbox(
+                console, env_path, env_path_existed, mailbox, recipient,
+                helper, summary):
+            summary["mode"] = "refused"
+            summary["ring"] = "not configured"
+            summary["resident"] = "not started"
+            summary.pop("mail_root", None)
+            summary["has_token"] = bool(token)
+            console.say()
+            console.say("Setup stopped. Your existing configuration is untouched.")
+            _closing(console, root, summary)
+            return summary
+
+    # Telegram's read can refuse the token. Ask before the file is created,
+    # so a token the platform has just refused is never what gets saved.
+    # Slack and Discord collect their chats after the file, as before.
+    telegram_chats = None
+    if platform not in ("slack", "discord"):
+        ask_again = None
+        if not env_path_existed and not token_file:
+            ask_again = lambda: _prompt_telegram_token(console)
+        telegram_chats, token = _chat_ids(
+            console, token, chat_id_reader, ask_again)
+
+    if not env_path_existed:
         lines = [f"ALB_TOKEN={token}\n"]
         if platform == "slack":
             lines = ["ALB_PLATFORM=slack\n", f"ALB_TOKEN={token}\n",
@@ -282,29 +328,21 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
             lines.append(f"ALB_BUS_BINARY={helper}\n")
         _write_private(env_path, "".join(lines))
         summary["created"].append(str(env_path))
+        # New file: persist returns immediately. The keys are in the write
+        # above. The call stays so a future edit cannot skip the check.
+        if integrated and not _persist_mailbox(
+                console, env_path, False, mailbox, recipient, helper, summary):
+            summary["mode"] = "refused"
+            summary["ring"] = "not configured"
+            summary["resident"] = "not started"
+            summary.pop("mail_root", None)
+            summary["has_token"] = bool(token)
+            console.say()
+            console.say("Setup stopped. Your existing configuration is untouched.")
+            _closing(console, root, summary)
+            return summary
 
-    # Reconcile a config that was already here. A summary is a report, never
-    # a wish: if the mailbox keys are not in the file afterwards, this is not
-    # an integrated install and must not be called one.
-    # A REFUSAL IS TERMINAL. Downgrading to standalone and carrying on turned
-    # "I will not write this" into a DIFFERENT install: a pane offered, a
-    # surface written, a resident started. And where the old config held a
-    # complete integrated route, the summary said standalone while the
-    # runtime went on reading the old mailbox and recipient - a report that
-    # disagreed with the file it described.
-    #
-    # Nothing further is written and nothing is started. The operator still
-    # has the install they had.
-    if integrated and not _persist_mailbox(console, env_path, env_path_existed,
-                                           mailbox, recipient, helper, summary):
-        summary["mode"] = "refused"
-        summary["ring"] = "not configured"
-        summary["resident"] = "not started"
-        summary.pop("mail_root", None)
-        console.say()
-        console.say("Setup stopped. Your existing configuration is untouched.")
-        _closing(console, root, summary)
-        return summary
+    summary["has_token"] = bool(token) or env_path_existed
 
     # 4. The allowlist. Written deny-all whatever else happens; an entry is
     #    added only from a value the operator supplied or explicitly asked us
@@ -314,7 +352,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     elif platform == "discord":
         chats = discord_wizard.pairs(console, token, discord_call)
     else:
-        chats = _chat_ids(console, token, chat_id_reader)
+        chats = telegram_chats
 
     allow_path = root / "allowlist.json"
     if allow_path.exists():
@@ -380,6 +418,51 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     return summary
 
 
+def _helper_absolute(path):
+    """The path setup actually checked, not a name a later shell resolves."""
+    checked = pathlib.Path(path).expanduser()
+    if not checked.is_absolute():
+        checked = pathlib.Path.cwd() / checked
+    return str(checked)
+
+
+def _token_was_refused(exc):
+    """401 and 404 from this platform mean the token is not a bot token.
+
+    Anything else is a read failure. The exception text is never shown: the
+    request URL is built with the token in it, and some errors quote that URL.
+    """
+    code = getattr(exc, "code", None)
+    try:
+        code = int(code)
+    except (TypeError, ValueError):
+        return False
+    return code in (401, 404)
+
+
+def _prompt_telegram_token(console):
+    """Ask until the paste is one token, or the operator leaves it blank.
+
+    Echo stays off. The only confirmation is the character count.
+    """
+    while True:
+        token = console.ask_secret("  token (not echoed): ").strip()
+        if not token:
+            # Say it NOW, not at first run. The file is still written - the
+            # rest of the boilerplate is real either way - but the operator
+            # leaves knowing exactly what is missing rather than discovering
+            # it at 3am.
+            console.say("  no token entered. The file is written without one, and the")
+            console.say("  bridge will refuse to start until ALB_TOKEN is filled in.")
+            return ""
+        if _TELEGRAM_TOKEN.fullmatch(token):
+            console.say(f"  got it ({len(token)} characters).")
+            return token
+        console.say(f"  that does not look like one token ({len(token)} characters).")
+        console.say("  A bot token is digits, a colon, and about 35 characters.")
+        console.say("  Nothing is shown as you paste. Paste it once, then press enter.")
+
+
 def _telegram_token(console, token_file):
     console.say()
     console.say("Bot token from @BotFather. It is written to a mode-600 file and")
@@ -389,15 +472,10 @@ def _telegram_token(console, token_file):
     if token_file:
         token = _consume_token_file(token_file)
         console.say("  token read from file and the file was removed.")
-    else:
-        token = console.ask_secret("  token (not echoed): ").strip()
-    if not token:
-        # Say it NOW, not at first run. The file is still written - the rest of
-        # the boilerplate is real either way - but the operator leaves knowing
-        # exactly what is missing rather than discovering it at 3am.
-        console.say("  no token entered. The file is written without one, and the")
-        console.say("  bridge will refuse to start until ALB_TOKEN is filled in.")
-    return token
+        return token
+    console.say("  Nothing will appear as you paste. Paste the token once,")
+    console.say("  then press enter.")
+    return _prompt_telegram_token(console)
 
 
 def _cmux_born():
@@ -508,6 +586,26 @@ def _same_installation(origin):
         return False
 
 
+def _prefix_letterbox_dir(command, summary):
+    """Put the mailbox's parent on the start line, when there is a mailbox.
+
+    The helper reads LETTERBOX_DIR from the bridge process. Deriving it from
+    the mailbox the operator just named means the printed command is the one
+    that rings, not a command that finds whichever letterbox is installed.
+    """
+    if not command:
+        return command
+    mail = summary.get("mail_root") or ""
+    if not mail:
+        return command
+    parent = pathlib.Path(mail).expanduser().parent
+    import shlex
+    assignment = "LETTERBOX_DIR=" + shlex.quote(str(parent))
+    if str(command).startswith("LETTERBOX_DIR="):
+        return command
+    return f"{assignment} {command}"
+
+
 def _resident_command(root, origin_of=None, executable=None):
     """The command that starts THIS installation, or None if there isn't one.
 
@@ -562,6 +660,9 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running,
     but cannot find is what costs trust, not a started process.
     """
     command = _resident_command(root) if command is _UNSET else command
+    command = _prefix_letterbox_dir(command, summary)
+    if isinstance(command, str) and command:
+        summary["start_command"] = command
     if command is None:
         # No command a fresh shell would resolve to THIS install.
         # Declining is the honest answer: a pane that exits
@@ -674,7 +775,7 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running,
 
 
 
-def _chat_ids(console, token, reader):
+def _chat_ids(console, token, reader, ask_again=None):
     """Ask how the operator wants their chat id obtained. Both routes are real.
 
     Reading it removes a genuine trap: the payload contains a `from` id beside
@@ -682,7 +783,11 @@ def _chat_ids(console, token, reader):
     denies everything the first time a group is used - silently.
 
     Printing the command keeps a stronger claim available: for anyone who
-    chooses it, setup demonstrably never spoke to the platform.
+    chooses it, setup demonstrably never spoke to the platform. The printed
+    command keeps a placeholder. The token is never copied into it.
+
+    Returns (chat ids, token). The token may be empty when the platform
+    refused the one that was offered and it must not be saved.
 
     The choice is the operator's. Neither is the safe answer for everyone.
     """
@@ -701,44 +806,60 @@ def _chat_ids(console, token, reader):
         console.say()
         console.say(CHAT_ID_COMMAND)
         console.say()
-        return []
+        return [], token
 
-    console.say()
-    console.say("Send your bot a message now, then press enter.")
-    console.ask("  ready", "")
+    while True:
+        console.say()
+        console.say("Send your bot a message now, then press enter.")
+        console.ask("  ready", "")
 
-    try:
-        found = reader(token)
-    except Exception as exc:  # noqa: BLE001 - any failure falls back, never crashes setup
-        # A failed read must not leave a half-made install. Fall back to the
-        # route that needs nothing from us.
-        console.say(f"  could not read it: {exc}")
-        console.say("  run this instead:")
-        console.say(CHAT_ID_COMMAND)
-        return []
+        try:
+            found = reader(token)
+        except Exception as exc:  # noqa: BLE001 - any failure falls back, never crashes setup
+            if _token_was_refused(exc):
+                # 401/404 is the token. Say so, and do not save it. A generic
+                # "could not read it" made a wrong token look like success.
+                console.say("  that token is not recognised. The platform")
+                console.say("  answered 401 or 404. It was not saved.")
+                if ask_again is None:
+                    console.say("  An existing config was left as it was.")
+                    return [], ""
+                console.say("  Paste the token once, then press enter.")
+                token = ask_again()
+                if not token:
+                    return [], ""
+                continue
+            # Any other failure: do not print the exception. Its text can
+            # quote the request URL, and that URL contains the token.
+            console.say("  could not read it. The details are not shown,")
+            console.say("  because a failure line can contain the token.")
+            console.say("  This was not a rejected token. Run this instead,")
+            console.say("  and put the token only where the placeholder is:")
+            console.say(CHAT_ID_COMMAND)
+            return [], token
 
-    if not found:
-        console.say("  nothing came back - that usually means the bot has not")
-        console.say("  been messaged yet, or another process is polling it.")
-        console.say("  run this when you have:")
-        console.say(CHAT_ID_COMMAND)
-        return []
+        if not found:
+            console.say("  nothing came back - that usually means the bot has not")
+            console.say("  been messaged yet, or another process is polling it.")
+            console.say("  run this when you have:")
+            console.say(CHAT_ID_COMMAND)
+            return [], token
 
-    console.say()
-    for index, entry in enumerate(found, start=1):
-        console.say(f"  {index}) {entry['chat_id']}  {entry.get('label', '')}".rstrip())
-    console.say()
-    picked = console.ask("  which one is you (number, or blank for none)", "").strip()
+        console.say()
+        for index, entry in enumerate(found, start=1):
+            console.say(f"  {index}) {entry['chat_id']}  {entry.get('label', '')}".rstrip())
+        console.say()
+        picked = console.ask("  which one is you (number, or blank for none)", "").strip()
 
-    # Blank, a word, an out-of-range number: all mean no entry. An allowlist
-    # written from a value we did not understand is the failure this command
-    # exists to avoid.
-    if not picked.isdigit():
-        return []
-    index = int(picked)
-    if not 1 <= index <= len(found):
-        return []
-    return [str(found[index - 1]["chat_id"])]
+        # Blank, a word, an out-of-range number: all mean no entry. An allowlist
+        # written from a value we did not understand is the failure this command
+        # exists to avoid.
+        if not picked.isdigit():
+            return [], token
+        index = int(picked)
+        if not 1 <= index <= len(found):
+            return [], token
+        return [str(found[index - 1]["chat_id"])], token
 
 
 class UnreadableConfig(Exception):
@@ -967,6 +1088,20 @@ def _closing(console, root, summary):
     console.say(f"  alb --config {root}/bridge.env --root {root} --once")
     console.say("     one cycle. Reports fetched / published / denied.")
     console.say()
-    console.say("Then the test only you can run: have someone NOT on the")
+    console.say("Optional, and not required: have someone NOT on the")
     console.say("allowlist message the bot. Expect nothing to arrive and no")
-    console.say("error. That silence is the gate working.")
+    console.say("error. That silence is the gate working. You do not need")
+    console.say("a second person to finish.")
+    console.say()
+    if summary.get("has_token"):
+        console.say("To finish: message the bot yourself, from the account")
+        console.say("you allowlisted. Then start the bridge and leave it running:")
+    else:
+        console.say("To finish: put a token in bridge.env. The bridge refuses")
+        console.say("to start until that is there. Then message the bot yourself")
+        console.say("and leave the bridge running:")
+    command = summary.get("start_command") or ""
+    if command:
+        console.say(f"  {command}")
+    else:
+        console.say(f"  alb --config {root}/bridge.env --root {root}")

@@ -390,7 +390,7 @@ def summary(process_listing, self_pid, root, environ):
         lines.append(f"  {delivery['reason']}")
         lines.append("  This is fail-closed behaviour working correctly, and it is")
         lines.append("  also indistinguishable from a dead bot. Add your chat id to")
-        lines.append("  the allowlist - see INSTALL.md, step 7.")
+        lines.append("  the allowlist - see INSTALL.md, step 4.")
         lines.append("")
     else:
         lines.append(f"DELIVERY: {delivery['reason']}")
@@ -470,7 +470,8 @@ def summary(process_listing, self_pid, root, environ):
     lines.append("")
     lines.append("DAEMON CONTEXT")
     lines.append(f"  interpreter now : {context['interpreter']}")
-    lines.append(f"  cmux resolves   : {context['cmux_found']}")
+    lines.append(f"  cmux command on PATH : {context['cmux_found']}")
+    lines.append("  (whether that command exists; not which surface rings)")
     if context["version_manager_on_path"]:
         lines.append("  WARNING: a version manager is on PATH. A service manager")
         lines.append("           will not see it. Pin absolute paths in the unit file.")

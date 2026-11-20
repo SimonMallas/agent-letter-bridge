@@ -163,12 +163,15 @@ delivered into an existing inter-agent mailbox.
 Say yes and it asks two more: the directory containing that inbox, and the
 agent's registered participant name. **Both are required.** Leave either blank
 and it writes a standalone config and tells you it did — it will not hand you
-something that looks integrated and is not. It also asks for your letterbox
-helper's path, but only if that helper is not already on `PATH`.
+something that looks integrated and is not. A letterbox seat is
+`<letterbox>/<name>`. It records the letterbox helper it found as an absolute
+`ALB_BUS_BINARY`. It asks for a path only if that helper is not already on
+`PATH`.
 
-**2. Your bot token.** Not echoed as you type, not shown again, and never
-accepted as a command-line argument — a flag would put your token in shell
-history. An agent installing for you should use
+**2. Your bot token.** Nothing is shown as you paste. Paste it once and press
+enter. Setup says how many characters it accepted, and does not show the
+token again. It is never accepted as a command-line argument — a flag would
+put your token in shell history. An agent installing for you should use
 `alb --init --token-file <mode-600-file>` instead: you write the token into
 that file; the wizard reads it and deletes it.
 

@@ -237,9 +237,11 @@ older install, run its install command again. Use Letterbox 0.5.3 or later
 (Herdr 0.6.4): it pauses before the doorbell's Enter, and some agent apps take
 an Enter that arrives with the text as part of a paste, leaving the doorbell
 line unsent in their prompt. Setup finds `letterbox` on
-`PATH`; if it is not there, setup asks for its path (normally
-`~/.local/bin/letterbox`) and records it as `ALB_BUS_BINARY`. Start the bridge with `LETTERBOX_DIR` set to the letterbox
-containing `ALB_MAIL_ROOT`'s recipient inbox. An older `letterbox` without
+`PATH` and records that absolute path as `ALB_BUS_BINARY`. If it is not
+there, setup asks for its path (normally
+`~/.local/bin/letterbox`) and records that instead. The start command that setup prints sets `LETTERBOX_DIR` to the directory
+that contains the mailbox. An
+older `letterbox` without
 `ring` makes every ring `failing` / `unparseable`; `alb --doctor` reports
 `helper does not emit doorbell-outcome v=1` instead of waiting for a silent
 ring-health failure after cutover.

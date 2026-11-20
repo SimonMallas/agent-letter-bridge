@@ -146,6 +146,10 @@ class DeliverabilityIsNotHealth(unittest.TestCase):
             text = checks.summary([], self_pid=1, root=pathlib.Path(tmp),
                                   environ={"PATH": "/bin"})
             self.assertIn("NOTHING WILL BE DELIVERED", text)
+            self.assertIn("INSTALL.md, step 4", text)
+            self.assertNotIn("step 7", text)
+            self.assertIn("cmux command on PATH", text)
+            self.assertNotIn("cmux resolves", text)
 
 
 class DaemonContext(unittest.TestCase):

@@ -299,7 +299,8 @@ class TelegramUnchanged(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         with unittest.mock.patch("alb.helper_probe.inspect_helper",
                                  return_value=("ok", "x")):
-            console = ScriptedConsole(["n", "print"], ["123456:TOKEN"])
+            token = "1234567:" + ("a" * 35)
+            console = ScriptedConsole(["n", "print"], [token])
             wizard.init(pathlib.Path(tmp.name) / "alb", console,
                         helper_found=lambda n: "/usr/local/bin/bus.sh",
                         cmux_born=lambda: False,
@@ -307,7 +308,8 @@ class TelegramUnchanged(unittest.TestCase):
                         resident_command="/opt/alb --config x --root y")
         self.assertNotIn("Slack", console.transcript)
         env = (pathlib.Path(tmp.name) / "alb" / "bridge.env").read_text()
-        self.assertEqual(env, "ALB_TOKEN=123456:TOKEN\n")
+        self.assertEqual(env, f"ALB_TOKEN={token}\n")
+        self.assertNotIn(token, console.transcript)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+- First run says when a pasted bot token was accepted: echo stays off, the prompt says nothing will appear, and the next line is the character count. A paste that is not one token (digits, a colon, about 35 characters) is asked again and is not saved.
+- A platform answer of 401 or 404 is reported as an unrecognised token and is not written into the config. The read can be tried again in the same run. Other read failures no longer print the exception, and the fallback command keeps a placeholder rather than the token.
+- The closing screen marks the stranger-message check as optional and ends on messaging the bot yourself, plus the start command. That command sets `LETTERBOX_DIR` from the mailbox directory when there is one.
+- Integrated setup records the doorbell helper it checked as an absolute `ALB_BUS_BINARY`, including when that helper was already on `PATH`.
+- `alb --doctor` points an empty allowlist at INSTALL.md step 4, and its cmux line says whether the command is on `PATH`, not which surface rings.
+
 ## [0.7.2] — 2026-11-16
 
 - Several platform bridges with separate state roots may publish into one mailbox. New inbound deduplication qualifies each source id with its platform, so equal raw IDs from different platforms do not suppress one another. An old unqualified legacy letter never silently matches a qualified update; it can yield a visible duplicate rather than withholding new mail. The candidate also records the raw update key in its private ledger, so a normal rollback to 0.7.1 remains deduplicated while that state is retained; losing the ledger before rollback can still duplicate a redelivery.
