@@ -117,14 +117,28 @@ class TokenFile(Base):
         return path
 
     def test_file_is_consumed_and_removed_and_token_is_not_echoed(self):
-        path = self._token_file()
+        path = self._token_file(text=FAKE_TOKEN)
         console, result = self.run_init(
             answers=["n", "print", ""], secrets=[], token_file=str(path))
         self.assertFalse(path.exists())
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
-        self.assertIn("ALB_TOKEN=123456:FROMFILE", env)
-        self.assertNotIn("123456:FROMFILE", console.transcript)
-        self.assertFalse(any("123456:FROMFILE" in q for q in console.asked))
+        self.assertIn(f"ALB_TOKEN={FAKE_TOKEN}", env)
+        self.assertNotIn(FAKE_TOKEN, console.transcript)
+        self.assertFalse(any(FAKE_TOKEN in q for q in console.asked))
+
+    def test_a_doubled_token_file_is_not_saved(self):
+        doubled = FAKE_TOKEN + FAKE_TOKEN
+        path = self._token_file(text=doubled)
+        with self.assertRaises(wizard.SetupError) as caught:
+            self.run_init(answers=["n", "print", ""], secrets=[],
+                          token_file=str(path))
+        message = str(caught.exception)
+        self.assertIn("does not look like one token", message)
+        self.assertIn(str(len(doubled)), message)
+        self.assertNotIn(doubled, message)
+        self.assertNotIn(FAKE_TOKEN, message)
+        self.assertFalse(path.exists())
+        self.assertFalse((self.root / "bridge.env").exists())
 
     def test_world_readable_token_file_is_refused_and_kept(self):
         path = self._token_file(mode=0o644)

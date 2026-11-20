@@ -511,6 +511,13 @@ def _telegram_token(console, token_file):
     console.say("platform, and an old token cannot be proven unused.")
     if token_file:
         token = _consume_token_file(token_file)
+        if not _TELEGRAM_TOKEN.fullmatch(token):
+            # Same rule as a paste. The file is already consumed. The message
+            # carries the count only: the text is a secret, and this line is
+            # what the command prints.
+            raise SetupError(
+                "the token file does not look like one token "
+                f"({len(token)} characters)")
         console.say("  token read from file and the file was removed.")
         console.say("  Done: the token is in. The platform has not been asked.")
         console.say("  Next: choose whether I ask the platform for your chat,")

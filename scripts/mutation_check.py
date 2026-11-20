@@ -964,8 +964,10 @@ EXTRA = {
         WIZARD, "tests.test_setup",
         '    if integrated:\n'
         '        console.say()\n'
-        '        console.say("The doorbell is your letterbox\'s own, addressed to")',
-        "    if False:\n        console.say()\n        console.say(\"unused\")"),
+        '        console.say("A new message will be announced through the folder")',
+        '    if False:\n'
+        '        console.say()\n'
+        '        console.say("A new message will be announced through the folder")'),
     "a helper ring is a ring": (
         WIZARD, "tests.test_setup",
         '    if summary.get("ring") not in RINGS:',

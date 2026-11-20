@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 - First run says when a pasted bot token was accepted by this machine: echo stays off, the prompt says nothing will appear, and the next line thanks you, gives the character count, says the platform has not been asked, and names the next step. A paste that is not one token (digits, a colon, about 35 characters) is asked again and is not saved.
+- A token read from a file is held to the same one-token shape as a paste. A file that is not one token is not written into the config, and the error names only the character count.
 - After each step the wizard says that step is done and what comes next. There is no "step N of M", because the path branches. The last lines say the bridge is not working yet, and that it is working only once it is running and a message from you shows up. The opening question and the pane question are written for someone setting this up for the first time. A paste does not contact the platform.
 - A platform answer of 401 or 404 is reported as an unrecognised token and is not written into the config. The read can be tried again in the same run. Other read failures no longer print the exception, and the fallback command keeps a placeholder rather than the token.
 - The closing screen marks the stranger-message check as optional and ends on messaging the bot yourself, plus the start command. That command sets `LETTERBOX_DIR` from the mailbox directory when there is one.
