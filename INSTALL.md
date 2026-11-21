@@ -178,9 +178,9 @@ something that looks integrated and is not. A letterbox seat is
 enter. Setup thanks you, says this machine accepted the paste as one token,
 gives the character count, says the platform has not been asked, and names
 the next step. It does not show the token again. It is never accepted as a command-line argument — a flag would
-put your token in shell history. An agent installing for you should use
-`alb --init --token-file <mode-600-file>` instead: you write the token into
-that file; the wizard reads it and deletes it.
+put your token in shell history. An agent installing for you opens a
+terminal that is already waiting at that paste. You paste and press enter.
+You write a file only when that terminal cannot be opened.
 
 **3. How to get your chat id — `read` or `print`.** Both are real options:
 
@@ -193,7 +193,9 @@ that file; the wizard reads it and deletes it.
 the bridge to collect properly later. Pick whichever you prefer; neither is the
 safe answer for everybody.
 
-**4. Your agent's pane, if you want the ring.** It lists the panes it can see.
+**4. Your agent's pane, if you want the ring.** When this terminal already
+named a seat, this question is not asked. Init says there is no pane to
+pick, and the ring is the letterbox helper. Otherwise it lists the panes it can see.
 **It will not pick one** — a listing can't tell which pane holds your agent, and
 a ring typed into the wrong pane lands in someone else's session. Copy the id
 into `bridge.env` as `ALB_SURFACE`.

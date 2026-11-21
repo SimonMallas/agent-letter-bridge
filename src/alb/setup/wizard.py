@@ -181,8 +181,10 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
 
     Note the absence of a `token` parameter: it is asked for, never passed.
     A signature that accepted one would grow a --token flag, and a flag is
-    shell history. `--token-file` is the agent-driven path: a 0600 file is
-    read and deleted; the token string never appears in argv.
+    shell history. `--token-file` is for when no terminal can take the
+    paste: a 0600 file is read and deleted, so the token never appears in
+    argv. When the person is here, the hidden prompt is the path, in a
+    terminal the caller does not read.
 
     `letterbox_agent` is the seat this terminal already has. There is no
     flag for it. A name the caller types can point delivery at the wrong

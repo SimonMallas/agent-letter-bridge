@@ -30,10 +30,11 @@ them or re-run `init`. Go to [Upgrading a running bridge](#upgrading-a-running-b
 
 | You may | You may **not** |
 | --- | --- |
-| run `alb --init` in the terminal that already names your seat, and let it create the files | create or edit `allowlist.json` from a value you inferred |
-| hand the person the init command when you cannot run it yourself | set `LETTERBOX_DIR` or `LETTERBOX_AGENT`, answer a folder or seat question, or put a seat on the command (there is no such flag) |
-| name a mode-600 token file for `--init --token-file` | put a token in a transcript, log, commit, argv, or message |
+| open a terminal the person can type into, and run `alb --init` there | read that terminal, before, during, or after the paste |
+| let init use the seat the terminal already names | set `LETTERBOX_DIR` or `LETTERBOX_AGENT`, answer a folder or seat question, or put a seat on the command (there is no such flag) |
+| use `--token-file` only when that terminal cannot be opened | put a token in a transcript, log, commit, argv, or message |
 | run `--doctor`, `--status`, `--once` | run `--canary` or `--reply-to` without being asked — both send |
+| write the allowlist id the person gives you | create or edit `allowlist.json` from a value you inferred |
 | read letters in the inbox | commit anything under the state directory |
 | report what failed and why | conclude "installed" without the Step 8 checkpoints passing |
 
@@ -50,31 +51,30 @@ back for confirmation, or include it in a summary.
 ## Step 0 — The seat this terminal already has
 
 Use this path first. The person sent you, the agent they are already working
-with, to this repo to install the bridge. They should not be asked which
-folder or which seat. You already are that seat, or this terminal does not
-say so.
+with, to this repo to install the bridge. Do not ask whether this is
+integrated or standalone. Do not ask which folder, which seat, or which
+pane. You already are that seat, or this terminal does not say so.
 
 Look at the environment you inherited. Do not set, unset, or change
 `LETTERBOX_DIR` or `LETTERBOX_AGENT`. A name you type is a choice, and a
 choice can point the bridge at someone else's mailbox. Setup trusts only
 the seat the terminal already had. There is no flag for a seat.
 
-Run this in the same terminal, with nothing added for a folder or a seat:
+You run init in Step 3, in a terminal the person can type into, and only as:
 
 ```sh
-alb --init --root ~/.alb --token-file <mode-600-file>
+alb --init --root ~/.alb
 ```
 
-Hand the person that command only if you cannot run it yourself. They write
-the token file. They are asked how to find their chat id, and whether to
-start. They are not asked for a folder or a name.
+Nothing on that command names a folder, a seat, or a token file.
 
-- Init says it used a seat and did not ask: that is the install. Continue
-  at Step 1. The seat and the folder in that sentence are the ones to report.
-- Init says the named seat will not be used, or it asks which folder or
-  which seat: **stop.** Tell the person this terminal does not name a seat.
-  Do not answer those questions. Do not export the variables. Do not guess
-  a participant name from the repo, a transcript, or a folder listing.
+- They tell you init used a seat and did not ask: that is the install.
+  Continue. The seat and the folder they report are the ones to report.
+  You still do not read the terminal to check.
+- They tell you it asked which folder or which seat, or that the named seat
+  will not be used: **stop.** A new terminal sometimes does not carry the
+  seat. Do not answer those questions. Do not export the variables. Do not
+  guess a participant name from the repo, a transcript, or a folder listing.
 
 ### Only when this terminal does not name a seat
 
@@ -234,7 +234,7 @@ user ID from their chat app. All of that happens in their browser or app.
 first screen, so the app cannot exist before init runs.
 
 - Run `alb --init --platform slack --root ~/.alb-slack` in a terminal pane the
-  human can see (Step 5's rules on driving it apply).
+  human can see. Do not read the token prompts. Step 3 is the same rule.
 - They copy the manifest from that screen, make the app, then paste the two
   tokens at init's hidden prompts themselves: the app-level token (`xapp-`)
   and the bot token (`xoxb-`). Never ask for either in chat.
@@ -264,14 +264,17 @@ first screen, so the app cannot exist before init runs.
 
 ---
 
-## Step 3 — ASK: the bot token
+## Step 3 — The paste terminal
 
-> "I need a bot token. In Telegram, message @BotFather, send `/newbot`, and
-> write the token it gives you into a mode-600 file I will name — do not paste
-> it into this chat. **If this bot already existed for anything else, please
-> revoke and re-issue the token first** — the platform allows one consumer per
-> token, and I cannot prove an old one isn't still being polled. Then send the
-> bot any message, so there is one for setup to find."
+You open this. The person does not open a terminal, and they do not write a file.
+
+> "I am opening a terminal that will ask you to paste the bot token and press
+> enter. Nothing will appear as you paste. Do not paste it into this chat.
+> In Telegram, message @BotFather, send `/newbot`, and paste the token it
+> gives you into that terminal. **If this bot already existed for anything
+> else, please revoke and re-issue the token first** — the platform allows
+> one consumer per token, and I cannot prove an old one isn't still being
+> polled. Then send the bot any message, so there is one for setup to find."
 
 "Revoke and re-issue" is the safe default *because* the previous consumer is
 usually unknown and unprovable. But if you **know** the current consumer —
@@ -288,13 +291,53 @@ way — they live on the platform side.) Handing off a known consumer by
 agreement is a different risk from a token that "might" still be polled
 somewhere.
 
-You cannot do this step. BotFather is an interactive chat the human is in.
+You cannot message BotFather. That chat is the person's. Opening the terminal is yours.
 
 **Do not repeat the token back.** Not in a summary, not to confirm it, not in a
 log. It is a live credential.
 
-**Recommended agent path: `--init --token-file`.** Name a path the human
-writes (mode 600, owner-only, one line, the token only). Then:
+**The path is a terminal already waiting for the paste.** After Step 2, open
+one and run only this. No token file, no seat flag, and no export of
+`LETTERBOX_DIR` or `LETTERBOX_AGENT`:
+
+```sh
+alb --init --root ~/.alb
+```
+
+The wizard is already waiting. It says nothing will appear as you paste, to
+paste once and press enter, then thank you, the character count, that the
+platform has not been asked, and the next step.
+
+**Do not read that terminal.** Not before the paste, not during it, and not
+after. Do not confirm the prompt by looking. Reading it is how a key ends
+up in your transcript. The person tells you whether they saw the thank-you
+and the next step. You then run `alb --doctor --root ~/.alb`. Doctor keeps
+the bot id and does not print the secret half.
+
+**How to open it.**
+
+- **cmux**, and only when this process is already inside cmux
+  (`CMUX_SOCKET_PATH` or `CMUX_SOCKET_CAPABILITY`). The only open command
+  in this repo is the one setup uses for the bridge's own pane. The same
+  flags start the paste terminal. Do not read the workspace it creates:
+
+  ```sh
+  cmux workspace create --name "bridge setup" --command "alb --init --root ~/.alb"
+  ```
+
+- **tmux, Zellij, Herdr, Rex.** Open a new pane in the same window and run
+  the init line in it. This repo does not ship an open command for those,
+  and this page will not invent flags. There is no Rex command here to copy.
+
+If that terminal asks which folder or which seat, stop, as Step 0 says. Do
+not answer, and do not export the variables so that it carries the seat.
+
+**When you cannot open a terminal the person can type into**, the file is
+the path. That limit is why the file exists: you must not watch the paste,
+and a file you do not read keeps the key out of your transcript. It does
+not replace the terminal when the person is here and a pane can be opened.
+Name a mode-600 path they write (owner-only, one line, the token only).
+Then, in the terminal that already names the seat:
 
 ```sh
 alb --init --root ~/.alb --token-file <that-path>
@@ -306,12 +349,9 @@ echo the contents. Never pass the token as an argument (`--token` does not
 exist). Do not tell them to write `bridge.env` by hand, and do not invent a
 key name — the key is `ALB_TOKEN`, and a hand-written file with anything else
 is refused by the loader. File-writing for the config belongs to init, which
-sets the mode at creation.
-
-**If you fall back to the hidden prompt** (human typing at the wizard, not
-the token-file path): before telling them to paste anything into a pane,
-read the pane and confirm it is at the hidden token prompt. A paste into
-the wrong prompt or the wrong pane is how a token lands in a transcript.
+sets the mode at creation. Slack and Discord, below, still take a token from
+a file. That is a different path. Do not send Telegram to the file when a
+paste terminal can be opened.
 
 ---
 
@@ -326,47 +366,42 @@ the wrong prompt or the wrong pane is how a token lands in a transcript.
 > network. Which?"
 
 If they have no preference, say `print` is the more conservative default and
-let them confirm. **Do not choose silently.**
+let them confirm. **Do not choose silently.** Say this before the paste
+terminal asks, so they can answer there. You do not type the answer, and
+you do not read the terminal to see which they picked. `--doctor` tells you
+whether an id was saved.
 
 One more thing decides this for you: `read` issues a `getUpdates` call, and
 the platform allows **one** consumer per token. If anything is *already*
 polling this bot — a legacy bridge, another install — `read` can collide
 with it (often a 409), and two consumers on one token make update
 ownership and recovery ambiguous. So if the token is already in use
-anywhere, choose `print` (or stop the other consumer first). `read` is only
+anywhere, tell them to choose `print` (or stop the other consumer first). `read` is only
 safe on a bot nothing else is polling.
 
 ---
 
-## Step 5 — Run `alb --init`
+## Step 5 — `alb --init` is the paste terminal
 
-Recommended (agent-driven token handoff):
+Step 3 already started it. Do not start a second one.
+
+The offer to start the bridge is in that same terminal. Ask the person what
+they answered. Do not start another bridge from your own session.
+
+If no paste terminal could be opened, Step 3's file path is the run:
 
 ```sh
 alb --init --root ~/.alb --token-file <mode-600-file>
 ```
 
-Interactive fallback (human types the token at the hidden prompt):
-
-```sh
-alb --init --root ~/.alb
-```
-
 If it asks which folder or which seat, stop, as Step 0 says. Do not answer.
 
 It is interactive and refuses to run without a terminal, so **you cannot pipe
-answers into it** — a hidden token prompt needs a real tty. If you are
-driving a terminal the human can see, run it there. If you are an agent in a
-harness with no tty, you have two honest options: hand the human the command
-and the answers and wait, or drive `init` through a **pty** you allocate
-yourself (Python's `pty` module, or wrap the command in `script -q /dev/null`).
-If you drive a pty: match the prompts on **plain-text-stripped**
-output (the wizard's prompts carry ANSI escapes that defeat literal substring
-matching), and **stream the log incrementally** rather than buffering it —
-a harness timeout can kill the process after the files are already written,
-and a buffered log loses the evidence that it succeeded. The files land
-before the final "start now?" offer, so a lost tail does not mean a failed
-install; verify with `--doctor`, not with the transcript.
+answers into it**. Do not allocate a pty in order to watch the token prompt.
+A session you read is the same leak as reading the pane. Confirm with
+`--doctor` and with what the person says they saw, not with a transcript of
+the paste. The files land before the final "start now?" offer, so a lost
+tail does not mean a failed install.
 
 It creates the state directory `0700`, `bridge.env` `0600`, and
 `allowlist.json` `0600` **denying everyone**. It will not overwrite anything
@@ -377,7 +412,7 @@ that already exists, and it reports what it kept.
 
 At the end, `init` offers to start the bridge for you. That offer begins
 polling **immediately** — which is the 409 the stuck-table later blames on
-the operator, if another consumer is still up. Decline it if you are mid-
+the operator, if another consumer is still up. Tell them to decline it if you are mid-
 handoff or unsure whether the token is free; start the bridge yourself once
 you have confirmed nothing else is polling (Step 8.5). On an empty allowlist
 the offer already defaults to *not* starting, which is correct.
@@ -414,24 +449,39 @@ only thing between a stranger and the agents on this machine.
 
 ---
 
-## Step 7 — ASK: the ring
+## Step 7 — The ring
 
-> "Do you want a ring typed into a terminal pane when mail arrives? If so, I
-> need the pane id of the agent's terminal."
+If init used a seat, or it said there is no pane to pick, **do not ask.**
+Do not ask which cmux or tmux pane. Do not set `ALB_SURFACE`. The ring is
+the letterbox helper (`ALB_BUS_BINARY`), which resolves the pane from
+`ALB_TO`.
 
-`alb --init` lists them for you. To list them again:
+That is how a carried seat rings on cmux, tmux, Herdr, Zellij, and Rex.
+Rex is not a pane id this bridge types into. There is no Rex notifier.
+Zellij rings through that same helper, not through a notifier this bridge
+types into. You do not choose the pane, and you do not ask the person to
+name one.
+
+The question below is only for a bridge that keeps its own folder. The
+wizard asks it in the init terminal. You still do not choose a pane, and
+you do not read that terminal to copy an id out of it. The person pastes
+the id at the wizard's own question.
+
+To list panes later, outside that terminal:
 
 ```sh
 cmux --id-format uuids tree --all                                       # cmux
 tmux list-panes -a -F '#{pane_id} #{session_name}:#{window_index}.#{pane_index}'   # tmux
+herdr agent list                                                        # herdr
 ```
 
 You may list panes. **Do not choose one.** You cannot tell from a listing which
 pane holds the agent the human means, and a ring typed into the wrong pane
 lands in someone else's session.
 
-Then set `ALB_SURFACE` to the id **they** name, and `ALB_NOTIFIER=tmux` if
-applicable. A placeholder value is refused by name — do not put one there as a
+On that standalone path, `ALB_SURFACE` is the id **they** named, and
+`ALB_NOTIFIER=tmux` or `herdr` only when the listing they used was that
+one. A placeholder value is refused by name — do not put one there as a
 "to be filled in later", because a fake pane id is the one setting that fails
 silently forever.
 
@@ -439,10 +489,8 @@ silently forever.
 and sits until something sweeps. Treat a ring-less install as the exception
 that needs a reason (an agent that sweeps on its own schedule), not the
 default. `--status` reports the ring as `disabled` with a reason. It can be
-added later without touching anything else.
-
-**[integrated]** do not set `ALB_SURFACE`. The doorbell helper resolves the pane
-from `ALB_TO`.
+added later without touching anything else. A carried seat is not that
+exception: its ring is the helper, and it was not asked for a pane.
 
 ---
 

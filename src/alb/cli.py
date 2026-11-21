@@ -14,7 +14,8 @@ SET IT UP
                               entry, never overwrites a file, and never reaches
                               the platform unless you ask it to.
   alb --init --token-file PATH  same, but reads a mode-600 token file and
-                              deletes it (agent-driven handoff; no argv token).
+                              deletes it. For when no terminal can take the
+                              paste. The token never appears in argv.
 
 RUN IT
   alb --config bridge.env --root ~/.alb        both flags are required
