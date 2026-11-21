@@ -1743,3 +1743,105 @@ class FirstRunSaysWhatHappened(Base):
         self.assertIn(f"LETTERBOX_DIR={parent}", result["start_command"])
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertNotIn("LETTERBOX_DIR", env)
+
+
+class LetterboxAlreadyInstalled(Base):
+    """A first run with Letterbox already on the machine.
+
+    The opening used to say "choose no if you are setting this up for the
+    first time." That sent a person who already had a folder down the
+    bridge's own folder, and the end never named a seat. Listing the seats
+    is not picking one.
+    """
+
+    def _box(self):
+        box = pathlib.Path(self.tmp.name) / "letterbox"
+        for name in ("alpha", "beta"):
+            (box / name / "inbox").mkdir(parents=True)
+        (box / "notes").mkdir()
+        (box / ".hidden" / "inbox").mkdir(parents=True)
+        link = box / "linked"
+        link.symlink_to(box / "alpha", target_is_directory=True)
+        return box
+
+    def test_enter_means_yes_and_a_blank_seat_is_not_a_pick(self):
+        box = self._box()
+        console, result = self.run_init(answers=[], letterbox_dir=str(box))
+        self.assertEqual(console.asked[0], "  Y/n")
+        self.assertIn("1) alpha", console.transcript)
+        self.assertIn("2) beta", console.transcript)
+        self.assertNotIn(".hidden", console.transcript)
+        self.assertNotIn("linked", console.transcript)
+        self.assertNotIn("\n    notes", "\n" + console.transcript)
+        self.assertEqual(result["mode"], "standalone")
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertNotIn("ALB_MAIL_ROOT", env)
+        self.assertNotIn("ALB_TO=", env)
+        self.assertIn("This is not set up for any seat.", console.transcript)
+        self.assertNotIn("setting this up for the first time", console.transcript)
+
+    def test_picking_a_number_names_that_seat(self):
+        box = self._box()
+        console, result = self.run_init(
+            answers=["y", "2", "print", ""], letterbox_dir=str(box))
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertEqual(result["mode"], "integrated")
+        self.assertEqual(result["ring"], "helper")
+        self.assertIn("ALB_TO=beta", env)
+        self.assertIn(f"ALB_MAIL_ROOT={box / 'beta'}", env)
+        self.assertIn("This is set up for beta.", console.transcript)
+
+    def test_a_folder_path_still_works_when_seats_are_listed(self):
+        box = self._box()
+        other = pathlib.Path(self.tmp.name) / "other"
+        (other / "inbox").mkdir(parents=True)
+        _, result = self.run_init(
+            answers=["y", str(other), "custom", "print", ""],
+            letterbox_dir=str(box))
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertEqual(result["mode"], "integrated")
+        self.assertIn("ALB_TO=custom", env)
+        self.assertIn(f"ALB_MAIL_ROOT={other}", env)
+
+    def test_choosing_no_does_not_send_them_only_to_cmux(self):
+        box = self._box()
+        console, result = self.run_init(
+            answers=["n", "print", ""], letterbox_dir=str(box), panes=[])
+        self.assertEqual(result["mode"], "standalone")
+        self.assertEqual(result["resident"], "incomplete")
+        self.assertNotIn("Re-run init from a cmux pane", console.transcript)
+        self.assertIn("pick the seat", console.transcript.lower())
+        self.assertIn("No panes are visible", console.transcript)
+
+    def test_without_a_letterbox_folder_cmux_is_still_the_pane_route(self):
+        console, _ = self.run_init(answers=["n", "print"], panes=[])
+        self.assertIn("Re-run init from a cmux pane", console.transcript)
+        self.assertNotIn("setting this up for the first time", console.transcript)
+
+    def test_an_empty_read_can_be_tried_again(self):
+        calls = []
+
+        def reader(token):
+            calls.append(token)
+            if len(calls) == 1:
+                return []
+            return [{"chat_id": "111", "label": "you"}]
+
+        console, _ = self.run_init(
+            answers=["n", "read", "", "y", "", "1"], chat_id_reader=reader)
+        self.assertEqual(calls, [FAKE_TOKEN, FAKE_TOKEN])
+        self.assertEqual(
+            json.loads((self.root / "allowlist.json").read_text())["chats"],
+            ["111"])
+        self.assertIn("try this read again", console.transcript)
+        self.assertIn("try the read again", "\n".join(console.asked))
+
+    def test_declining_the_second_read_saves_no_chat(self):
+        console, _ = self.run_init(
+            answers=["n", "read", "", "n"],
+            chat_id_reader=lambda token: [])
+        self.assertEqual(
+            json.loads((self.root / "allowlist.json").read_text())["chats"],
+            [])
+        self.assertIn("No chat id was saved", console.transcript)
+        self.assertIn("denying everyone", console.transcript.lower())

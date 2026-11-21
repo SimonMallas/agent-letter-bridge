@@ -29,11 +29,10 @@ WHAT IT WILL NOT DO, and why each one is a refusal rather than an omission:
     the operator meant, and a ring typed into the wrong pane lands in somebody
     else's session.
 
-  - It will not detect a mailbox. Kimi's detect-and-ask is the right shape and
-    the detector is the problem: the only mailbox layouts we know are this
-    team's, so shipping a detector would either encode our topology in a public
-    repo or be confidently wrong on a stranger's machine. The operator is asked
-    for a path instead. Same one-key experience, nothing invented.
+  - It will not guess a mailbox from a layout it invented. If LETTERBOX_DIR
+    is given and a child folder there already has an inbox, those names are
+    listed and the operator picks one. A blank pick is not a seat. Choosing
+    no still keeps the bridge's own folder. No other layout is searched.
 """
 import json
 import os
@@ -76,6 +75,38 @@ def _write_private(path, text):
 
 def _yes(answer):
     return answer.strip().lower() in ("y", "yes")
+
+
+# A seat name is one path segment. The same shape Letterbox uses for a
+# participant: a letter, then letters, digits, dot, underscore, or hyphen.
+_SEAT_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9._-]{0,31}$")
+
+
+def _seats_in(directory):
+    """Names of child folders that already have an inbox.
+
+    Empty when the directory is missing or unreadable. A symlink is not a
+    seat: following one would offer a folder the operator did not put here.
+    Hidden names and folders with no inbox are not seats. Nothing is created.
+    """
+    if not directory:
+        return []
+    root = pathlib.Path(directory).expanduser()
+    try:
+        if not root.is_dir():
+            return []
+        names = []
+        for child in root.iterdir():
+            name = child.name
+            if not _SEAT_NAME.fullmatch(name) or child.is_symlink():
+                continue
+            inbox = child / "inbox"
+            if inbox.is_symlink() or not inbox.is_dir():
+                continue
+            names.append(name)
+    except OSError:
+        return []
+    return sorted(names)
 
 
 # The two states in which a bell will actually ring. "configured" is a pane
@@ -141,7 +172,8 @@ def _consume_token_file(path):
 def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
          cmux_born=None, bridge_running=None, start_pane=None,
          resident_command=_UNSET, token_file=None, platform="telegram",
-         app_token_file=None, slack_call=None, discord_call=None):
+         app_token_file=None, slack_call=None, discord_call=None,
+         letterbox_dir=""):
     """Create the boilerplate under `root`, asking for what cannot be derived.
 
     `console` supplies say / ask / ask_secret, so the questions are testable
@@ -167,27 +199,65 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     os.chmod(root, DIR_MODE)
     summary["kept" if existed else "created"].append(str(root))
 
-    # 2. Standalone or integrated. Asked, because the answer is about intent
-    #    and no filesystem check can see intent.
+    # 2. Standalone or integrated.
     #
-    #    SMALL QUESTION FIRST. This was one prompt carrying mode, path and name
-    #    at once, and it failed on the first integrated install: the operator
-    #    had already decided on integrated, ran this, and got a standalone
-    #    config because the prompt did not read as the thing they had decided.
-    #    Three keys were then added by hand. Nothing errored at any point.
-    #    A question that can be answered without knowing a path gets asked
-    #    first; the path is only wanted once the answer is yes.
+    # SMALL QUESTION FIRST. One prompt that carried mode, path and name failed
+    # the first integrated install: the operator had decided, and got a
+    # standalone config because the prompt did not read as that decision.
+    # The question is still yes or no. The path is asked only after yes.
+    #
+    # LETTERBOX_DIR is not a guess. It is the folder Letterbox was given.
+    # Seats already in it are listed. The person picks. A blank is not a pick.
+    seats = _seats_in(letterbox_dir)
+    summary["letterbox_seen"] = bool(seats)
+    helper_lookup = helper_found or shutil.which
+    helper_on_path = helper_lookup("letterbox")
+
     console.say("Do you already have a folder on this machine where messages")
     console.say("for a program are delivered?")
+    if seats:
+        shown = pathlib.Path(letterbox_dir).expanduser()
+        console.say("Letterbox is already on this machine.")
+        console.say(f"  folder: {shown}")
+        console.say("  seats:")
+        for index, name in enumerate(seats, start=1):
+            console.say(f"    {index}) {name}")
+        console.say("Choose yes to deliver into one of those seats.")
+        console.say("Choose no only if this bridge should keep its own folder.")
+    elif helper_on_path:
+        console.say("letterbox is on PATH. Choose yes if a folder already")
+        console.say("receives messages. Choose no only if this bridge should")
+        console.say("keep its own folder.")
     console.say("  yes - messages will go into that folder. I will ask which")
     console.say("        folder, and the name that folder already uses.")
-    console.say("  no  - the bridge keeps its own folder. Choose no if you are")
-    console.say("        setting this up for the first time.")
-    integrated = _yes(console.ask("  y/N", "n"))
+    console.say("  no  - the bridge keeps its own folder. Choose no only if")
+    console.say("        there is no such folder.")
+    mode_default = "y" if seats else "n"
+    mode_prompt = "  Y/n" if seats else "  y/N"
+    integrated = _yes(console.ask(mode_prompt, mode_default))
 
     mailbox = ""
     recipient = ""
-    if integrated:
+    if integrated and seats:
+        console.say()
+        console.say("Which seat? A number from the list, or a folder path")
+        console.say("if the seat is not listed. A blank does not pick one.")
+        picked = console.ask("  seat", "").strip()
+        if picked.isdigit():
+            index = int(picked)
+            if 1 <= index <= len(seats):
+                recipient = seats[index - 1]
+                mailbox = str(
+                    pathlib.Path(letterbox_dir).expanduser() / recipient)
+            else:
+                console.say("  that number is not in the list.")
+        elif picked:
+            mailbox = picked
+            console.say()
+            console.say("The name that folder already uses for this program.")
+            console.say("It has to match that registration, not a nickname.")
+            recipient = console.ask("  name", "").strip()
+    elif integrated:
         console.say()
         console.say("The folder that already receives those messages, not a")
         console.say("folder inside it. The seat is a name inside that folder.")
@@ -213,6 +283,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     if integrated and mailbox and recipient:
         summary["mode"] = "integrated"
         summary["mail_root"] = mailbox
+        summary["recipient"] = recipient
     elif integrated:
         # SAY SO. Falling back silently is the original defect wearing a
         # different hat: the operator answered yes, and would leave believing
@@ -230,7 +301,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     # `letterbox` a later shell finds, which may not be the one just checked.
     helper = ""
     if integrated:
-        found = (helper_found or shutil.which)("letterbox")
+        found = helper_on_path
         typed = False
         if not found:
             console.say()
@@ -744,8 +815,14 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running,
         # disabled, not broken. That is grok's install.
         console.say("No ring is configured. The bridge will not be started.")
         console.say("A poller with nothing to ping is not an install.")
-        console.say("Re-run init from a cmux pane, paste your pane id")
-        console.say("when asked, then start.")
+        if summary.get("letterbox_seen"):
+            console.say("This is not set up for a named seat.")
+            console.say("Re-run init and choose yes, then pick the seat.")
+            console.say("A cmux pane is only for a bridge that keeps its own")
+            console.say("folder.")
+        else:
+            console.say("Re-run init from a cmux pane, paste your pane id")
+            console.say("when asked, then start.")
         summary["resident"] = "incomplete"
         return
 
@@ -895,10 +972,14 @@ def _chat_ids(console, token, reader, ask_again=None):
 
         if not found:
             console.say("  Done: the platform accepted this token. No chat came back.")
-            console.say("  Next: message the bot, then run the command below.")
-            console.say("  nothing came back - that usually means the bot has not")
+            console.say("  Next: message the bot, then try this read again.")
+            console.say("  nothing came back. That usually means the bot has not")
             console.say("  been messaged yet, or another process is polling it.")
-            console.say("  run this when you have:")
+            if _yes(console.ask("  try the read again? [y/N]", "n")):
+                continue
+            console.say("  No chat id was saved.")
+            console.say("  The allowlist will deny everyone until one is added.")
+            console.say("  Run this when you have messaged the bot:")
             console.say(CHAT_ID_COMMAND)
             return [], token
 
@@ -1123,6 +1204,12 @@ def _offer_ring(console, panes, summary):
         console.say("  that id is not in the list above - re-run to refresh.")
         return "", ""
 
+    if summary.get("letterbox_seen"):
+        console.say("No panes are visible, so a pane ring cannot be set here.")
+        console.say("Letterbox seats were listed. Re-run and pick one.")
+        console.say("A pane id is only for a bridge that keeps its own folder.")
+        return "", ""
+
     console.say("No panes are visible, so this cannot be set up yet.")
     console.say("Run init again from a terminal that has at least one pane,")
     console.say("then paste your pane id. Editing the config later")
@@ -1164,6 +1251,18 @@ def _closing(console, root, summary):
         console.say(f"  {command}")
     else:
         console.say(f"  alb --config {root}/bridge.env --root {root}")
+    console.say()
+    recipient = summary.get("recipient") or ""
+    if summary.get("mode") == "integrated" and recipient:
+        console.say(f"This is set up for {recipient}.")
+        console.say("Messages go to that seat.")
+    else:
+        console.say("This is not set up for any seat.")
+        if summary.get("letterbox_seen"):
+            console.say("Nothing names who the messages are for.")
+            console.say("Re-run init and pick a seat from the folder already here.")
+        else:
+            console.say("Nothing names who the messages are for.")
     console.say()
     if summary.get("resident") == "started":
         console.say("The bridge process is running. That is not the same as working.")
