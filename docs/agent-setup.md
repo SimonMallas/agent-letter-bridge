@@ -49,6 +49,18 @@ you have new mail: check the bridge inbox
 It carries no content and no identifier by design. It means *something is
 waiting*, nothing more.
 
+## A reply in this terminal stays here
+
+The first message is the same rule as every later one. Typing the answer
+in this terminal does not send it. The phone hears it only when you run:
+
+```
+alb --reply-to <letter-id> --text "..."
+```
+
+The doorbell line above stays that one fixed line. It is not a place to
+put the answer.
+
 ## What to do
 
 In standalone mode, read `--root/inbox`. That is the whole instruction.

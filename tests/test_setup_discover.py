@@ -150,3 +150,32 @@ class CmuxPanesAreParsedNotDumped(unittest.TestCase):
         completed = mock.Mock(returncode=0, stdout="something we do not understand\n")
         with mock.patch.object(discover.subprocess, "run", return_value=completed):
             self.assertEqual(discover.list_panes("cmux"), [])
+
+
+class CheckingTheTokenDoesNotPoll(unittest.TestCase):
+    """getMe asks whether the platform accepts the token. It is not a poll."""
+
+    def test_get_me_sends_no_offset_and_returns_no_payload(self):
+        seen = {}
+
+        def fake_request(base, method, params, token, timeout=None):
+            seen["method"] = method
+            seen["params"] = dict(params)
+            return {"ok": True, "result": {"id": 1, "username": "not-returned"}}
+
+        with mock.patch.object(discover.api, "_request", fake_request):
+            self.assertIsNone(discover.check_token("1:x"))
+        self.assertEqual(seen["method"], "getMe")
+        self.assertEqual(seen["params"], {})
+        self.assertNotIn("offset", seen["params"])
+
+    def test_a_false_ok_is_a_refusal_and_names_no_token(self):
+        def fake_request(base, method, params, token, timeout=None):
+            return {"ok": False, "description": "no " + token}
+
+        with mock.patch.object(discover.api, "_request", fake_request):
+            with self.assertRaises(discover.PlatformRefused) as caught:
+                discover.check_token("1:x")
+        self.assertEqual(caught.exception.code, 401)
+        self.assertNotIn("1:x", str(caught.exception))
+        self.assertEqual(str(caught.exception), "platform refused the token")

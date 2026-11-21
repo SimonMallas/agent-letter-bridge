@@ -298,7 +298,9 @@ class TelegramUnchanged(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         with unittest.mock.patch("alb.helper_probe.inspect_helper",
-                                 return_value=("ok", "x")):
+                                 return_value=("ok", "x")), \
+             unittest.mock.patch("alb.setup.discover.check_token",
+                                 return_value=None):
             token = "1234567:" + ("a" * 35)
             console = ScriptedConsole(["n", "print"], [token])
             wizard.init(pathlib.Path(tmp.name) / "alb", console,

@@ -175,9 +175,11 @@ something that looks integrated and is not. A letterbox seat is
 `PATH`.
 
 **2. Your bot token.** Nothing is shown as you paste. Paste it once and press
-enter. Setup thanks you, says this machine accepted the paste as one token,
-gives the character count, says the platform has not been asked, and names
-the next step. It does not show the token again. It is never accepted as a command-line argument — a flag would
+enter. That paste asks the platform once whether it accepts the token.
+Accepted means the platform accepted it. Setup gives the character count
+and names the next step. A refusal is not saved. If the platform could not
+be asked, that is not a refusal, the details are not shown, and the token
+is not saved. It does not show the token again. It is never accepted as a command-line argument — a flag would
 put your token in shell history. An agent installing for you opens a
 terminal that is already waiting at that paste. You paste and press enter.
 You are not asked to type a seat name. You write a file only when that
@@ -188,7 +190,7 @@ terminal cannot be opened.
 | | what happens | what you can then say |
 | --- | --- | --- |
 | `read` | one `getUpdates` call with your token; shows the ids it found; you pick yours | the wrong-id trap is impossible — it reads `chat.id` by construction |
-| `print` | prints the command for you to run yourself | setup never touched the network at all |
+| `print` | prints the command for you to run yourself | this step does not poll. The token check already happened |
 
 `read` consumes nothing — it sends no offset, so your messages stay queued for
 the bridge to collect properly later. Pick whichever you prefer; neither is the
@@ -204,7 +206,8 @@ into `bridge.env` as `ALB_SURFACE`.
 ### What it will not do
 
 It never invents an allowlist entry, never overwrites a file that already
-exists, never reaches the platform unless you choose `read`, and never picks a
+exists, and never polls for messages unless you choose `read`. Pasting the
+token asks the platform once whether it accepts that token. It never picks a
 pane or a mailbox for you. Re-running it on a working bridge is safe: it keeps
 what is there and tells you what it kept.
 

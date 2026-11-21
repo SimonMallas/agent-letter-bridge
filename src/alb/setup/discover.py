@@ -1,4 +1,7 @@
-"""The two lookups `alb init` may perform, both explicitly asked for.
+"""The lookups `alb init` may perform.
+
+The token check is what a paste asks for. The chat read is a separate ask.
+Neither poll is implied by the other.
 
 Neither happens unless the operator chose it in that moment. They live here,
 apart from the wizard, so that what reaches the network and what reads the
@@ -9,6 +12,31 @@ import re
 import subprocess
 
 from alb.adapters.telegram import api
+
+
+class PlatformRefused(Exception):
+    """getMe answered, and the answer was not acceptance.
+
+    `code` matches the wizard's refusal check. The message stays fixed:
+    the token must not be copied into it.
+    """
+
+    code = 401
+
+    def __init__(self):
+        super().__init__("platform refused the token")
+
+
+def check_token(token, timeout=10):
+    """One getMe call. It does not read messages and it sends no offset.
+
+    getUpdates is the call that can take the poll and consume a queue.
+    This one only asks whether the platform recognises the token. The
+    payload is not returned: the wizard needs the outcome, not the bot.
+    """
+    payload = api._request(api.BASE, "getMe", {}, token, timeout=timeout)
+    if not isinstance(payload, dict) or payload.get("ok") is not True:
+        raise PlatformRefused()
 
 
 def read_chat_ids(token, timeout=10):

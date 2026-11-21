@@ -7,7 +7,7 @@ the value of this command is entirely in what it will not do:
 
   - it never invents an allowlist entry
   - it never puts a secret in argv, and so never in shell history
-  - it never touches the network unless the operator says so, in that moment
+  - a paste asks whether the platform accepts the token; a chat read is separate
   - it never overwrites something that already exists
   - it never picks a pane, or a mailbox, on the operator's behalf
 """
@@ -72,6 +72,12 @@ class Base(unittest.TestCase):
             return_value=("ok", "helper emits doorbell-outcome v=1"))
         self._probe.start()
         self.addCleanup(self._probe.stop)
+        # The real check is getMe. A test that does not pass token_check must
+        # not dial out. Tests that pass their own checker bypass this.
+        self._check = unittest.mock.patch(
+            "alb.setup.discover.check_token", return_value=None)
+        self._check.start()
+        self.addCleanup(self._check.stop)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -294,17 +300,19 @@ class ItRefusesToGuess(Base):
         self.assertEqual(json.loads((self.root / "allowlist.json").read_text())["chats"], [])
 
     def test_it_does_not_touch_the_network_when_the_operator_declines(self):
-        """Pi's constraint: a public product should be able to say setup never
-        reaches the platform unless you ask it to. Declining must make that
-        literally true, not nearly true."""
-        calls = []
+        """Declining the chat read does not poll. The paste still asks once
+        whether the platform accepts the token."""
+        polls = []
+        checks = []
         self.run_init(answers=["n", "print", ""],
-                      chat_id_reader=lambda token: calls.append(token) or [])
-        self.assertEqual(calls, [])
+                      chat_id_reader=lambda token: polls.append(token) or [],
+                      token_check=lambda token: checks.append(token))
+        self.assertEqual(polls, [])
+        self.assertEqual(checks, [FAKE_TOKEN])
 
     def test_it_reads_the_chat_id_only_when_the_operator_asks(self):
-        """Simon's decision: keep the choice. The trap-killer stays available;
-        the no-network claim stays true for anyone who declines."""
+        """Simon's decision: keep the choice. The trap-killer stays available.
+        Declining the chat read does not poll."""
         calls = []
 
         def reader(token):
@@ -396,10 +404,10 @@ class TheSecretNeverLands(Base):
     def test_the_token_is_never_printed_back(self):
         console, _ = self.run_init(answers=["n", "print", ""])
         self.assertNotIn(FAKE_TOKEN, console.transcript)
-        self.assertIn("This machine accepted that paste as one token",
-                      console.transcript)
+        self.assertIn("Accepted.", console.transcript)
+        self.assertIn("The platform accepted that token", console.transcript)
         self.assertIn(f"({len(FAKE_TOKEN)} characters)", console.transcript)
-        self.assertIn("The platform has not been asked", console.transcript)
+        self.assertNotIn("The platform has not been asked", console.transcript)
 
     def test_there_is_no_flag_that_would_put_a_token_in_shell_history(self):
         """Pi's constraint, pinned as a signature check: a --token flag is the
@@ -1619,10 +1627,10 @@ class FirstRunSaysWhatHappened(Base):
         self.assertNotIn(FAKE_TOKEN, console.transcript)
         self.assertIn(f"does not look like one token ({len(doubled)} characters)",
                       console.transcript)
-        self.assertIn("This machine accepted that paste as one token",
-                      console.transcript)
+        self.assertIn("Accepted.", console.transcript)
+        self.assertIn("The platform accepted that token", console.transcript)
         self.assertIn(f"({len(FAKE_TOKEN)} characters)", console.transcript)
-        self.assertIn("Thank you", console.transcript)
+        self.assertNotIn("Thank you", console.transcript)
         self.assertIn("or you look that up yourself", console.transcript)
 
     def test_a_refused_token_is_not_written_and_can_be_replaced(self):
@@ -1708,6 +1716,8 @@ class FirstRunSaysWhatHappened(Base):
         verdict = text.index("The bridge is not working yet")
         self.assertLess(finish, verdict)
         self.assertIn("You will know it is working", text[verdict:])
+        self.assertIn("A reply typed in the terminal stays in the terminal.", text)
+        self.assertIn("alb --reply-to", text[verdict:])
         self.assertTrue(text.rstrip().endswith("it is not."))
         self.assertNotIn("step 2 of", text)
 
@@ -1720,7 +1730,9 @@ class FirstRunSaysWhatHappened(Base):
         self.assertNotIn("inbox it already sweeps", text)
         self.assertNotIn("feel alive", text)
         self.assertIn("I will not pick one", text)
-        self.assertIn("I did not contact the platform", text)
+        self.assertIn("I did not ask the platform for a chat", text)
+        self.assertIn("does not poll", text)
+        self.assertNotIn("I did not contact the platform", text)
 
     def test_a_successful_read_says_the_platform_accepted_the_token(self):
         def reader(token):
@@ -1743,6 +1755,126 @@ class FirstRunSaysWhatHappened(Base):
         self.assertIn(f"LETTERBOX_DIR={parent}", result["start_command"])
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertNotIn("LETTERBOX_DIR", env)
+
+    def test_a_refused_paste_is_not_saved_and_can_be_replaced(self):
+        class Refused(Exception):
+            def __init__(self):
+                self.code = 401
+                super().__init__("HTTP Error 401: " + FAKE_TOKEN)
+
+        seen = []
+
+        def checker(token):
+            if token == FAKE_TOKEN:
+                self.assertFalse((self.root / "bridge.env").exists())
+            seen.append(token)
+            if token == FAKE_TOKEN:
+                raise Refused()
+
+        console, _ = self.run_init(
+            answers=["n", "print", ""],
+            secrets=(FAKE_TOKEN, OTHER_TOKEN),
+            token_check=checker)
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertEqual(seen, [FAKE_TOKEN, OTHER_TOKEN])
+        self.assertIn(f"ALB_TOKEN={OTHER_TOKEN}", env)
+        self.assertNotIn(FAKE_TOKEN, env)
+        self.assertNotIn(FAKE_TOKEN, console.transcript)
+        self.assertNotIn(OTHER_TOKEN, console.transcript)
+        self.assertIn("Refused.", console.transcript)
+        self.assertIn("was not saved", console.transcript)
+        self.assertNotIn("HTTP Error", console.transcript)
+
+    def test_a_failure_to_ask_is_not_a_refusal_and_can_be_retried(self):
+        calls = []
+
+        def checker(token):
+            calls.append(token)
+            if len(calls) == 1:
+                raise OSError("down " + token + " https://api.example/bot"
+                              + token + "/getMe")
+
+        console, _ = self.run_init(
+            answers=["n", "y", "print", ""],
+            token_check=checker)
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertEqual(calls, [FAKE_TOKEN, FAKE_TOKEN])
+        self.assertIn(f"ALB_TOKEN={FAKE_TOKEN}", env)
+        self.assertNotIn(FAKE_TOKEN, console.transcript)
+        self.assertIn("Not accepted.", console.transcript)
+        self.assertIn("not a refusal", console.transcript)
+        self.assertNotIn("Refused.", console.transcript)
+        self.assertIn("try the check again", "\n".join(console.asked))
+
+    def test_declining_the_check_retry_does_not_save_the_token(self):
+        def checker(token):
+            raise OSError("down " + token)
+
+        console, _ = self.run_init(
+            answers=["n", "n", "print", ""],
+            token_check=checker)
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertNotIn(FAKE_TOKEN, env)
+        self.assertNotIn(FAKE_TOKEN, console.transcript)
+        self.assertIn("The token was not saved.", console.transcript)
+        self.assertIn("no token entered", console.transcript)
+        self.assertIn("Not accepted.", console.transcript)
+        self.assertNotIn("Refused.", console.transcript)
+
+    def test_an_empty_paste_does_not_ask_the_platform(self):
+        checks = []
+        console, _ = self.run_init(
+            answers=["n", "print", ""], secrets=("",),
+            token_check=lambda token: checks.append(token))
+        self.assertEqual(checks, [])
+        self.assertIn("no token entered", console.transcript)
+
+    def test_a_paste_that_is_not_one_token_is_not_sent(self):
+        checks = []
+        doubled = FAKE_TOKEN + FAKE_TOKEN
+        self.run_init(
+            answers=["n", "print", ""],
+            secrets=(doubled, FAKE_TOKEN),
+            token_check=lambda token: checks.append(token))
+        self.assertEqual(checks, [FAKE_TOKEN])
+
+    def test_a_token_file_the_platform_refuses_is_not_saved(self):
+        path = pathlib.Path(self.tmp.name) / "refused-token"
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(FAKE_TOKEN)
+        os.chmod(path, 0o600)
+
+        class Refused(Exception):
+            def __init__(self):
+                self.code = 404
+                super().__init__("no " + FAKE_TOKEN)
+
+        with self.assertRaises(wizard.SetupError) as caught:
+            self.run_init(answers=["n"], secrets=[], token_file=str(path),
+                          token_check=lambda token: (_ for _ in ()).throw(Refused()))
+        self.assertNotIn(FAKE_TOKEN, str(caught.exception))
+        self.assertIn(str(len(FAKE_TOKEN)), str(caught.exception))
+        self.assertFalse((self.root / "bridge.env").exists())
+        self.assertFalse(path.exists())
+
+    def test_a_token_file_that_cannot_be_checked_is_not_saved(self):
+        path = pathlib.Path(self.tmp.name) / "unchecked-token"
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(FAKE_TOKEN)
+        os.chmod(path, 0o600)
+
+        def checker(token):
+            raise OSError("down " + token)
+
+        with self.assertRaises(wizard.SetupError) as caught:
+            self.run_init(answers=["n", "n"], secrets=[], token_file=str(path),
+                          token_check=checker)
+        self.assertNotIn(FAKE_TOKEN, str(caught.exception))
+        self.assertIn(str(len(FAKE_TOKEN)), str(caught.exception))
+        self.assertFalse((self.root / "bridge.env").exists())
+        self.assertFalse(path.exists())
 
 
 class LetterboxAlreadyInstalled(Base):

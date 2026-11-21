@@ -325,13 +325,15 @@ Do not type a path to the helper.
 No token file. No seat flag.
 
 The wizard is already waiting. It says nothing will appear as you paste, to
-paste once and press enter, then thank you, the character count, that the
-platform has not been asked, and the next step.
+paste once and press enter. A paste that is one token is one check of
+whether the platform accepts it. Accepted means the platform accepted it,
+with the character count, and the next step. A refusal is not saved. A
+failure to ask is not a refusal, and the details are not shown.
 
 **Do not read that terminal.** Not before the paste, not during it, and not
 after. Do not confirm the prompt by looking. Reading it is how a key ends
-up in your transcript. The person tells you whether they saw the thank-you
-and the next step. You then run `alb --doctor --root ~/.alb`. Doctor keeps
+up in your transcript. The person tells you whether they saw accepted and
+the next step. You then run `alb --doctor --root ~/.alb`. Doctor keeps
 the bot id and does not print the secret half.
 
 **How to open it.**
@@ -395,8 +397,8 @@ paste terminal can be opened.
 > "Setup can read your chat id itself — one `getUpdates` call with your token,
 > which consumes nothing — or it can print the command for you to run. Reading
 > it removes a real trap: the payload has a second, nearly identical id that
-> silently denies everything. Printing it means setup never touches the
-> network. Which?"
+> silently denies everything. The token was already checked. Printing does
+> not poll. Which?"
 
 If they have no preference, say `print` is the more conservative default and
 let them confirm. **Do not choose silently.** Say this before the paste
@@ -555,7 +557,10 @@ alb --config ~/.alb/bridge.env --root ~/.alb --once
 
 **Test 1 — a listed sender produces a letter.** Ask the human to message the
 bot, run one cycle, and confirm both that the cycle reported
-`published 1` **and** that a `.md` file appeared in the inbox. Tell the human:
+`published 1` **and** that a `.md` file appeared in the inbox. The answer
+goes back on the phone with `alb --reply-to <letter-id> --text "..."`. A
+reply typed only in the terminal does not reach the phone. Do that for the
+first message, not only a later one. Tell the human:
 replying to a message keeps the next message in that message's thread (Telegram: press and hold, then **Reply**; Slack: **Reply in thread**; Discord: **Reply**). Sending without Reply starts a new thread. Either way the agent receives the message, and starting a new thread is not a mistake; use Reply when one subject should stay together.
 
 If they already sent several messages before the first poll, expect

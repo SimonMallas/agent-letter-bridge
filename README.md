@@ -198,8 +198,9 @@ alb --status --root ~/.alb
 allowlist, then asks you for the things no program can derive: your bot token,
 whether your agent already has a mailbox, and your chat id — which it will
 either read for you, or print the command for you to run, your choice. It never
-invents an allowlist entry, never overwrites a file, and never touches the
-network unless you ask it to.
+invents an allowlist entry and never overwrites a file. Pasting the token asks
+the platform whether it accepts it: one check, not a poll. It does not poll
+for messages unless you choose that.
 
 **It will deliver nothing until a chat id is in that allowlist.** That is
 deliberate and it is the step people skip.

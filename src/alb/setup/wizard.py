@@ -17,9 +17,11 @@ WHAT IT WILL NOT DO, and why each one is a refusal rather than an omission:
     the process table, and by anything reading either. The token is asked for
     without echo or it is not asked for here at all.
 
-  - It will not reach the platform unless the operator asks it to, in that
-    moment, having been told what the call is. Anyone who declines can be told
-    truthfully that setup never touched the network.
+  - It will not poll for messages unless the operator asks it to, in that
+    moment, having been told what the call is. On Telegram, pasting a token
+    is a different ask: one check of whether the platform accepts the token,
+    and not a poll. Anyone who declines the chat read can be told that setup
+    did not poll. Slack and Discord do not make that check.
 
   - It will not overwrite anything. Re-running this on a working bridge must
     not silently disarm it: an allowlist reset to deny-all reads exactly like a
@@ -173,7 +175,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
          cmux_born=None, bridge_running=None, start_pane=None,
          resident_command=_UNSET, token_file=None, platform="telegram",
          app_token_file=None, slack_call=None, discord_call=None,
-         letterbox_dir="", letterbox_agent=""):
+         letterbox_dir="", letterbox_agent="", token_check=None):
     """Create the boilerplate under `root`, asking for what cannot be derived.
 
     `console` supplies say / ask / ask_secret, so the questions are testable
@@ -195,7 +197,11 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     summary = {"mode": "standalone", "created": [], "kept": [], "ring": "not configured"}
 
     console.say("alb init - creates the files, asks for the rest.")
-    console.say("Nothing here is sent anywhere unless you ask for it explicitly.")
+    if platform in ("slack", "discord"):
+        console.say("Nothing here is sent anywhere unless you ask for it explicitly.")
+    else:
+        console.say("Pasting a token asks the platform whether it accepts that token.")
+        console.say("Nothing else is sent unless you ask for it explicitly.")
     console.say()
 
     # 1. The directory. 0700 stated, not inherited: a directory created under
@@ -377,12 +383,14 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
 
     # Said here, after the folder and the helper, so "next" is the token
     # and not a question that still sits in between.
-    if summary["mode"] == "integrated":
-        _noted(console, "messages will go to the folder you named.",
-               "the token. Nothing is sent until you ask.")
+    if platform in ("slack", "discord"):
+        token_next = "the token. Nothing is sent until you ask."
     else:
-        _noted(console, "the bridge will keep its own folder.",
-               "the token. Nothing is sent until you ask.")
+        token_next = "the token. Pasting it asks whether the platform accepts it."
+    if summary["mode"] == "integrated":
+        _noted(console, "messages will go to the folder you named.", token_next)
+    else:
+        _noted(console, "the bridge will keep its own folder.", token_next)
 
     # 3. The token. Never echoed, never an argument, never printed back.
     app_token = ""
@@ -401,15 +409,15 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
                                      token_file=token_file)
         discord_wizard.invite_step(console, token)
     else:
-        token = _telegram_token(console, token_file)
+        token = _telegram_token(console, token_file, token_check)
 
     env_path = root / "bridge.env"
     env_path_existed = env_path.exists()
     if env_path_existed:
         # Never clobber. Someone re-running this already has a working bridge
         # more often than not, and a silently replaced config is a morning.
-        # Do this before any platform read, so a refusal stops with the file
-        # untouched and without having asked the platform anything.
+        # The chat read has not happened. Keeping the file does not undo a
+        # token check the paste already asked for.
         summary["kept"].append(str(env_path))
         console.say(f"  kept {env_path} - it already exists, nothing was changed")
         if integrated and not _persist_mailbox(
@@ -432,7 +440,10 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     if platform not in ("slack", "discord"):
         ask_again = None
         if not env_path_existed and not token_file:
-            ask_again = lambda: _prompt_telegram_token(console)
+            checker = _token_checker(token_check)
+
+            def ask_again():
+                return _prompt_telegram_token(console, checker)
         telegram_chats, token = _chat_ids(
             console, token, chat_id_reader, ask_again)
 
@@ -586,12 +597,51 @@ def _noted(console, done, nxt):
     console.say(f"  Next: {nxt}")
 
 
-def _prompt_telegram_token(console):
-    """Ask until the paste is one token, or the operator leaves it blank.
+def _token_checker(token_check):
+    """The paste's platform check. Tests pass their own. The real one is getMe."""
+    if token_check is not None:
+        return token_check
 
-    Echo stays off. A good paste is accepted by this machine only. The
-    platform is not asked here: the opening line promised that nothing is
-    sent unless the operator asks.
+    def real(token):
+        from alb.setup import discover
+        discover.check_token(token)
+
+    return real
+
+
+def _platform_accepts(console, token, checker):
+    """True only when the platform accepts the token.
+
+    A 401 or 404 is a refusal and is not saved. Anything else is a failure
+    to ask: not a refusal, and not accepted. The exception text is never
+    shown, because a failure line can quote the request URL, and that URL
+    contains the token.
+    """
+    while True:
+        try:
+            checker(token)
+        except Exception as exc:  # noqa: BLE001 - classified, never printed
+            if _token_was_refused(exc):
+                console.say("  Refused. The platform did not accept that token.")
+                console.say(f"  ({len(token)} characters). It was not saved.")
+                return False
+            console.say("  Not accepted. The platform could not be asked.")
+            console.say("  This is not a refusal. The details are not shown,")
+            console.say("  because a failure line can contain the token.")
+            if _yes(console.ask("  try the check again? [y/N]", "n")):
+                continue
+            console.say("  The token was not saved.")
+            return False
+        console.say("  Accepted. The platform accepted that token")
+        console.say(f"  ({len(token)} characters). It is not shown again.")
+        return True
+
+
+def _prompt_telegram_token(console, checker):
+    """Ask until the platform accepts one token, or the operator leaves it blank.
+
+    Echo stays off. The shape check is local. Accepted means the platform
+    said so. A paste that is not one token is not sent.
     """
     while True:
         token = console.ask_secret("  token (not echoed): ").strip()
@@ -605,18 +655,19 @@ def _prompt_telegram_token(console):
             console.say("  Next: the chat question. A read cannot succeed without a token.")
             return ""
         if _TELEGRAM_TOKEN.fullmatch(token):
-            console.say("  Thank you. This machine accepted that paste as one token")
-            console.say(f"  ({len(token)} characters). The platform has not been asked,")
-            console.say("  so this is not the platform accepting it.")
-            console.say("  Next: choose whether I ask the platform for your chat,")
-            console.say("  or you look that up yourself.")
-            return token
+            if _platform_accepts(console, token, checker):
+                console.say("  Next: choose whether I ask the platform for your chat,")
+                console.say("  or you look that up yourself.")
+                return token
+            console.say("  Paste the token once, then press enter.")
+            continue
         console.say(f"  that does not look like one token ({len(token)} characters).")
         console.say("  A bot token is digits, a colon, and about 35 characters.")
         console.say("  Nothing is shown as you paste. Paste it once, then press enter.")
 
 
-def _telegram_token(console, token_file):
+def _telegram_token(console, token_file, token_check):
+    checker = _token_checker(token_check)
     console.say()
     console.say("Bot token from @BotFather. It is written to a mode-600 file and")
     console.say("not shown again. If this bot existed before, revoke and re-issue")
@@ -631,14 +682,17 @@ def _telegram_token(console, token_file):
             raise SetupError(
                 "the token file does not look like one token "
                 f"({len(token)} characters)")
+        if not _platform_accepts(console, token, checker):
+            raise SetupError(
+                "the platform did not accept the token "
+                f"({len(token)} characters)")
         console.say("  token read from file and the file was removed.")
-        console.say("  Done: the token is in. The platform has not been asked.")
         console.say("  Next: choose whether I ask the platform for your chat,")
         console.say("  or you look that up yourself.")
         return token
     console.say("  Nothing will appear as you paste. Paste the token once,")
     console.say("  then press enter.")
-    return _prompt_telegram_token(console)
+    return _prompt_telegram_token(console, checker)
 
 
 def _cmux_born():
@@ -951,9 +1005,9 @@ def _chat_ids(console, token, reader, ask_again=None):
     the `chat` id, they are identical in a direct message, and the wrong one
     denies everything the first time a group is used - silently.
 
-    Printing the command keeps a stronger claim available: for anyone who
-    chooses it, setup demonstrably never spoke to the platform. The printed
-    command keeps a placeholder. The token is never copied into it.
+    Printing the command keeps the poll off. On Telegram the token check
+    already happened when there was a token. The printed command keeps a
+    placeholder. The token is never copied into it.
 
     Returns (chat ids, token). The token may be empty when the platform
     refused the one that was offered and it must not be saved.
@@ -965,14 +1019,17 @@ def _chat_ids(console, token, reader, ask_again=None):
     console.say("  read  - I make ONE getUpdates call with your token and show")
     console.say("          you the ids it returns. It consumes nothing and")
     console.say("          leaves your messages queued.")
-    console.say("  print - I print the command and you run it yourself. I never")
-    console.say("          touch the network.")
+    console.say("  print - I print the command and you run it yourself. I do")
+    console.say("          not poll for messages.")
     choice = console.ask("  read or print", "print").strip().lower()
 
     if choice != "read" or reader is None:
         console.say()
-        console.say("  Done: I did not contact the platform, so I cannot say")
-        console.say("  whether it accepts this token.")
+        console.say("  Done: I did not ask the platform for a chat.")
+        if token:
+            console.say("  The token check already happened. This step does not poll.")
+        else:
+            console.say("  This step does not poll.")
         console.say("  Next: run the command below, then put the number in")
         console.say("  the allowlist.")
         console.say()
@@ -1313,5 +1370,8 @@ def _closing(console, root, summary):
         console.say("the same as working.")
     else:
         console.say("The bridge is not working yet. These files do not run it.")
-    console.say("You will know it is working when it is running and a message")
-    console.say("from you shows up. Until that message shows up, it is not.")
+    console.say("A reply typed in the terminal stays in the terminal.")
+    console.say("The phone hears the answer only when alb --reply-to sends it.")
+    console.say("You will know it is working when it is running, a message")
+    console.say("from you shows up, and the answer comes back on the phone.")
+    console.say("Until then, it is not.")
