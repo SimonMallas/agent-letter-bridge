@@ -180,7 +180,8 @@ gives the character count, says the platform has not been asked, and names
 the next step. It does not show the token again. It is never accepted as a command-line argument — a flag would
 put your token in shell history. An agent installing for you opens a
 terminal that is already waiting at that paste. You paste and press enter.
-You write a file only when that terminal cannot be opened.
+You are not asked to type a seat name. You write a file only when that
+terminal cannot be opened.
 
 **3. How to get your chat id — `read` or `print`.** Both are real options:
 

@@ -31,7 +31,7 @@ them or re-run `init`. Go to [Upgrading a running bridge](#upgrading-a-running-b
 | You may | You may **not** |
 | --- | --- |
 | open a terminal the person can type into, and run `alb --init` there | read that terminal, before, during, or after the paste |
-| let init use the seat the terminal already names | set `LETTERBOX_DIR` or `LETTERBOX_AGENT`, answer a folder or seat question, or put a seat on the command (there is no such flag) |
+| pass this terminal's existing `LETTERBOX_AGENT`, `LETTERBOX_DIR`, and `PATH` into the paste terminal by reference | assign those variables, answer a folder, seat, or helper-path question, or put a seat on the command (there is no such flag) |
 | use `--token-file` only when that terminal cannot be opened | put a token in a transcript, log, commit, argv, or message |
 | run `--doctor`, `--status`, `--once` | run `--canary` or `--reply-to` without being asked — both send |
 | write the allowlist id the person gives you | create or edit `allowlist.json` from a value you inferred |
@@ -55,26 +55,30 @@ with, to this repo to install the bridge. Do not ask whether this is
 integrated or standalone. Do not ask which folder, which seat, or which
 pane. You already are that seat, or this terminal does not say so.
 
-Look at the environment you inherited. Do not set, unset, or change
-`LETTERBOX_DIR` or `LETTERBOX_AGENT`. A name you type is a choice, and a
-choice can point the bridge at someone else's mailbox. Setup trusts only
-the seat the terminal already had. There is no flag for a seat.
+Look at the environment you inherited. Do not assign, unset, or replace
+`LETTERBOX_DIR` or `LETTERBOX_AGENT`. Passing `"$LETTERBOX_AGENT"` through,
+as Step 3 does, is not a change: the shell expands the value it already
+has. A name you type is a choice, and a choice can point the bridge at
+someone else's mailbox. Setup trusts only the seat the terminal already
+had. There is no flag for a seat.
 
-You run init in Step 3, in a terminal the person can type into, and only as:
+You run init in Step 3, in a terminal the person can type into. The program
+is `alb --init`. It uses a seat only when that terminal's own environment
+already names one. A pane started by a server does not inherit this
+terminal. Step 3 passes the variables through by reference. You still do
+not type a name.
 
-```sh
-alb --init --root ~/.alb
-```
-
-Nothing on that command names a folder, a seat, or a token file.
+Nothing on that command names a folder, a seat, or a token file. There is
+still no flag.
 
 - They tell you init used a seat and did not ask: that is the install.
   Continue. The seat and the folder they report are the ones to report.
   You still do not read the terminal to check.
-- They tell you it asked which folder or which seat, or that the named seat
-  will not be used: **stop.** A new terminal sometimes does not carry the
-  seat. Do not answer those questions. Do not export the variables. Do not
-  guess a participant name from the repo, a transcript, or a folder listing.
+- They tell you it asked which folder, which seat, or for a helper path, or
+  that the named seat will not be used: **stop.** The seat did not carry.
+  Do not answer. Do not assign `LETTERBOX_DIR` or `LETTERBOX_AGENT`. Do not
+  type a helper path. Do not guess a participant name from the repo, a
+  transcript, or a folder listing.
 
 ### Only when this terminal does not name a seat
 
@@ -297,12 +301,28 @@ You cannot message BotFather. That chat is the person's. Opening the terminal is
 log. It is a live credential.
 
 **The path is a terminal already waiting for the paste.** After Step 2, open
-one and run only this. No token file, no seat flag, and no export of
-`LETTERBOX_DIR` or `LETTERBOX_AGENT`:
+one. The program it runs is this, started from the terminal that already
+names the seat:
 
 ```sh
-alb --init --root ~/.alb
+/usr/bin/env \
+  LETTERBOX_AGENT="$LETTERBOX_AGENT" \
+  LETTERBOX_DIR="$LETTERBOX_DIR" \
+  PATH="$PATH" \
+  alb --init --root ~/.alb
 ```
+
+The shell that already has the variables expands the three references. You
+do not assign them. You do not print them. You do not replace
+`"$LETTERBOX_AGENT"` with a name. A name you type can point the bridge at
+someone else's mailbox. There is still no flag. Setup trusts only the
+environment the paste terminal actually receives.
+
+`PATH` is in that line because a server-started pane does not keep this
+terminal's `PATH`, and both `alb` and `letterbox` have to be found there.
+Do not type a path to the helper.
+
+No token file. No seat flag.
 
 The wizard is already waiting. It says nothing will appear as you paste, to
 paste once and press enter, then thank you, the character count, that the
@@ -319,21 +339,34 @@ the bot id and does not print the secret half.
 - **cmux**, and only when this process is already inside cmux
   (`CMUX_SOCKET_PATH` or `CMUX_SOCKET_CAPABILITY`). The only open command
   in this repo is the one setup uses for the bridge's own pane. The same
-  flags start the paste terminal. Do not read the workspace it creates:
+  flags start the paste terminal. The seat shell expands the references.
+  Do not read the workspace it creates:
 
   ```sh
-  cmux workspace create --name "bridge setup" --command "alb --init --root ~/.alb"
+  cmux workspace create --name "bridge setup" --command \
+    "/usr/bin/env LETTERBOX_AGENT=\"$LETTERBOX_AGENT\" LETTERBOX_DIR=\"$LETTERBOX_DIR\" PATH=\"$PATH\" alb --init --root ~/.alb"
   ```
 
-- **tmux, Zellij, Herdr, Rex.** Open a new pane in the same window and run
-  the init line in it. This repo does not ship an open command for those,
-  and this page will not invent flags. There is no Rex command here to copy.
+- **Rex.** A pane opened with `rex session new` is started by the Rex
+  server and does not inherit the caller's environment. A bare `alb --init`
+  there asks for a folder and a seat. The program after `--` is the env
+  line above. Do not add Rex flags this page does not show. It shows none:
+  this repo does not ship that command. If you do not already know a
+  complete `rex session new` line, do not guess one.
+- **tmux, Zellij, Herdr.** Open a new pane in the same window and run the
+  env line in it. This repo does not ship an open command for those, and
+  this page will not invent flags. Inheritance was not measured for them.
+  Do not rely on it.
 
-If that terminal asks which folder or which seat, stop, as Step 0 says. Do
-not answer, and do not export the variables so that it carries the seat.
+If that terminal asks which folder, which seat, or for a helper path, stop,
+as Step 0 says. Do not answer. Do not assign the variables to a value you
+chose.
 
-**When you cannot open a terminal the person can type into**, the file is
-the path. That limit is why the file exists: you must not watch the paste,
+**When you cannot open a terminal the person can type into**, including when
+opening one would mean guessing a command, the file is the path. Run it
+here, in the terminal that already names the seat, so the route is still
+the agent the person was talking to. That limit is why the file exists:
+you must not watch the paste,
 and a file you do not read keeps the key out of your transcript. It does
 not replace the terminal when the person is here and a pane can be opened.
 Name a mode-600 path they write (owner-only, one line, the token only).
