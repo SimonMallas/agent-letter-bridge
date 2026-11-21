@@ -618,6 +618,7 @@ def _init(args):
             platform=args.platform or "telegram",
             app_token_file=args.app_token_file,
             letterbox_dir=os.environ.get("LETTERBOX_DIR") or "",
+            letterbox_agent=os.environ.get("LETTERBOX_AGENT") or "",
         )
     except wizard.SetupError as exc:
         print(f"alb: {exc}", file=sys.stderr)

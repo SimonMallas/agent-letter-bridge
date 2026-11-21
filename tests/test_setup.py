@@ -1845,3 +1845,49 @@ class LetterboxAlreadyInstalled(Base):
             [])
         self.assertIn("No chat id was saved", console.transcript)
         self.assertIn("denying everyone", console.transcript.lower())
+
+    def test_a_terminal_seat_is_used_without_asking(self):
+        box = self._box()
+        console, result = self.run_init(
+            answers=["print", ""],
+            letterbox_dir=str(box),
+            letterbox_agent="beta")
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        asked = "\n".join(console.asked)
+        self.assertEqual(result["mode"], "integrated")
+        self.assertTrue(result.get("seat_carried"))
+        self.assertEqual(result["ring"], "helper")
+        self.assertIn("ALB_TO=beta", env)
+        self.assertIn(f"ALB_MAIL_ROOT={box / 'beta'}", env)
+        self.assertIn("did not choose a seat", console.transcript)
+        self.assertIn("This is set up for beta.", console.transcript)
+        self.assertNotIn("Y/n", asked)
+        self.assertNotIn("y/N", asked)
+        self.assertNotIn("seat", asked)
+        self.assertNotIn("folder", asked)
+
+    def test_a_named_seat_that_is_not_there_stops_without_asking(self):
+        box = self._box()
+        console, result = self.run_init(
+            answers=["y", "1", "print"],
+            letterbox_dir=str(box),
+            letterbox_agent="missing")
+        self.assertEqual(result["mode"], "refused")
+        self.assertEqual(result["ring"], "not configured")
+        self.assertFalse((self.root / "bridge.env").exists())
+        self.assertIn("will not ask you to choose a seat", console.transcript)
+        self.assertIn("seat: missing", console.transcript)
+        self.assertEqual(console.asked, [])
+
+    def test_a_seat_name_that_is_not_one_name_is_not_shown(self):
+        box = self._box()
+        console, result = self.run_init(
+            answers=["y"],
+            letterbox_dir=str(box),
+            letterbox_agent="../beta")
+        self.assertEqual(result["mode"], "refused")
+        self.assertNotIn("../beta", console.transcript)
+        self.assertNotIn("beta", console.transcript)
+        self.assertIn("not shown", console.transcript)
+        self.assertFalse((self.root / "bridge.env").exists())
+        self.assertEqual(console.asked, [])

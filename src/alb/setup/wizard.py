@@ -173,7 +173,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
          cmux_born=None, bridge_running=None, start_pane=None,
          resident_command=_UNSET, token_file=None, platform="telegram",
          app_token_file=None, slack_call=None, discord_call=None,
-         letterbox_dir=""):
+         letterbox_dir="", letterbox_agent=""):
     """Create the boilerplate under `root`, asking for what cannot be derived.
 
     `console` supplies say / ask / ask_secret, so the questions are testable
@@ -183,6 +183,11 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     A signature that accepted one would grow a --token flag, and a flag is
     shell history. `--token-file` is the agent-driven path: a 0600 file is
     read and deleted; the token string never appears in argv.
+
+    `letterbox_agent` is the seat this terminal already has. There is no
+    flag for it. A name the caller types can point delivery at the wrong
+    mailbox, so a name that is not already a seat stops setup instead of
+    asking the person to pick one.
     """
     root = pathlib.Path(root).expanduser()
     summary = {"mode": "standalone", "created": [], "kept": [], "ring": "not configured"}
@@ -212,33 +217,68 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     summary["letterbox_seen"] = bool(seats)
     helper_lookup = helper_found or shutil.which
     helper_on_path = helper_lookup("letterbox")
-
-    console.say("Do you already have a folder on this machine where messages")
-    console.say("for a program are delivered?")
-    if seats:
-        shown = pathlib.Path(letterbox_dir).expanduser()
-        console.say("Letterbox is already on this machine.")
-        console.say(f"  folder: {shown}")
-        console.say("  seats:")
-        for index, name in enumerate(seats, start=1):
-            console.say(f"    {index}) {name}")
-        console.say("Choose yes to deliver into one of those seats.")
-        console.say("Choose no only if this bridge should keep its own folder.")
-    elif helper_on_path:
-        console.say("letterbox is on PATH. Choose yes if a folder already")
-        console.say("receives messages. Choose no only if this bridge should")
-        console.say("keep its own folder.")
-    console.say("  yes - messages will go into that folder. I will ask which")
-    console.say("        folder, and the name that folder already uses.")
-    console.say("  no  - the bridge keeps its own folder. Choose no only if")
-    console.say("        there is no such folder.")
-    mode_default = "y" if seats else "n"
-    mode_prompt = "  Y/n" if seats else "  y/N"
-    integrated = _yes(console.ask(mode_prompt, mode_default))
+    carried = (letterbox_agent or "").strip()
 
     mailbox = ""
     recipient = ""
-    if integrated and seats:
+    if carried:
+        # The seat came with the terminal. Do not ask, and do not fall
+        # through into the question a person answers for themselves.
+        usable = bool(_SEAT_NAME.fullmatch(carried)) and carried in seats
+        if not usable:
+            console.say("This terminal names a seat, and setup will not use it.")
+            if _SEAT_NAME.fullmatch(carried):
+                console.say(f"  seat: {carried}")
+            else:
+                console.say("  The name is not a single seat name, so it is not shown.")
+            if letterbox_dir:
+                shown = pathlib.Path(letterbox_dir).expanduser()
+                console.say(f"  folder: {shown}")
+                console.say("That seat is not a child folder with an inbox there.")
+            else:
+                console.say("The Letterbox folder is not set, so there is nowhere to look.")
+            console.say("Setup stopped. It will not ask you to choose a seat.")
+            console.say("Run it again from the seat's own terminal, or from a")
+            console.say("terminal that does not name a seat if you mean to choose.")
+            summary["mode"] = "refused"
+            summary["ring"] = "not configured"
+            summary["resident"] = "not started"
+            summary["has_token"] = False
+            return summary
+        shown = pathlib.Path(letterbox_dir).expanduser()
+        mailbox = str(shown / carried)
+        recipient = carried
+        integrated = True
+        summary["seat_carried"] = True
+        console.say("This terminal already names a seat. Setup will use it.")
+        console.say(f"  seat: {carried}")
+        console.say(f"  folder: {mailbox}")
+        console.say("This run did not choose a seat, and it did not ask.")
+    else:
+        console.say("Do you already have a folder on this machine where messages")
+        console.say("for a program are delivered?")
+        if seats:
+            shown = pathlib.Path(letterbox_dir).expanduser()
+            console.say("Letterbox is already on this machine.")
+            console.say(f"  folder: {shown}")
+            console.say("  seats:")
+            for index, name in enumerate(seats, start=1):
+                console.say(f"    {index}) {name}")
+            console.say("Choose yes to deliver into one of those seats.")
+            console.say("Choose no only if this bridge should keep its own folder.")
+        elif helper_on_path:
+            console.say("letterbox is on PATH. Choose yes if a folder already")
+            console.say("receives messages. Choose no only if this bridge should")
+            console.say("keep its own folder.")
+        console.say("  yes - messages will go into that folder. I will ask which")
+        console.say("        folder, and the name that folder already uses.")
+        console.say("  no  - the bridge keeps its own folder. Choose no only if")
+        console.say("        there is no such folder.")
+        mode_default = "y" if seats else "n"
+        mode_prompt = "  Y/n" if seats else "  y/N"
+        integrated = _yes(console.ask(mode_prompt, mode_default))
+
+    if not carried and integrated and seats:
         console.say()
         console.say("Which seat? A number from the list, or a folder path")
         console.say("if the seat is not listed. A blank does not pick one.")
@@ -257,7 +297,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
             console.say("The name that folder already uses for this program.")
             console.say("It has to match that registration, not a nickname.")
             recipient = console.ask("  name", "").strip()
-    elif integrated:
+    elif integrated and not carried:
         console.say()
         console.say("The folder that already receives those messages, not a")
         console.say("folder inside it. The seat is a name inside that folder.")

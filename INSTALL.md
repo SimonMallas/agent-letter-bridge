@@ -153,12 +153,18 @@ This does every remaining piece of setup that is typing rather than judgement:
 creates the state directory `0700`, writes `bridge.env` at `0600`, and writes
 `allowlist.json` at `0600` **denying everyone**.
 
+If this terminal already names a seat (`LETTERBOX_AGENT` is set, and that
+name is a child of `LETTERBOX_DIR` with an inbox), init uses that seat and
+does not ask for a folder or a name. That is the path when an agent you are
+already working with runs init here. The questions below are for a terminal
+that does not name a seat.
+
 It asks you four things:
 
 **1. Do you already have a folder on this machine where messages for a program are delivered?**
-A yes/no — you do not need a path to answer it. `n` (the default) gives you
-standalone, which is the right answer unless you specifically want messages
-delivered into a folder that already receives them.
+A yes/no — you do not need a path to answer it. With no seats listed, `n`
+(the default) keeps the bridge's own folder. When seats are listed, enter
+means yes, and a blank seat is not a pick.
 
 Say yes and it asks two more: the directory containing that inbox, and the
 agent's registered participant name. **Both are required.** Leave either blank

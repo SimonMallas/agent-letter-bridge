@@ -30,7 +30,8 @@ them or re-run `init`. Go to [Upgrading a running bridge](#upgrading-a-running-b
 
 | You may | You may **not** |
 | --- | --- |
-| run `alb --init` and let it create the files | create or edit `allowlist.json` from a value you inferred |
+| run `alb --init` in the terminal that already names your seat, and let it create the files | create or edit `allowlist.json` from a value you inferred |
+| hand the person the init command when you cannot run it yourself | set `LETTERBOX_DIR` or `LETTERBOX_AGENT`, answer a folder or seat question, or put a seat on the command (there is no such flag) |
 | name a mode-600 token file for `--init --token-file` | put a token in a transcript, log, commit, argv, or message |
 | run `--doctor`, `--status`, `--once` | run `--canary` or `--reply-to` without being asked — both send |
 | read letters in the inbox | commit anything under the state directory |
@@ -46,24 +47,51 @@ back for confirmation, or include it in a summary.
 
 ---
 
-## Step 0 — ASK: standalone or integrated?
+## Step 0 — The seat this terminal already has
+
+Use this path first. The person sent you, the agent they are already working
+with, to this repo to install the bridge. They should not be asked which
+folder or which seat. You already are that seat, or this terminal does not
+say so.
+
+Look at the environment you inherited. Do not set, unset, or change
+`LETTERBOX_DIR` or `LETTERBOX_AGENT`. A name you type is a choice, and a
+choice can point the bridge at someone else's mailbox. Setup trusts only
+the seat the terminal already had. There is no flag for a seat.
+
+Run this in the same terminal, with nothing added for a folder or a seat:
+
+```sh
+alb --init --root ~/.alb --token-file <mode-600-file>
+```
+
+Hand the person that command only if you cannot run it yourself. They write
+the token file. They are asked how to find their chat id, and whether to
+start. They are not asked for a folder or a name.
+
+- Init says it used a seat and did not ask: that is the install. Continue
+  at Step 1. The seat and the folder in that sentence are the ones to report.
+- Init says the named seat will not be used, or it asks which folder or
+  which seat: **stop.** Tell the person this terminal does not name a seat.
+  Do not answer those questions. Do not export the variables. Do not guess
+  a participant name from the repo, a transcript, or a folder listing.
+
+### Only when this terminal does not name a seat
+
+A person running init themselves, in a terminal with no `LETTERBOX_AGENT`,
+is asked the question below. You are not that person. If you are the agent
+doing the install and you reached this heading, you already stopped above.
 
 > "Do you already have a folder on this machine where messages for a program
 > are delivered?"
 
 - **No / don't know → standalone.** Letters go to a directory this bridge owns.
-  Safe default: it cannot disturb anything already running. **Running inside
-  cmux does NOT make an install integrated** — integrated is about where MAIL
-  goes (an inter-agent letterbox inbox); cmux is only the ring transport, and
-  standalone installs use it too.
-- **Yes → integrated.** Letters go into that existing inbox, and the doorbell is
-  the doorbell that agent already recognises. You need its inbox path and its
-  exact participant name.
-
-**Do not decide this by inspecting the filesystem.** An inbox existing does not
-mean the operator wants letters delivered into it. There is deliberately no
-detector in the tool for the same reason — `alb --init` asks this question too,
-and you will need their answer to it either way.
+  **Running inside cmux does NOT make an install integrated** — integrated is
+  about where mail goes; cmux is only the ring transport, and standalone
+  installs use it too.
+- **Yes → integrated.** Letters go into that existing inbox. The person names
+  the folder and the participant. If the Letterbox folder already lists
+  seats, they pick a number. You still do not pick for them.
 
 ---
 
@@ -323,6 +351,8 @@ Interactive fallback (human types the token at the hidden prompt):
 ```sh
 alb --init --root ~/.alb
 ```
+
+If it asks which folder or which seat, stop, as Step 0 says. Do not answer.
 
 It is interactive and refuses to run without a terminal, so **you cannot pipe
 answers into it** — a hidden token prompt needs a real tty. If you are

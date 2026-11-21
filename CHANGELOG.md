@@ -7,6 +7,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+- When the terminal already names a seat (`LETTERBOX_AGENT`, and that name is a child of `LETTERBOX_DIR` with an inbox), setup uses it and does not ask for a folder or a name. A name that is not a seat stops setup instead of asking. There is no flag for a seat. The agent install brief leads with that path.
 - When `LETTERBOX_DIR` already holds seats (a child folder with an inbox), setup lists them and does not pick one. Pressing enter on that question is yes. A read that comes back with no chat can be tried again in the same run. The closing line names the seat, or says there is none. Choosing the bridge's own folder after those seats were listed does not say the only next step is a cmux pane.
 - First run says when a pasted bot token was accepted by this machine: echo stays off, the prompt says nothing will appear, and the next line thanks you, gives the character count, says the platform has not been asked, and names the next step. A paste that is not one token (digits, a colon, about 35 characters) is asked again and is not saved.
 - A token read from a file is held to the same one-token shape as a paste. A file that is not one token is not written into the config, and the error names only the character count.
