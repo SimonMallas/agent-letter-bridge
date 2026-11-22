@@ -1855,6 +1855,8 @@ class FirstRunSaysWhatHappened(Base):
                           token_check=lambda token: (_ for _ in ()).throw(Refused()))
         self.assertNotIn(FAKE_TOKEN, str(caught.exception))
         self.assertIn(str(len(FAKE_TOKEN)), str(caught.exception))
+        self.assertIn("did not accept", str(caught.exception))
+        self.assertNotIn("could not be asked", str(caught.exception))
         self.assertFalse((self.root / "bridge.env").exists())
         self.assertFalse(path.exists())
 
@@ -1873,6 +1875,8 @@ class FirstRunSaysWhatHappened(Base):
                           token_check=checker)
         self.assertNotIn(FAKE_TOKEN, str(caught.exception))
         self.assertIn(str(len(FAKE_TOKEN)), str(caught.exception))
+        self.assertIn("could not be asked", str(caught.exception))
+        self.assertNotIn("did not accept", str(caught.exception))
         self.assertFalse((self.root / "bridge.env").exists())
         self.assertFalse(path.exists())
 

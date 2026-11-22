@@ -610,7 +610,7 @@ def _token_checker(token_check):
 
 
 def _platform_accepts(console, token, checker):
-    """True only when the platform accepts the token.
+    """"accepted", "refused", or "unchecked".
 
     A 401 or 404 is a refusal and is not saved. Anything else is a failure
     to ask: not a refusal, and not accepted. The exception text is never
@@ -624,17 +624,17 @@ def _platform_accepts(console, token, checker):
             if _token_was_refused(exc):
                 console.say("  Refused. The platform did not accept that token.")
                 console.say(f"  ({len(token)} characters). It was not saved.")
-                return False
+                return "refused"
             console.say("  Not accepted. The platform could not be asked.")
             console.say("  This is not a refusal. The details are not shown,")
             console.say("  because a failure line can contain the token.")
             if _yes(console.ask("  try the check again? [y/N]", "n")):
                 continue
             console.say("  The token was not saved.")
-            return False
+            return "unchecked"
         console.say("  Accepted. The platform accepted that token")
         console.say(f"  ({len(token)} characters). It is not shown again.")
-        return True
+        return "accepted"
 
 
 def _prompt_telegram_token(console, checker):
@@ -655,7 +655,7 @@ def _prompt_telegram_token(console, checker):
             console.say("  Next: the chat question. A read cannot succeed without a token.")
             return ""
         if _TELEGRAM_TOKEN.fullmatch(token):
-            if _platform_accepts(console, token, checker):
+            if _platform_accepts(console, token, checker) == "accepted":
                 console.say("  Next: choose whether I ask the platform for your chat,")
                 console.say("  or you look that up yourself.")
                 return token
@@ -682,10 +682,15 @@ def _telegram_token(console, token_file, token_check):
             raise SetupError(
                 "the token file does not look like one token "
                 f"({len(token)} characters)")
-        if not _platform_accepts(console, token, checker):
+        verdict = _platform_accepts(console, token, checker)
+        if verdict == "refused":
             raise SetupError(
                 "the platform did not accept the token "
                 f"({len(token)} characters)")
+        if verdict != "accepted":
+            raise SetupError(
+                "the platform could not be asked about the token "
+                f"({len(token)} characters). It was not saved.")
         console.say("  token read from file and the file was removed.")
         console.say("  Next: choose whether I ask the platform for your chat,")
         console.say("  or you look that up yourself.")
