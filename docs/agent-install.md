@@ -33,10 +33,12 @@ them or re-run `init`. Go to [Upgrading a running bridge](#upgrading-a-running-b
 | open a terminal the person can type into, and run `alb --init` there | read that terminal, before, during, or after the paste |
 | pass this terminal's existing `LETTERBOX_AGENT`, `LETTERBOX_DIR`, and `PATH` into the paste terminal by reference | assign those variables, answer a folder, seat, or helper-path question, or put a seat on the command (there is no such flag) |
 | use `--token-file` only when that terminal cannot be opened | put a token in a transcript, log, commit, argv, or message |
-| run `--doctor`, `--status`, `--once` | run `--canary` or `--reply-to` without being asked — both send |
+| run `--doctor`, `--status`, `--once` | run `--canary`, or `--reply-to` when no letter has asked for an answer — both send. The first letter is that ask |
 | write the allowlist id the person gives you | create or edit `allowlist.json` from a value you inferred |
 | read letters in the inbox | commit anything under the state directory |
 | report what failed and why | conclude "installed" without the Step 8 checkpoints passing |
+
+The first letter asks. Once Test 1 has put that letter on disk, answer it with `alb --reply-to` and the words that message needs. Typing those words in this terminal does not send them. `--canary` does not answer the letter.
 
 **The allowlist is a security control, not configuration.** It is the only thing
 between a stranger and this machine's agents. Write exactly the id the human
@@ -579,8 +581,10 @@ files: ring failures are deliberately swallowed so a dead notifier never costs a
 letter, which means a broken ring is silent. `state/ring-health.json` records
 the last outcome; it is not proof the pane received anything.
 
-**Do not report the install as complete until Test 1 has actually produced a
-file you looked at.** "The command exited 0" is not the same claim.
+**Do not report the install as complete until you have looked at Test 1's
+letter, answered it with `alb --reply-to`, and the human confirms that answer
+is on the phone.** A letter file alone is not complete. A reply typed only in
+this terminal is not complete. "The command exited 0" is not the same claim.
 
 If **you** are the agent being woken (integrated, same pane): do not sweep the
 inbox the instant `--once` publishes. The letter is durable before the doorbell is
