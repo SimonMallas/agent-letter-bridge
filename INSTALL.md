@@ -2,6 +2,8 @@
 
 A single path from nothing to a working bridge, in order.
 
+**Open a terminal and leave it open.** Every command block on this page goes in that terminal. Copy the block, paste it, and press Enter.
+
 If you want to know *why* any step is the way it is, every step links into
 [`docs/operations.md`](docs/operations.md). This page only tells you what to do.
 

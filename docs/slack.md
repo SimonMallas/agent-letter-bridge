@@ -27,6 +27,8 @@ bridge prints. Nothing passes through anyone else.
 First time? [Slack, step by step](slack-setup.md) walks through every screen,
 with screenshots.
 
+Open a terminal. Copy this, paste it, and press Enter.
+
 ```sh
 pipx install agent-letter-bridge
 alb --init --platform slack --root ~/.alb-slack

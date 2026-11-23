@@ -160,30 +160,30 @@ Installing it with a CLI agent rather than by hand? Give the agent
 [`docs/agent-install.md`](docs/agent-install.md) — the same install written as a
 brief, with the boundaries an agent needs and a human infers.
 
-The short version, once you know the shape:
+The short version, once you know the shape. Open a terminal. Copy this block, paste it there, and press Enter:
 
 ```sh
 pipx install agent-letter-bridge                # or: uv tool install agent-letter-bridge
 alb --init --root ~/.alb                        # creates the files, asks for the rest
 ```
 
-For Slack instead of Telegram, run `alb --init --platform slack --root
+For Slack instead of Telegram, in that same terminal, run `alb --init --platform slack --root
 ~/.alb-slack`; it prints the app manifest and asks for the two tokens. What
 differs from Telegram is in [`docs/slack.md`](docs/slack.md), and
 [Slack, step by step](docs/slack-setup.md) shows every screen.
 
-For Discord, run `alb --init --platform discord --root ~/.alb-discord`; it
+For Discord, in that same terminal, run `alb --init --platform discord --root ~/.alb-discord`; it
 walks you through making the bot, asks for its token and prints the link that
 adds it to your server. What differs is in [`docs/discord.md`](docs/discord.md),
 and [Discord, step by step](docs/discord-setup.md) shows every screen.
 
-For pip, first create and activate a dedicated virtual environment, then run
-`python -m pip install agent-letter-bridge`. For development from a checkout,
-use `pipx install .` instead. Installation does not configure or start a relay.
+For pip, open a terminal, create and activate a dedicated virtual environment, then paste
+`python -m pip install agent-letter-bridge` and press Enter. For development from a checkout,
+paste `pipx install .` instead. Installation does not configure or start a relay.
 
 **`--init` may offer to start the bridge for you, and what comes next depends
 on your answer.** Only one process may hold a root at a time, so these are two
-routes, not two steps:
+routes, not two steps. In that same terminal, paste one of these and press Enter. Do not run both:
 
 ```sh
 # (a) you DECLINED the offer, or it was not made — run one cycle by hand:

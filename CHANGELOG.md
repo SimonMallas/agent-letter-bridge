@@ -7,6 +7,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+- The install page, the readme's short version, and the Slack and Discord first-time starts say to open a terminal, copy the command block, paste it, and press Enter. Later blocks on the install page use that one instruction. Reference examples were left as they were.
 - Setup pages no longer say how long the install takes. The Slack manifest copy is its own step, in the setup page, the Slack page, the agent install brief, and the text `alb --init` prints: copy from the first `{` to the last `}` before any screenshot, then paste that copy.
 - The agent install brief no longer treats the first letter's `alb --reply-to` as an unasked send. `--canary`, and `--reply-to` when no letter has asked, still send and stay forbidden. The install is not complete until the human confirms that answer is on the phone. `--status` and `--doctor` are unchanged. A sent receipt is not that confirmation. The bridge still does not send the answer itself.
 - On the token-file path, a failure to ask the platform is not worded as a refusal. A 401 or 404 still says the platform did not accept the token. The token is not saved in either case.

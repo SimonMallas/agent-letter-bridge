@@ -19,6 +19,8 @@ screenshot.
 
 ## 1. Start setup in your terminal
 
+Copy this, paste it into that terminal, and press Enter.
+
 ```sh
 alb --init --platform discord --root ~/.alb-discord
 ```
