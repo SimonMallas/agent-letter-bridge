@@ -478,18 +478,18 @@ EXTRA = {
         DISCOVER, "tests.test_setup_discover",
         '        chat = message.get("chat") or {}',
         '        chat = message.get("from") or {}'),
-    "saying yes without both details is not silently downgraded": (
+    "a blank name does not join a seat": (
         WIZARD, "tests.test_setup",
-        '        integrated = False\n        mailbox = recipient = ""',
-        '        pass'),
-    "the helper is asked for only when it is missing": (
+        "    if not typed or not _SEAT_NAME.fullmatch(typed):",
+        "    if False and not _SEAT_NAME.fullmatch(typed):"),
+    "a name that is not a seat does not join": (
         WIZARD, "tests.test_setup",
-        '        if not found:\n'
-        '            console.say()\n'
-        '            console.say("Integrated mode rings through your letterbox\'s own")',
-        '        if True:\n'
-        '            console.say()\n'
-        '            console.say("Integrated mode rings through your letterbox\'s own")'),
+        "    if typed not in seats:",
+        "    if False:"),
+    "a missing helper does not join the seat": (
+        WIZARD, "tests.test_setup",
+        "        if not join:\n            integrated = False",
+        "        if False:\n            integrated = False"),
     "the outbound letter create is the claim": (
         OUTBOUND, "tests.test_outbound",
         "    except FileExistsError:\n        raise AlreadyClaimed",

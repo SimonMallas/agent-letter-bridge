@@ -10,7 +10,7 @@ Install Agent Letter Bridge from the checkout this prompt came from. If you do n
 
 Read docs/agent-install.md. If a line below disagrees with that page, follow the line below.
 
-Do not ask me for a folder, a seat, a name, a path, a bot, or an allowlist. Do not invent a seat. There is no seat flag. Do not search this machine for a mailbox.
+Do not ask me for a folder, a path, a bot, or an allowlist. Do not invent a seat. There is no seat flag. Do not search this machine for a mailbox. Do not pass a name. The setup terminal may ask the name of the agent. Leave that question there.
 
 If LETTERBOX_DIR and LETTERBOX_AGENT are both already set and non-empty in this terminal, pass those references into the setup terminal. If either is empty, leave both off the command.
 
@@ -18,7 +18,7 @@ Open a terminal and leave it open. If no bridge is using ~/.alb, run alb --init 
 
 The setup terminal may ask which chat is mine. Leave that question there. Do not ask it yourself.
 
-If that terminal asks for a folder, a seat, a name, or a helper path, stop. Do not answer.
+If that terminal asks for a folder, a path, or a helper path, stop. Do not answer. Do not answer the name for me.
 
 Leave any bridge that is already running untouched.
 
@@ -52,10 +52,13 @@ class TheInstallPrompt(unittest.TestCase):
 
     def test_the_prompt_forbids_the_questions_a_plain_sentence_produced(self):
         for line in (
-            "Do not ask me for a folder, a seat, a name, a path, a bot, or an allowlist.",
+            "Do not ask me for a folder, a path, a bot, or an allowlist.",
+            "Do not pass a name.",
+            "The setup terminal may ask the name of the agent.",
             "If either is empty, leave both off the command.",
             "Do not read that terminal.",
-            "If that terminal asks for a folder, a seat, a name, or a helper path, stop.",
+            "If that terminal asks for a folder, a path, or a helper path, stop.",
+            "Do not answer the name for me.",
             "Leave any bridge that is already running untouched.",
             "answer it with alb --reply-to on this bridge.",
             "The installer does not send that answer.",

@@ -23,7 +23,7 @@ Install Agent Letter Bridge from the checkout this prompt came from. If you do n
 
 Read docs/agent-install.md. If a line below disagrees with that page, follow the line below.
 
-Do not ask me for a folder, a seat, a name, a path, a bot, or an allowlist. Do not invent a seat. There is no seat flag. Do not search this machine for a mailbox.
+Do not ask me for a folder, a path, a bot, or an allowlist. Do not invent a seat. There is no seat flag. Do not search this machine for a mailbox. Do not pass a name. The setup terminal may ask the name of the agent. Leave that question there.
 
 If LETTERBOX_DIR and LETTERBOX_AGENT are both already set and non-empty in this terminal, pass those references into the setup terminal. If either is empty, leave both off the command.
 
@@ -31,7 +31,7 @@ Open a terminal and leave it open. If no bridge is using ~/.alb, run alb --init 
 
 The setup terminal may ask which chat is mine. Leave that question there. Do not ask it yourself.
 
-If that terminal asks for a folder, a seat, a name, or a helper path, stop. Do not answer.
+If that terminal asks for a folder, a path, or a helper path, stop. Do not answer. Do not answer the name for me.
 
 Leave any bridge that is already running untouched.
 
@@ -44,9 +44,11 @@ When my first message arrives as a letter, answer it with alb --reply-to on this
 
 ## Step 0 — Where the letters go
 
-A terminal that does not name a seat is not asked for a folder or a name.
-The bridge keeps its own folder. That does not join a mailbox that already
-exists. Joining one needs a terminal that already names that seat.
+A terminal that does not already name a seat asks for the name of the agent.
+It does not ask for a folder. A blank name does not join. A name that is not
+already a seat does not create one and does not match a nearby name. The
+bridge keeps its own folder. Joining one needs that exact name, and a yes
+that Letterbox is already installed for this agent.
 
 | | **Standalone** | **Integrated** |
 | --- | --- | --- |
@@ -54,11 +56,12 @@ exists. Joining one needs a terminal that already names that seat.
 | Letters land in | a directory this bridge owns | the inbox it already sweeps |
 | The doorbell | a new line it must learn | the doorbell it already knows |
 | You must teach the agent | yes — one line, one path | no |
-| Setup asks you for | the token, then which chat is yours | the token, then which chat is yours. It does not ask you to name a seat |
+| Setup asks you for | the name of the agent, then the token, then which chat is yours | the token, then which chat is yours, when this terminal already names the seat |
 
-**If this terminal does not name a seat, the bridge stays standalone.**
-It owns everything it touches, so it cannot disturb something already running.
-You can switch later by adding one setting.
+**If this terminal does not already name a seat, setup asks for the name of the agent.**
+A name that is not an exact seat leaves the bridge standalone. It owns
+everything it touches, so it cannot disturb something already running.
+You can switch later by running init again and giving the exact name.
 
 Init does **not** work out the mode by looking: an inbox on disk is not you
 asking for letters to be put in it. Step 4 is what it actually asks.
@@ -181,23 +184,26 @@ creates the state directory `0700`, writes `bridge.env` at `0600`, and writes
 
 If this terminal already names a seat (`LETTERBOX_AGENT` is set, and that
 name is a child of `LETTERBOX_DIR` with an inbox), init uses that seat and
-does not ask for a folder or a name. That is the path when an agent you are
-already working with runs init here.
+does not ask for a name. That is the path when an agent you are already
+working with runs init here.
 
-If this terminal does not name a seat, init does not ask for a folder or a
-name either. There is no safe folder to attach to, so the bridge keeps its
-own folder and says so. You then paste the token.
+If this terminal does not name a seat, init asks for the name of the agent.
+It does not ask for a folder or a helper path. A blank name does not join.
+A name that is not already a seat does not create one and does not match a
+nearby name. Enter on "is Letterbox already installed for this agent" means
+yes, and yes joins that seat only. No keeps the bridge's own folder. The
+name is not saved unless it joined. There is no seat flag. The agent does
+not pass the name.
 
-The folder question appears only when this terminal was given a Letterbox
-folder that already lists seats, and was not given a seat name. Enter on
-that question means yes. A blank seat is not a pick. Yes asks which seat:
-a number from the list, or a folder path if the seat is not listed, then
-the name that folder already uses. **Both are required.** Leave either
-blank and it writes a standalone config and tells you it did. It will not
-hand you something that looks integrated and is not. A letterbox seat is
-`<letterbox>/<name>`. It records the letterbox helper it found as an absolute
-`ALB_BUS_BINARY`. It asks for a helper path only if that helper is not
-already on `PATH`.
+The folder is the one this terminal was given. If it was not given one,
+init reads only the folder Letterbox's own setup has already recorded, and
+only when that record exists. It does not search the machine, and it does
+not use the working directory.
+
+It records the letterbox helper it found on `PATH` as an absolute
+`ALB_BUS_BINARY`. If `letterbox` is not on `PATH`, it tries the one path
+the installer uses. If neither is usable, it does not ask for a path and
+it does not join. Re-run when `letterbox` is on `PATH`.
 
 It then asks three things:
 
@@ -209,7 +215,8 @@ be asked, that is not a refusal, the details are not shown, and the token
 is not saved. It does not show the token again. It is never accepted as a command-line argument — a flag would
 put your token in shell history. An agent installing for you opens a
 terminal that is already waiting at that paste. You paste and press enter.
-You are not asked to type a seat name. You write a file only when that
+You may be asked the name of the agent. You are not asked for a folder or
+a helper path. You write a file only when that
 terminal cannot be opened.
 
 **2. How to get your chat id — `read` or `print`.** Both are real options:

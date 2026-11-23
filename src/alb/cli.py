@@ -620,6 +620,8 @@ def _init(args):
             app_token_file=args.app_token_file,
             letterbox_dir=os.environ.get("LETTERBOX_DIR") or "",
             letterbox_agent=os.environ.get("LETTERBOX_AGENT") or "",
+            recorded_dir=wizard.recorded_letterbox_dir,
+            helper_install=wizard.installed_letterbox,
         )
     except wizard.SetupError as exc:
         print(f"alb: {exc}", file=sys.stderr)

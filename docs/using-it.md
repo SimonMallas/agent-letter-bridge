@@ -18,7 +18,7 @@ Install Agent Letter Bridge from the checkout this prompt came from. If you do n
 
 Read docs/agent-install.md. If a line below disagrees with that page, follow the line below.
 
-Do not ask me for a folder, a seat, a name, a path, a bot, or an allowlist. Do not invent a seat. There is no seat flag. Do not search this machine for a mailbox.
+Do not ask me for a folder, a path, a bot, or an allowlist. Do not invent a seat. There is no seat flag. Do not search this machine for a mailbox. Do not pass a name. The setup terminal may ask the name of the agent. Leave that question there.
 
 If LETTERBOX_DIR and LETTERBOX_AGENT are both already set and non-empty in this terminal, pass those references into the setup terminal. If either is empty, leave both off the command.
 
@@ -26,7 +26,7 @@ Open a terminal and leave it open. If no bridge is using ~/.alb, run alb --init 
 
 The setup terminal may ask which chat is mine. Leave that question there. Do not ask it yourself.
 
-If that terminal asks for a folder, a seat, a name, or a helper path, stop. Do not answer.
+If that terminal asks for a folder, a path, or a helper path, stop. Do not answer. Do not answer the name for me.
 
 Leave any bridge that is already running untouched.
 
@@ -36,7 +36,7 @@ When my first message arrives as a letter, answer it with alb --reply-to on this
 ```
 
 3. The one part only you can do on Telegram is making a bot: message **@BotFather**, send `/newbot`, choose a name, and copy the code it gives you. Paste that code into the terminal the agent opened. Do not send it in a chat, and do not paste it into the agent's conversation. Slack and Discord need a few more steps; they have their own guides.
-4. Send your new bot a message, for example “hello”. If the setup terminal asks which chat is yours, answer it there. If it asks for a folder, a seat, or a name, stop and tell the agent. Do not answer that.
+4. Send your new bot a message, for example “hello”. If the setup terminal asks which chat is yours, answer it there. If it asks the name of the agent, answer that there too. If it asks for a folder, a path, or a helper path, stop and tell the agent. Do not answer that.
 5. The agent tells you when the test message has arrived. You are done.
 
 If you would rather do it by hand, follow [the full installation guide](../INSTALL.md).

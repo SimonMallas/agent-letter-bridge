@@ -31,12 +31,14 @@ WHAT IT WILL NOT DO, and why each one is a refusal rather than an omission:
     the operator meant, and a ring typed into the wrong pane lands in somebody
     else's session.
 
-  - It will not guess a mailbox from a layout it invented. If LETTERBOX_DIR
-    is given and a child folder there already has an inbox, those names are
-    listed and the operator picks one. A blank pick is not a seat. Choosing
-    no still keeps the bridge's own folder. A terminal that was not given
-    that folder, and does not name a seat, is not asked: the bridge keeps
-    its own folder. No other layout is searched.
+  - It will not guess a mailbox from a layout it invented. A terminal that
+    already names a seat uses that seat. Any other terminal is asked for
+    the name of the agent, and that name joins only an exact seat in the
+    folder this terminal was given, or the one folder Letterbox's own
+    setup has already recorded. A blank does not join. A name that is not
+    a seat does not create one, and a typo does not attach to a nearby
+    name. No other layout is searched, and the working directory is not
+    a folder.
 """
 import json
 import os
@@ -173,11 +175,177 @@ def _consume_token_file(path):
     return token
 
 
+def recorded_letterbox_dir(path=None):
+    """The folder Letterbox's own setup recorded, or "" if there is none.
+
+    The file holds one path. A missing file, a symlink, or more than one
+    line is no folder. This does not look at the working directory and
+    does not search the machine. Tests pass `path` so they never open the
+    live file. The real command calls this with no argument.
+    """
+    if path is None:
+        config = os.environ.get("XDG_CONFIG_HOME") or str(
+            pathlib.Path.home() / ".config")
+        path = pathlib.Path(config) / "agent-letterbox" / "default-dir"
+    else:
+        path = pathlib.Path(path)
+    try:
+        if path.is_symlink() or not path.is_file():
+            return ""
+        text = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+    if not text or "\n" in text or "\x00" in text:
+        return ""
+    return text
+
+
+def installed_letterbox(path=None):
+    """The one helper path Letterbox's installer uses, or "" if it is absent.
+
+    Tests pass `path`. The real command calls this with no argument, which
+    is the only place that looks at the install path on this machine.
+    """
+    if path is None:
+        path = pathlib.Path.home() / ".local" / "bin" / "letterbox"
+    else:
+        path = pathlib.Path(path)
+    try:
+        if path.is_file():
+            return str(path)
+    except OSError:
+        return ""
+    return ""
+
+
+def _folder_for_a_typed_name(letterbox_dir, recorded_dir):
+    """The one folder a typed name may join, and the seats already in it.
+
+    A folder this terminal was given is the only folder, even when it
+    lists nothing. The recorded default is used only when no folder was
+    given, and only when the reader returns one. No reader means no folder.
+    """
+    given = (letterbox_dir or "").strip()
+    if given:
+        folder = str(pathlib.Path(given).expanduser())
+        return folder, _seats_in(folder)
+    recorded = ""
+    if recorded_dir is not None:
+        try:
+            recorded = (recorded_dir() or "").strip()
+        except OSError:
+            recorded = ""
+    if not recorded:
+        return "", []
+    folder = str(pathlib.Path(recorded).expanduser())
+    return folder, _seats_in(folder)
+
+
+def _ask_agent_name(console):
+    console.say("Name of the agent.")
+    console.say("One word, the name that agent already uses.")
+    console.say("A blank does not join. A name that is not already a seat")
+    console.say("does not create one and does not match a nearby name.")
+    return console.ask("  name", "").strip()
+
+
+def _join_typed_name(console, typed, folder, seats):
+    """Join an exact seat, or say why this run keeps its own folder.
+
+    Returns (integrated, mailbox, recipient). Nothing is created.
+    """
+    if not typed or not _SEAT_NAME.fullmatch(typed):
+        if typed:
+            console.say("That is not a seat name, so this run does not join a seat.")
+        else:
+            console.say("No name was given, so this run does not join a seat.")
+        console.say("The bridge will keep its own folder.")
+        if not folder:
+            console.say("Setup did not look for a folder.")
+        console.say("It will not ask you for a folder.")
+        return False, "", ""
+    if not folder:
+        console.say("Setup did not look for a folder.")
+        console.say("The name is not joined.")
+        console.say("The bridge will keep its own folder.")
+        console.say("It will not ask you for a folder.")
+        return False, "", ""
+    if typed not in seats:
+        console.say(f"  {typed} is not a seat in that folder.")
+        console.say("Setup will not create one, and it will not match a nearby name.")
+        console.say("The bridge will keep its own folder.")
+        console.say("It will not ask you for a folder.")
+        return False, "", ""
+    console.say("Is Letterbox already installed for this agent?")
+    console.say("  yes - join that seat only.")
+    console.say("  no  - the bridge keeps its own folder.")
+    if not _yes(console.ask("  Y/n", "y")):
+        console.say("The bridge will keep its own folder.")
+        return False, "", ""
+    mailbox = str(pathlib.Path(folder).expanduser() / typed)
+    return True, mailbox, typed
+
+
+def _resolve_helper(console, helper_on_path, helper_install):
+    """Return (join, helper_path). A path is never asked for.
+
+    A helper on PATH that fails its check still joins, and the path is not
+    recorded. That is the previous behaviour. Anything else has to be the
+    one installer path and has to pass the same check. If neither is
+    usable, this run does not join.
+    """
+    from alb.helper_probe import inspect_helper
+
+    def recorded(path):
+        helper = _helper_absolute(path)
+        console.say(f"  doorbell helper: {helper}")
+        console.say("  recorded as ALB_BUS_BINARY, so a later PATH")
+        console.say("  cannot swap it.")
+        return helper
+
+    def rejected(msg):
+        console.say()
+        console.say(msg)
+        console.say("Integrated mode rings through `letterbox ring`:")
+        console.say("Letterbox 0.5.1 or later for cmux, tmux and Zellij,")
+        console.say("0.6.2 or later for Herdr. To update, run your")
+        console.say("edition's install command again. Installing now will")
+        console.say("record every ring as failing until it is updated.")
+
+    if helper_on_path:
+        status, msg = inspect_helper(helper_on_path)
+        if status != "ok":
+            rejected(msg)
+            console.say("  That helper was not recorded.")
+            return True, ""
+        return True, recorded(helper_on_path)
+
+    candidate = ""
+    if helper_install is not None:
+        try:
+            candidate = (helper_install() or "").strip()
+        except OSError:
+            candidate = ""
+    if candidate:
+        status, msg = inspect_helper(candidate)
+        if status == "ok":
+            return True, recorded(candidate)
+        rejected(msg)
+
+    console.say()
+    console.say("The name matches a seat, but the helper is not available.")
+    console.say("This run keeps the bridge's own folder rather than a")
+    console.say("mailbox it cannot ring.")
+    console.say("Re-run when letterbox is on PATH.")
+    return False, ""
+
+
 def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
          cmux_born=None, bridge_running=None, start_pane=None,
          resident_command=_UNSET, token_file=None, platform="telegram",
          app_token_file=None, slack_call=None, discord_call=None,
-         letterbox_dir="", letterbox_agent="", token_check=None):
+         letterbox_dir="", letterbox_agent="", token_check=None,
+         recorded_dir=None, helper_install=None):
     """Create the boilerplate under `root`, asking for what cannot be derived.
 
     `console` supplies say / ask / ask_secret, so the questions are testable
@@ -191,9 +359,13 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     terminal the caller does not read.
 
     `letterbox_agent` is the seat this terminal already has. There is no
-    flag for it. A name the caller types can point delivery at the wrong
-    mailbox, so a name that is not already a seat stops setup instead of
-    asking the person to pick one.
+    flag for it. A carried name that is not already a seat stops setup
+    instead of asking the person to pick one. When the terminal names no
+    seat, the person is asked for the name of the agent. That name joins
+    only an exact seat. It does not create one.
+
+    `recorded_dir` and `helper_install` default to absent so a test does
+    not read this machine. The real command passes the readers.
     """
     root = pathlib.Path(root).expanduser()
     summary = {"mode": "standalone", "created": [], "kept": [], "ring": "not configured"}
@@ -217,25 +389,29 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     # 2. Standalone or integrated.
     #
     # A terminal that already names a seat uses it and does not ask.
-    # A terminal that carries a Letterbox folder lists the seats and asks
-    # once, yes or no, before any path. One prompt that carried mode, path
-    # and name failed the first integrated install. A terminal that names
-    # nothing is not asked: there is no folder this run can safely attach
-    # to, so the bridge keeps its own.
+    # Any other terminal is asked for the name of the agent. That name
+    # joins only an exact seat. There is no folder question, no numbered
+    # list, and no helper-path question.
     #
-    # LETTERBOX_DIR is not a guess. It is the folder Letterbox was given.
-    # Seats already in it are listed. The person picks. A blank is not a pick.
-    seats = _seats_in(letterbox_dir)
-    summary["letterbox_seen"] = bool(seats)
+    # The folder is the one this terminal was given. When it was not given
+    # one, the only other folder is the one Letterbox's own setup recorded,
+    # and only when that record exists. A given folder does not fall
+    # through to the record. The working directory is not a folder.
     helper_lookup = helper_found or shutil.which
     helper_on_path = helper_lookup("letterbox")
     carried = (letterbox_agent or "").strip()
 
     mailbox = ""
     recipient = ""
+    integrated = False
+    carried_ok = False
     if carried:
         # The seat came with the terminal. Do not ask, and do not fall
         # through into the question a person answers for themselves.
+        # An empty folder does not fall through to the recorded default:
+        # that would be a second way for a caller to attach a name.
+        seats = _seats_in(letterbox_dir)
+        summary["letterbox_seen"] = bool(seats)
         usable = bool(_SEAT_NAME.fullmatch(carried)) and carried in seats
         if not usable:
             console.say("This terminal names a seat, and setup will not use it.")
@@ -261,53 +437,14 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
         mailbox = str(shown / carried)
         recipient = carried
         integrated = True
-        summary["seat_carried"] = True
-        console.say("This terminal already names a seat. Setup will use it.")
-        console.say(f"  seat: {carried}")
-        console.say(f"  folder: {mailbox}")
-        console.say("This run did not choose a seat, and it did not ask.")
+        carried_ok = True
     else:
-        if seats:
-            console.say("Do you already have a folder on this machine where messages")
-            console.say("for a program are delivered?")
-            shown = pathlib.Path(letterbox_dir).expanduser()
-            console.say("Letterbox is already on this machine.")
-            console.say(f"  folder: {shown}")
-            console.say("  seats:")
-            for index, name in enumerate(seats, start=1):
-                console.say(f"    {index}) {name}")
-            console.say("Choose yes to deliver into one of those seats.")
-            console.say("Choose no only if this bridge should keep its own folder.")
-            console.say("  yes - messages will go into that folder. I will ask which")
-            console.say("        folder, and the name that folder already uses.")
-            console.say("  no  - the bridge keeps its own folder. Choose no only if")
-            console.say("        there is no such folder.")
-            integrated = _yes(console.ask("  Y/n", "y"))
-        else:
-            integrated = False
-            console.say("This terminal does not name a seat.")
-            console.say("The bridge will keep its own folder.")
-            console.say("It will not ask you for a folder or a name.")
-
-    if not carried and integrated and seats:
-        console.say()
-        console.say("Which seat? A number from the list, or a folder path")
-        console.say("if the seat is not listed. A blank does not pick one.")
-        picked = console.ask("  seat", "").strip()
-        if picked.isdigit():
-            index = int(picked)
-            if 1 <= index <= len(seats):
-                recipient = seats[index - 1]
-                mailbox = str(
-                    pathlib.Path(letterbox_dir).expanduser() / recipient)
-            else:
-                console.say("  that number is not in the list.")
-        elif picked:
-            mailbox = picked
-            console.say()
-            console.say("The name that folder already uses for this program.")
-            console.say("It has to match that registration, not a nickname.")
-            recipient = console.ask("  name", "").strip()
+        folder, seats = _folder_for_a_typed_name(
+            letterbox_dir, recorded_dir)
+        summary["letterbox_seen"] = bool(seats)
+        typed_name = _ask_agent_name(console)
+        integrated, mailbox, recipient = _join_typed_name(
+            console, typed_name, folder, seats)
 
     # A ghost path is caught HERE, while the human is still present. The
     # runtime refuses to invent a mailbox, so a config naming one would fail at
@@ -318,6 +455,28 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
         console.say(f"  {mailbox} does not exist. A mailbox belongs to an agent")
         console.say("  that already has one, so it will not be invented.")
         mailbox = ""
+
+    # The letterbox helper. Not a flag, and not a question. On PATH, the
+    # absolute path is recorded. Otherwise the one path the installer uses,
+    # and only when the helper check accepts it. If neither is usable, this
+    # run does not join: a mailbox it cannot ring is not an install.
+    helper = ""
+    if integrated and mailbox and recipient:
+        join, helper = _resolve_helper(console, helper_on_path, helper_install)
+        if not join:
+            integrated = False
+            mailbox = ""
+            recipient = ""
+            carried_ok = False
+        elif carried_ok:
+            summary["seat_carried"] = True
+            console.say("This terminal already names a seat. Setup will use it.")
+            console.say(f"  seat: {recipient}")
+            console.say(f"  folder: {mailbox}")
+            console.say("This run did not choose a seat, and it did not ask.")
+        else:
+            console.say(f"  seat: {recipient}")
+            console.say(f"  folder: {mailbox}")
 
     if integrated and mailbox and recipient:
         summary["mode"] = "integrated"
@@ -334,44 +493,6 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
         console.say("  one was blank. Writing a STANDALONE config instead.")
         console.say("  Re-run init to set up the mailbox once you have both.")
 
-    # The letterbox helper. Not a flag. Asked for only when integrated mode
-    # needs it and it is not already on PATH. When it is on PATH, the absolute
-    # path is still recorded: leaving it unset rings through whichever
-    # `letterbox` a later shell finds, which may not be the one just checked.
-    helper = ""
-    if integrated:
-        found = helper_on_path
-        typed = False
-        if not found:
-            console.say()
-            console.say("Integrated mode rings through your letterbox's own")
-            console.say("doorbell helper, and letterbox is not on PATH here.")
-            console.say("Letterbox installs it as ~/.local/bin/letterbox.")
-            helper = console.ask("  path to the helper", "").strip()
-            typed = bool(helper)
-        else:
-            helper = found
-        probe_path = helper
-        if probe_path:
-            from alb.helper_probe import inspect_helper
-            status, msg = inspect_helper(probe_path)
-            if status != "ok":
-                console.say()
-                console.say(msg)
-                console.say("Integrated mode rings through `letterbox ring`:")
-                console.say("Letterbox 0.5.1 or later for cmux, tmux and Zellij,")
-                console.say("0.6.2 or later for Herdr. To update, run your")
-                console.say("edition's install command again. Installing now will")
-                console.say("record every ring as failing until it is updated.")
-                if not typed:
-                    console.say("  That helper was not recorded.")
-                    helper = ""
-            else:
-                helper = _helper_absolute(probe_path)
-                console.say(f"  doorbell helper: {helper}")
-                console.say("  recorded as ALB_BUS_BINARY, so a later PATH")
-                console.say("  cannot swap it.")
-
     # Said here, after the folder and the helper, so "next" is the token
     # and not a question that still sits in between.
     if platform in ("slack", "discord"):
@@ -379,7 +500,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     else:
         token_next = "the token. Pasting it asks whether the platform accepts it."
     if summary["mode"] == "integrated":
-        _noted(console, "messages will go to the folder you named.", token_next)
+        _noted(console, "messages will go to that agent's folder.", token_next)
     else:
         _noted(console, "the bridge will keep its own folder.", token_next)
 
@@ -909,7 +1030,7 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running,
         console.say("A poller with nothing to ping is not an install.")
         if summary.get("letterbox_seen"):
             console.say("This is not set up for a named seat.")
-            console.say("Re-run init and choose yes, then pick the seat.")
+            console.say("Re-run init and give that seat's exact name.")
             console.say("A cmux pane is only for a bridge that keeps its own")
             console.say("folder.")
         else:
@@ -1301,7 +1422,7 @@ def _offer_ring(console, panes, summary):
 
     if summary.get("letterbox_seen"):
         console.say("No panes are visible, so a pane ring cannot be set here.")
-        console.say("Letterbox seats were listed. Re-run and pick one.")
+        console.say("A seat already in that folder can be joined by its exact name.")
         console.say("A pane id is only for a bridge that keeps its own folder.")
         return "", ""
 
@@ -1355,7 +1476,7 @@ def _closing(console, root, summary):
         console.say("This is not set up for any seat.")
         if summary.get("letterbox_seen"):
             console.say("Nothing names who the messages are for.")
-            console.say("Re-run init and pick a seat from the folder already here.")
+            console.say("Re-run init and give the exact name of a seat already there.")
         else:
             console.say("Nothing names who the messages are for.")
     console.say()

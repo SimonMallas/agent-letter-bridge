@@ -243,7 +243,7 @@ class Init(Base):
                 return {"id": APP_ID, "username": "letterbox"}
             return {"id": DM, "type": 1}
 
-        console = self.Console(answers=["read", USER, ""], secrets=[TOKEN])
+        console = self.Console(answers=["", "read", USER, ""], secrets=[TOKEN])
         wizard.init(root, console, platform="discord", panes=[],
                     discord_call=call, bridge_running=lambda r: False,
                     cmux_born=lambda: False)

@@ -24,12 +24,17 @@ Copy this, paste it into that terminal, and press Enter.
 alb --init --platform slack --root ~/.alb-slack
 ```
 
-With no seat named, setup does not ask where letters go:
+With no seat named, setup asks for the name of the agent and not for a folder:
 
 ```text
-This terminal does not name a seat.
+Name of the agent.
+One word, the name that agent already uses.
+A blank does not join. A name that is not already a seat
+does not create one and does not match a nearby name.
+No name was given, so this run does not join a seat.
 The bridge will keep its own folder.
-It will not ask you for a folder or a name.
+Setup did not look for a folder.
+It will not ask you for a folder.
 ```
 
 Setup then prints a

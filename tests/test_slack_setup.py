@@ -132,6 +132,9 @@ class Base(unittest.TestCase):
 
     def run_init(self, answers=None, secrets=(APP, BOT), call=None, **kw):
         kw.setdefault("helper_found", lambda name: "/usr/local/bin/bus.sh")
+        supply_name = kw.pop("supply_name", False)
+        if not kw.get("letterbox_agent") and not supply_name:
+            answers = [""] + list(answers or [])
         kw.setdefault("cmux_born", lambda: False)
         kw.setdefault("bridge_running", lambda root: False)
         kw.setdefault("start_pane", lambda title, command: (_ for _ in ()).throw(
@@ -309,7 +312,7 @@ class TelegramUnchanged(unittest.TestCase):
              unittest.mock.patch("alb.setup.discover.check_token",
                                  return_value=None):
             token = "1234567:" + ("a" * 35)
-            console = ScriptedConsole(["print"], [token])
+            console = ScriptedConsole(["", "print"], [token])
             wizard.init(pathlib.Path(tmp.name) / "alb", console,
                         helper_found=lambda n: "/usr/local/bin/bus.sh",
                         cmux_born=lambda: False,

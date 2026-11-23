@@ -165,7 +165,7 @@ Install Agent Letter Bridge from the checkout this prompt came from. If you do n
 
 Read docs/agent-install.md. If a line below disagrees with that page, follow the line below.
 
-Do not ask me for a folder, a seat, a name, a path, a bot, or an allowlist. Do not invent a seat. There is no seat flag. Do not search this machine for a mailbox.
+Do not ask me for a folder, a path, a bot, or an allowlist. Do not invent a seat. There is no seat flag. Do not search this machine for a mailbox. Do not pass a name. The setup terminal may ask the name of the agent. Leave that question there.
 
 If LETTERBOX_DIR and LETTERBOX_AGENT are both already set and non-empty in this terminal, pass those references into the setup terminal. If either is empty, leave both off the command.
 
@@ -173,7 +173,7 @@ Open a terminal and leave it open. If no bridge is using ~/.alb, run alb --init 
 
 The setup terminal may ask which chat is mine. Leave that question there. Do not ask it yourself.
 
-If that terminal asks for a folder, a seat, a name, or a helper path, stop. Do not answer.
+If that terminal asks for a folder, a path, or a helper path, stop. Do not answer. Do not answer the name for me.
 
 Leave any bridge that is already running untouched.
 
@@ -189,7 +189,7 @@ pipx install agent-letter-bridge                # or: uv tool install agent-lett
 alb --init --root ~/.alb                        # creates the files, then the token
 ```
 
-That short version installs the published package. The prompt above installs this checkout. This checkout does not ask for a folder or a name.
+That short version installs the published package. The prompt above installs this checkout. This checkout asks for the name of the agent when the terminal does not already name one. It does not ask for a folder.
 
 For Slack instead of Telegram, in that same terminal, run `alb --init --platform slack --root
 ~/.alb-slack`; it prints the app manifest and asks for the two tokens. What
@@ -221,8 +221,10 @@ alb --status --root ~/.alb
 `--init` creates the state directory, a mode-600 config and a **deny-all**
 allowlist, then asks you for the things no program can derive: your bot token,
 and your chat id, which it will either read for you or print the command for
-you to run, your choice. It does not ask for a folder or a name when this
-terminal does not name a seat. The bridge keeps its own folder. It never
+you to run, your choice. It asks for the name of the agent when this
+terminal does not already name a seat. It does not ask for a folder. The
+bridge keeps its own folder unless that name is an exact seat and you say
+Letterbox is already installed for this agent. It never
 invents an allowlist entry and never overwrites a file. Pasting the token asks
 the platform whether it accepts it: one check, not a poll. It does not poll
 for messages unless you choose that.

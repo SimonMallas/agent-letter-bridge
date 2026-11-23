@@ -65,10 +65,12 @@ someone else's mailbox. Setup trusts only the seat the terminal already
 had. There is no flag for a seat.
 
 A shell that has just started has neither variable. Empty references are
-not a seat. Do not ask the person for a folder or a name. Run init. It
-keeps the bridge's own folder. Joining a mailbox that already exists needs
-a terminal that already names that seat. This run does not search the
-machine for one.
+not a seat. Do not ask the person for a folder. The setup terminal asks
+them for the name of the agent. Do not answer that question, and do not
+pass a name. A blank keeps the bridge's own folder. Joining a mailbox
+that already exists needs the exact name of a seat in the folder this
+terminal was given, or the one Letterbox's own setup has already recorded.
+This run does not search the machine for one.
 
 You run init in Step 3, in a terminal the person can type into. The program
 is `alb --init`. It uses a seat only when that terminal's own environment
@@ -82,25 +84,27 @@ still no flag.
 - They tell you init used a seat and did not ask: that is the install.
   Continue. The seat and the folder they report are the ones to report.
   You still do not read the terminal to check.
-- They tell you it asked which folder, which seat, or for a helper path, or
-  that the named seat will not be used: **stop.** The seat did not carry.
-  Do not answer. Do not assign `LETTERBOX_DIR` or `LETTERBOX_AGENT`. Do not
-  type a helper path. Do not guess a participant name from the repo, a
-  transcript, or a folder listing.
+- They tell you it asked which folder, or for a helper path, or that the
+  named seat will not be used: **stop.** The seat did not carry. Do not
+  answer. Do not assign `LETTERBOX_DIR` or `LETTERBOX_AGENT`. Do not type
+  a helper path. Do not guess a participant name from the repo, a
+  transcript, or a folder listing. The name of the agent is the one
+  question you leave in that terminal. Do not answer it.
 
 ### When this terminal does not name a seat
 
-Init says the terminal does not name a seat, keeps the bridge's own folder,
-and does not ask for a folder or a name. You read that folder from the root
-you passed to init. You still do not read the paste terminal.
+Init asks for the name of the agent, does not ask for a folder, and keeps
+the bridge's own folder unless that name is an exact seat. You read that
+folder from the root you passed to init. You still do not read the paste
+terminal.
 
 **Running inside cmux does not make an install integrated.** Integrated is
 about where mail goes. cmux is only the ring transport, and a bridge that
 keeps its own folder uses it too.
 
-A folder or name question means an older build, or a terminal that was
-given a Letterbox folder listing seats and no seat name. Stop. Do not
-answer. Do not guess a name from the repo, a transcript, or a folder listing.
+A folder question, or a helper-path question, means an older build. Stop.
+Do not answer. Do not guess a name from the repo, a transcript, or a
+folder listing. The name question is the current build. Leave it there.
 
 Joining a mailbox that already exists still needs a terminal that already
 names that seat.
@@ -374,9 +378,9 @@ the bot id and does not print the secret half.
   this page will not invent flags. Inheritance was not measured for them.
   Do not rely on it.
 
-If that terminal asks which folder, which seat, or for a helper path, stop,
-as Step 0 says. Do not answer. Do not assign the variables to a value you
-chose.
+If that terminal asks which folder, or for a helper path, stop, as Step 0
+says. Do not answer. Do not assign the variables to a value you chose.
+The name of the agent is the one question you leave there. Do not answer it.
 
 **When you cannot open a terminal the person can type into**, including when
 opening one would mean guessing a command, the file is the path. Run it

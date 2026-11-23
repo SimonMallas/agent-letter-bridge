@@ -10,7 +10,7 @@ the value of this command is entirely in what it will not do:
   - a paste asks whether the platform accepts the token; a chat read is separate
   - it never overwrites something that already exists
   - it never picks a pane, or a mailbox, on the operator's behalf
-  - a terminal that names no seat is not asked for a folder or a name
+  - a terminal that names no seat is asked for the name of the agent, not for a folder
 """
 import errno
 import json
@@ -89,6 +89,13 @@ class Base(unittest.TestCase):
         # that has a letterbox installed and not on one that does not - so the
         # suite would pass or fail depending on whose laptop it ran on.
         kw.setdefault("helper_found", lambda name: "/usr/local/bin/bus.sh")
+        # A typed name is asked whenever no seat was carried. Tests that are
+        # not about that question get a blank, so the rest of their answers
+        # stay aligned and a blank does not join. Tests of the question pass
+        # supply_name and put the name first.
+        supply_name = kw.pop("supply_name", False)
+        if not kw.get("letterbox_agent") and not supply_name:
+            answers = [""] + list(answers or [])
         # HERMETIC BY DEFAULT, learned the loud way: the first run of this
         # suite after the resident offer landed created 359 real cmux
         # workspaces on the maintainer's machine, because these defaults fell
@@ -357,16 +364,17 @@ class ItRefusesToGuess(Base):
         self.assertEqual(result["mode"], "standalone")
         self.assertNotIn("ALB_MAIL_ROOT", (self.root / "bridge.env").read_text())
 
-    def test_a_mailbox_path_is_used_when_the_operator_gives_one(self):
-        mailbox = pathlib.Path(self.tmp.name) / "seat"
-        (mailbox / "inbox").mkdir(parents=True)
-        console, result = self.run_init(
-            answers=["y", str(mailbox), "an-agent", "print", ""],
-            letterbox_dir=self.listed_dir())
+    def test_an_exact_seat_name_joins_that_seat(self):
+        box = pathlib.Path(self.listed_dir())
+        mailbox = box / "alpha"
+        _console, result = self.run_init(
+            answers=["alpha", "y", "print", ""],
+            letterbox_dir=str(box),
+            supply_name=True)
         self.assertEqual(result["mode"], "integrated")
         env = (self.root / "bridge.env").read_text()
         self.assertIn(f"ALB_MAIL_ROOT={mailbox}", env)
-        self.assertIn("ALB_TO=an-agent", env)
+        self.assertIn("ALB_TO=alpha", env)
 
 
 class ItNeverDestroys(Base):
@@ -402,7 +410,7 @@ class TheSecretNeverLands(Base):
     def test_the_token_is_asked_for_without_echo(self):
         """ask_secret, not ask. A token echoed into a terminal is a token in a
         scrollback buffer."""
-        console = ScriptedConsole(["print", ""], [FAKE_TOKEN])
+        console = ScriptedConsole(["", "print", ""], [FAKE_TOKEN])
         self.run_init(answers=None)  # not used; kept for symmetry
         wizard.init(self.root / "echo-check", console,
                     helper_found=lambda name: "x", cmux_born=lambda: False,
@@ -438,66 +446,80 @@ class TheMailboxQuestionIsSmallFirst(Base):
     config - then Grok hand-appended three keys. Nothing errored.
     """
 
-    def test_a_terminal_with_no_seat_is_not_asked(self):
-        """No folder was carried and no seat was named. There is nothing
-        safe to attach to, so init does not ask and does not invent one."""
-        console, result = self.run_init(answers=["print", ""])
+    def test_a_terminal_with_no_seat_is_asked_for_the_name_only(self):
+        """No folder was carried. The one question is the name. A blank
+        does not join, and setup does not look for a folder."""
+        console, result = self.run_init(answers=["", "print", ""], supply_name=True)
         asked = "\n".join(console.asked)
+        self.assertEqual(console.asked[0], "  name")
         self.assertNotIn("Y/n", asked)
         self.assertNotIn("y/N", asked)
         self.assertNotIn("folder", asked)
-        self.assertNotIn("name", asked)
         self.assertNotIn("seat", asked)
         self.assertEqual(result["mode"], "standalone")
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertNotIn("ALB_MAIL_ROOT", env)
-        self.assertIn("does not name a seat", console.transcript)
+        self.assertIn("No name was given", console.transcript)
+        self.assertIn("did not look for a folder", console.transcript)
         self.assertIn("keep its own folder", console.transcript)
-        self.assertIn("will not ask you for a folder or a name", console.transcript)
+        self.assertIn("will not ask you for a folder", console.transcript)
+        self.assertNotIn("will not ask you for a folder or a name", console.transcript)
 
-    def test_yes_then_path_and_name_gives_a_complete_integrated_config(self):
-        mailbox = pathlib.Path(self.tmp.name) / "seat"
-        (mailbox / "inbox").mkdir(parents=True)
+    def test_an_exact_name_then_yes_gives_a_complete_integrated_config(self):
+        box = pathlib.Path(self.listed_dir())
+        mailbox = box / "alpha"
         _, result = self.run_init(
-            answers=["y", str(mailbox), "an-agent", "print", ""],
-            letterbox_dir=self.listed_dir())
+            answers=["alpha", "y", "print", ""],
+            letterbox_dir=str(box),
+            supply_name=True)
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertEqual(result["mode"], "integrated")
         self.assertIn(f"ALB_MAIL_ROOT={mailbox}", env)
-        self.assertIn("ALB_TO=an-agent", env)
+        self.assertIn("ALB_TO=alpha", env)
 
-    def test_yes_then_a_blank_path_does_not_silently_become_standalone(self):
-        """The exact failure. Saying yes and then leaving a prompt empty
-        produced a token-only config that runs, delivers, and rings nowhere the
-        operator expected - with no error at any point."""
-        console, result = self.run_init(answers=["y", "", "print", ""],
-            letterbox_dir=self.listed_dir())
-        self.assertEqual(result["mode"], "standalone")
-        transcript = console.transcript.lower()
-        self.assertIn("standalone", transcript)
-        self.assertIn("re-run", transcript)
-
-    def test_yes_then_a_blank_name_does_not_silently_become_standalone(self):
-        mailbox = pathlib.Path(self.tmp.name) / "seat"
-        (mailbox / "inbox").mkdir(parents=True)
+    def test_a_blank_name_does_not_silently_become_standalone(self):
+        """The name is the question. Leaving it empty must say so, and must
+        not write a mailbox."""
         console, result = self.run_init(
-            answers=["y", str(mailbox), "", "print", ""],
-            letterbox_dir=self.listed_dir())
+            answers=["", "print", ""],
+            letterbox_dir=self.listed_dir(),
+            supply_name=True)
         self.assertEqual(result["mode"], "standalone")
-        self.assertIn("re-run", console.transcript.lower())
+        self.assertIn("No name was given", console.transcript)
+        self.assertIn("keep its own folder", console.transcript)
+        self.assertNotIn("ALB_MAIL_ROOT",
+                         (self.root / "bridge.env").read_text(encoding="utf-8"))
+
+    def test_a_name_that_is_not_a_seat_does_not_create_one(self):
+        box = pathlib.Path(self.listed_dir())
+        console, result = self.run_init(
+            answers=["alp", "print", ""],
+            letterbox_dir=str(box),
+            supply_name=True)
+        self.assertEqual(result["mode"], "standalone")
+        self.assertIn("alp is not a seat", console.transcript)
+        self.assertIn("will not create one", console.transcript)
+        self.assertIn("nearby name", console.transcript)
+        self.assertFalse((box / "alp").exists())
+        self.assertNotIn("ALB_MAIL_ROOT",
+                         (self.root / "bridge.env").read_text(encoding="utf-8"))
+        self.assertNotIn("Y/n", "\n".join(console.asked))
 
     def test_a_downgraded_install_stops_behaving_as_integrated(self):
-        """Found by the mutation gate, not by me. Asserting the reported mode
-        was not enough: the fallback also has to stop the rest of the run
-        treating this as integrated, and the visible consequence is the
-        letterbox helper. A standalone bridge never calls it, so being asked
-        for its path is being asked to solve a problem you do not have."""
+        """The name matched and the person said yes, but the helper is not
+        there. Asking for its path would be a question this run no longer
+        asks, and joining would write a mailbox it cannot ring."""
         console, result = self.run_init(
-            answers=["y", "", "print", ""],
+            answers=["alpha", "y", "print", ""],
             helper_found=lambda name: None,
-            letterbox_dir=self.listed_dir())
+            letterbox_dir=self.listed_dir(),
+            supply_name=True)
         self.assertEqual(result["mode"], "standalone")
         self.assertFalse(any("helper" in q.lower() for q in console.asked))
+        self.assertFalse(any("path" in q.lower() for q in console.asked))
+        self.assertIn("not available", console.transcript)
+        self.assertNotIn("ALB_MAIL_ROOT",
+                         (self.root / "bridge.env").read_text(encoding="utf-8"))
 
     def test_the_shipped_examples_are_not_this_machine(self):
         """A shipped example is a path a stranger reads. Ours would either
@@ -524,7 +546,7 @@ class TheMailboxQuestionIsSmallFirst(Base):
         """Separate claim, still worth keeping: whatever setup prints about
         THIS machine is the operator's own business, but our internal names
         have no reason to appear in it."""
-        console, _ = self.run_init(answers=["y", "", "print", ""],
+        console, _ = self.run_init(answers=["print", ""],
             letterbox_dir=self.listed_dir())
         for leak in ("shared-" "brain", "team-" "seat"):
             self.assertNotIn(leak, console.transcript)
@@ -558,13 +580,34 @@ class TheHelperIsAskedForOnlyWhenMissing(Base):
                          which=lambda name: looked_for.append(name) or "/no-such/letterbox")
         self.assertEqual(looked_for, ["letterbox"])
 
-    def test_a_missing_helper_is_asked_for(self):
-        console, _ = self._integrated(["/opt/bus.sh", "print", ""], which=lambda name: None)
-        self.assertIn("ALB_BUS_BINARY=/opt/bus.sh",
-                      (self.root / "bridge.env").read_text(encoding="utf-8"))
+    def test_a_missing_helper_is_not_asked_for_and_the_seat_is_not_joined(self):
+        console, result = self._integrated(["print", ""], which=lambda name: None)
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertEqual(result["mode"], "standalone")
+        self.assertNotIn("ALB_MAIL_ROOT", env)
+        self.assertNotIn("ALB_BUS_BINARY", env)
+        self.assertNotIn("ALB_TO=", env)
+        self.assertFalse(any("path" in q.lower() for q in console.asked))
+        self.assertIn("not available", console.transcript)
+
+    def test_the_installer_path_is_recorded_when_the_probe_accepts_it(self):
+        box = pathlib.Path(self.tmp.name) / "letterbox"
+        (box / "an-agent" / "inbox").mkdir(parents=True)
+        console = ScriptedConsole(["print", ""], [FAKE_TOKEN])
+        result = wizard.init(
+            self.root, console, helper_found=lambda name: None,
+            helper_install=lambda: "/opt/letterbox",
+            cmux_born=lambda: False, bridge_running=lambda root: False,
+            letterbox_dir=str(box), letterbox_agent="an-agent")
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertEqual(result["mode"], "integrated")
+        self.assertIn("ALB_BUS_BINARY=/opt/letterbox", env)
+        self.assertIn("ALB_TO=an-agent", env)
+        self.assertIn("doorbell helper: /opt/letterbox", console.transcript)
+        self.assertFalse(any("path" in q.lower() for q in console.asked))
 
     def test_a_standalone_install_never_asks_about_the_helper(self):
-        console = ScriptedConsole(["print", ""], [FAKE_TOKEN])
+        console = ScriptedConsole(["", "print", ""], [FAKE_TOKEN])
         wizard.init(self.root, console, helper_found=lambda name: None,
                     cmux_born=lambda: False, bridge_running=lambda root: False)
         self.assertFalse(any("helper" in q.lower() for q in console.asked))
@@ -576,18 +619,17 @@ class InitCatchesWhatTheRuntimeWouldRefuse(Base):
     the spirit of that promise silently: a mailbox path that does not exist,
     and an empty token."""
 
-    def test_a_mailbox_that_does_not_exist_downgrades_loudly(self):
-        """The runtime now refuses to invent a mailbox, so a config naming a
-        ghost path would fail at first run - hours after the operator walked
-        away believing the install was done. init is the moment the human is
-        still present, so it is the moment to say so."""
+    def test_a_name_that_is_not_a_seat_does_not_invent_a_mailbox(self):
+        """The runtime refuses to invent a mailbox. A typed path used to be
+        able to name one that was not there. A name that is not a seat is
+        not created, and the config does not mention a mailbox."""
         console, result = self.run_init(
-            answers=["y", str(self.root / "no-such-seat"), "an-agent", "print", ""],
-            letterbox_dir=self.listed_dir())
+            answers=["no-such-seat", "print", ""],
+            letterbox_dir=self.listed_dir(),
+            supply_name=True)
         self.assertEqual(result["mode"], "standalone")
-        transcript = console.transcript.lower()
-        self.assertIn("does not exist", transcript)
-        self.assertIn("re-run", transcript)
+        self.assertIn("not a seat", console.transcript)
+        self.assertIn("will not create one", console.transcript)
         self.assertNotIn("ALB_MAIL_ROOT",
                          (self.root / "bridge.env").read_text(encoding="utf-8"))
 
@@ -620,6 +662,8 @@ class TheResidentOffer(Base):
         kw.setdefault("bridge_running", lambda root: False)
         kw.setdefault("start_pane", lambda title, command: started.append((title, command)) or "SURFACE-NEW")
         kw.setdefault("panes", [{"id": "AGENT-PANE", "label": "agent"}])
+        if not kw.get("letterbox_agent") and not kw.pop("supply_name", False):
+            answers = [""] + list(answers or [])
         console = ScriptedConsole(answers, [FAKE_TOKEN])
         result = wizard.init(self.root, console, **kw)
         return console, result, started
@@ -1031,10 +1075,9 @@ class AnIntegratedInstallIsAnInstall(Base):
     """
 
     def _integrated(self, **kw):
-        mailbox = pathlib.Path(self.tmp.name) / "mail"
-        mailbox.mkdir()
         kw.setdefault("letterbox_dir", self.listed_dir())
-        return self.run_init(["y", str(mailbox), "agent", "print"], **kw)
+        kw["supply_name"] = True
+        return self.run_init(["alpha", "y", "print"], **kw)
 
     def test_the_helper_is_named_as_the_ring(self):
         _console, result = self._integrated()
@@ -1075,11 +1118,10 @@ class TheExitStatusAgreesWithTheWizard(Base):
 
     def test_a_fresh_integrated_install_exits_zero(self):
         from alb.cli import _init_status
-        mailbox = pathlib.Path(self.tmp.name) / "mail"
-        mailbox.mkdir()
         _console, result = self.run_init(
-            ["y", str(mailbox), "agent", "print"],
-            letterbox_dir=self.listed_dir())
+            ["alpha", "y", "print"],
+            letterbox_dir=self.listed_dir(),
+            supply_name=True)
         self.assertEqual(result["ring"], "helper")
         self.assertEqual(_init_status(result), 0)
 
@@ -1107,17 +1149,17 @@ class ARerunIntoIntegratedActuallyBecomesIntegrated(Base):
 
     def _standalone_then_integrated(self):
         self.run_init(["print"])                      # leaves a standalone env
-        mailbox = pathlib.Path(self.tmp.name) / "mail"
-        mailbox.mkdir()
+        box = pathlib.Path(self.listed_dir())
         return self.run_init(
-            ["y", str(mailbox), "agent", "print"],
-            letterbox_dir=self.listed_dir()), mailbox
+            ["alpha", "y", "print"],
+            letterbox_dir=str(box),
+            supply_name=True), box / "alpha"
 
     def test_the_mailbox_keys_reach_the_config(self):
         (_console, result), mailbox = self._standalone_then_integrated()
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertIn(f"ALB_MAIL_ROOT={mailbox}", env)
-        self.assertIn("ALB_TO=agent", env)
+        self.assertIn("ALB_TO=alpha", env)
         self.assertEqual(result["mode"], "integrated")
 
     def test_the_token_already_there_is_untouched(self):
@@ -1130,13 +1172,12 @@ class ARerunIntoIntegratedActuallyBecomesIntegrated(Base):
     def test_a_config_it_cannot_write_is_not_reported_as_integrated(self):
         """If the keys do not land, the mode must not be claimed."""
         self.run_init(["print"])
-        mailbox = pathlib.Path(self.tmp.name) / "mail"
-        mailbox.mkdir()
         env_path = self.root / "bridge.env"
         env_path.write_text("this is not = a config\x00", encoding="utf-8")
         _console, result = self.run_init(
-            ["y", str(mailbox), "agent", "print"],
-            letterbox_dir=self.listed_dir())
+            ["alpha", "y", "print"],
+            letterbox_dir=self.listed_dir(),
+            supply_name=True)
         self.assertNotEqual(result.get("mode"), "integrated")
 
 
@@ -1155,14 +1196,18 @@ class ARouteIsAPairNotTwoKeys(Base):
     Anything else is refused with both values named, and nothing is written.
     """
 
-    def _rerun(self, existing, answers_mailbox, recipient="new-agent"):
-        (self.root).mkdir(parents=True, exist_ok=True)
+    def _rerun(self, existing, seat="alpha"):
+        box = pathlib.Path(self.listed_dir())
+        (box / seat / "inbox").mkdir(parents=True, exist_ok=True)
+        self.root.mkdir(parents=True, exist_ok=True)
         env = self.root / "bridge.env"
         env.write_text(existing, encoding="utf-8")
         env.chmod(0o600)
-        return self.run_init(
-            ["y", str(answers_mailbox), recipient],
-            letterbox_dir=self.listed_dir())
+        console, result = self.run_init(
+            [seat, "y", "print"],
+            letterbox_dir=str(box),
+            supply_name=True)
+        return console, result, box / seat
 
     def _mailbox(self, name):
         path = pathlib.Path(self.tmp.name) / name
@@ -1170,44 +1215,43 @@ class ARouteIsAPairNotTwoKeys(Base):
         return path
 
     def test_a_retained_participant_does_not_take_a_new_mailbox(self):
-        new = self._mailbox("new-mail")
-        _console, result = self._rerun(
-            "ALB_TOKEN=1:T\nALB_TO=old-agent\n", new)
+        _console, result, new = self._rerun("ALB_TOKEN=1:T\nALB_TO=old-agent\n")
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertNotIn(f"ALB_MAIL_ROOT={new}", env)
         self.assertNotEqual(result.get("mode"), "integrated")
 
     def test_a_retained_mailbox_does_not_take_a_new_participant(self):
         old = self._mailbox("old-mail")
-        new = self._mailbox("new-mail")
-        _console, result = self._rerun(
-            f"ALB_TOKEN=1:T\nALB_MAIL_ROOT={old}\n", new)
+        _console, result, _new = self._rerun(
+            f"ALB_TOKEN=1:T\nALB_MAIL_ROOT={old}\n")
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
-        self.assertNotIn("ALB_TO=new-agent", env)
+        self.assertNotIn("ALB_TO=alpha", env)
         self.assertNotEqual(result.get("mode"), "integrated")
 
     def test_the_operator_is_told_which_two_values_disagree(self):
-        new = self._mailbox("new-mail")
-        console, _result = self._rerun(
-            "ALB_TOKEN=1:T\nALB_TO=old-agent\n", new)
+        console, _result, _new = self._rerun("ALB_TOKEN=1:T\nALB_TO=old-agent\n")
         self.assertIn("old-agent", console.transcript)
-        self.assertIn("new-agent", console.transcript)
+        self.assertIn("alpha", console.transcript)
 
     def test_a_retained_route_that_already_matches_is_accepted(self):
         """Re-running with the same answers must stay idempotent."""
-        old = self._mailbox("old-mail")
-        _console, result = self._rerun(
-            f"ALB_TOKEN=1:T\nALB_MAIL_ROOT={old}\nALB_TO=same-agent\n",
-            old, recipient="same-agent")
+        _console, _result, seat = self._rerun("ALB_TOKEN=1:T\n")
+        # The first call fills the empty pair. Write the matching route, then
+        # join the same seat again.
+        env = self.root / "bridge.env"
+        env.write_text(
+            f"ALB_TOKEN=1:T\nALB_MAIL_ROOT={seat}\nALB_TO=alpha\n",
+            encoding="utf-8")
+        env.chmod(0o600)
+        _console, result, _seat = self._rerun(env.read_text(encoding="utf-8"))
         self.assertEqual(result["mode"], "integrated")
 
     def test_an_empty_pair_is_still_filled_in(self):
         """The case the append existed for must keep working."""
-        new = self._mailbox("new-mail")
-        _console, result = self._rerun("ALB_TOKEN=1:T\n", new)
+        _console, result, new = self._rerun("ALB_TOKEN=1:T\n")
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertIn(f"ALB_MAIL_ROOT={new}", env)
-        self.assertIn("ALB_TO=new-agent", env)
+        self.assertIn("ALB_TO=alpha", env)
         self.assertEqual(result["mode"], "integrated")
 
 
@@ -1242,11 +1286,10 @@ class TheStartAdviceMatchesTheRing(Base):
         to cmux still meets cmux's born-inside rule, and telling an operator
         that where it runs 'does not change whether it rings' sells them a
         LaunchAgent that delivers mail silently forever."""
-        mailbox = pathlib.Path(self.tmp.name) / "mail"
-        mailbox.mkdir()
         transcript, _result = self._advice(
-            ["y", str(mailbox), "agent", "print"],
-            letterbox_dir=self.listed_dir())
+            ["alpha", "y", "print"],
+            letterbox_dir=self.listed_dir(),
+            supply_name=True)
         self.assertNotIn("does not change whether it rings", transcript)
         self.assertIn("supports", transcript)
 
@@ -1254,11 +1297,10 @@ class TheStartAdviceMatchesTheRing(Base):
         """`--status` reporting `delivered` says the helper call returned, not
         that the intended pane received anything. Offering one as proof of the
         other is the same overclaim as the heartbeat and the lock file."""
-        mailbox = pathlib.Path(self.tmp.name) / "mail"
-        mailbox.mkdir()
         transcript, _result = self._advice(
-            ["y", str(mailbox), "agent", "print"],
-            letterbox_dir=self.listed_dir())
+            ["alpha", "y", "print"],
+            letterbox_dir=self.listed_dir(),
+            supply_name=True)
         self.assertIn("--status", transcript)
         self.assertIn("RETURNED", transcript)
         self.assertIn("pane", transcript)
@@ -1295,13 +1337,13 @@ class ARefusedRouteEndsTheInstall(Base):
         env = self.root / "bridge.env"
         env.write_text(existing, encoding="utf-8")
         env.chmod(0o600)
-        new = self._mailbox("new-mail")
         started = []
         # Enough answers to complete a standalone install if the guard leaks.
         console, result = self.run_init(
-            ["y", str(new), "new-agent", "print", "PANE-1", "y"],
+            ["alpha", "y", "print", "PANE-1", "y"],
             panes=self.PANES, cmux_born=lambda: True,
             letterbox_dir=self.listed_dir(),
+            supply_name=True,
             start_pane=lambda title, command: started.append(title) or "S-NEW")
         return console, result, started, env.read_text(encoding="utf-8")
 
@@ -1760,8 +1802,10 @@ class FirstRunSaysWhatHappened(Base):
             answers=["print", ""],
             panes=[{"id": "pane-1", "label": "work", "notifier": "tmux"}])
         text = console.transcript
-        self.assertIn("does not name a seat", text)
-        self.assertIn("will not ask you for a folder or a name", text)
+        self.assertIn("Name of the agent.", text)
+        self.assertIn("No name was given", text)
+        self.assertIn("will not ask you for a folder", text)
+        self.assertNotIn("will not ask you for a folder or a name", text)
         self.assertNotIn("inbox it already sweeps", text)
         self.assertNotIn("feel alive", text)
         self.assertIn("I will not pick one", text)
@@ -1779,14 +1823,15 @@ class FirstRunSaysWhatHappened(Base):
         self.assertNotIn(FAKE_TOKEN, console.transcript)
 
     def test_the_start_command_names_the_mailbox_parent(self):
-        mailbox = pathlib.Path(self.tmp.name) / "letterbox" / "seat"
-        (mailbox / "inbox").mkdir(parents=True)
+        box = pathlib.Path(self.tmp.name) / "letterbox"
+        (box / "seat" / "inbox").mkdir(parents=True)
         console, result = self.run_init(
-            answers=["y", str(mailbox), "seat", "print", ""],
-            letterbox_dir=self.listed_dir(),
+            answers=["seat", "y", "print", ""],
+            letterbox_dir=str(box),
+            supply_name=True,
             cmux_born=lambda: False)
         self.assertEqual(result["mode"], "integrated")
-        parent = str(mailbox.parent)
+        parent = str(box)
         self.assertIn(f"LETTERBOX_DIR={parent}", console.transcript)
         self.assertIn(f"LETTERBOX_DIR={parent}", result["start_command"])
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
@@ -1936,15 +1981,15 @@ class LetterboxAlreadyInstalled(Base):
         link.symlink_to(box / "alpha", target_is_directory=True)
         return box
 
-    def test_enter_means_yes_and_a_blank_seat_is_not_a_pick(self):
+    def test_a_blank_name_does_not_pick_a_listed_seat(self):
         box = self._box()
-        console, result = self.run_init(answers=[], letterbox_dir=str(box))
-        self.assertEqual(console.asked[0], "  Y/n")
-        self.assertIn("1) alpha", console.transcript)
-        self.assertIn("2) beta", console.transcript)
+        console, result = self.run_init(
+            answers=["", "print", ""], letterbox_dir=str(box), supply_name=True)
+        self.assertEqual(console.asked[0], "  name")
+        self.assertNotIn("Y/n", "\n".join(console.asked))
         self.assertNotIn(".hidden", console.transcript)
         self.assertNotIn("linked", console.transcript)
-        self.assertNotIn("\n    notes", "\n" + console.transcript)
+        self.assertNotIn("1) alpha", console.transcript)
         self.assertEqual(result["mode"], "standalone")
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertNotIn("ALB_MAIL_ROOT", env)
@@ -1952,38 +1997,103 @@ class LetterboxAlreadyInstalled(Base):
         self.assertIn("This is not set up for any seat.", console.transcript)
         self.assertNotIn("setting this up for the first time", console.transcript)
 
-    def test_picking_a_number_names_that_seat(self):
+    def test_enter_on_a_matching_name_joins_that_seat(self):
         box = self._box()
         console, result = self.run_init(
-            answers=["y", "2", "print", ""], letterbox_dir=str(box))
+            answers=["beta"], letterbox_dir=str(box), supply_name=True)
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertEqual(result["mode"], "integrated")
         self.assertEqual(result["ring"], "helper")
         self.assertIn("ALB_TO=beta", env)
         self.assertIn(f"ALB_MAIL_ROOT={box / 'beta'}", env)
         self.assertIn("This is set up for beta.", console.transcript)
+        self.assertEqual(console.asked[0], "  name")
+        self.assertIn("  Y/n", console.asked)
 
-    def test_a_folder_path_still_works_when_seats_are_listed(self):
+    def test_a_typed_path_is_not_a_seat(self):
         box = self._box()
         other = pathlib.Path(self.tmp.name) / "other"
         (other / "inbox").mkdir(parents=True)
-        _, result = self.run_init(
-            answers=["y", str(other), "custom", "print", ""],
-            letterbox_dir=str(box))
+        console, result = self.run_init(
+            answers=[str(other), "print", ""],
+            letterbox_dir=str(box),
+            supply_name=True)
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
-        self.assertEqual(result["mode"], "integrated")
-        self.assertIn("ALB_TO=custom", env)
-        self.assertIn(f"ALB_MAIL_ROOT={other}", env)
+        self.assertEqual(result["mode"], "standalone")
+        self.assertNotIn("ALB_TO=custom", env)
+        self.assertNotIn(f"ALB_MAIL_ROOT={other}", env)
+        self.assertIn("not a seat name", console.transcript)
+        self.assertNotIn("Y/n", "\n".join(console.asked))
+
+    def test_a_symlink_is_not_an_exact_seat(self):
+        box = self._box()
+        console, result = self.run_init(
+            answers=["linked", "print", ""],
+            letterbox_dir=str(box),
+            supply_name=True)
+        self.assertEqual(result["mode"], "standalone")
+        self.assertIn("linked is not a seat", console.transcript)
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertNotIn("ALB_TO=linked", env)
 
     def test_choosing_no_does_not_send_them_only_to_cmux(self):
         box = self._box()
         console, result = self.run_init(
-            answers=["n", "print", ""], letterbox_dir=str(box), panes=[])
+            answers=["alpha", "n", "print", ""],
+            letterbox_dir=str(box),
+            supply_name=True,
+            panes=[])
         self.assertEqual(result["mode"], "standalone")
         self.assertEqual(result["resident"], "incomplete")
         self.assertNotIn("Re-run init from a cmux pane", console.transcript)
-        self.assertIn("pick the seat", console.transcript.lower())
+        self.assertIn("exact name", console.transcript)
         self.assertIn("No panes are visible", console.transcript)
+
+    def test_a_recorded_folder_is_used_only_when_none_was_given(self):
+        box = self._box()
+        note = pathlib.Path(self.tmp.name) / "default-dir"
+        note.write_text(str(box) + "\n", encoding="utf-8")
+        console, result = self.run_init(
+            answers=["beta", "y", "print"],
+            supply_name=True,
+            recorded_dir=lambda: wizard.recorded_letterbox_dir(note))
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertEqual(result["mode"], "integrated")
+        self.assertIn(f"ALB_MAIL_ROOT={box / 'beta'}", env)
+        self.assertIn("ALB_TO=beta", env)
+        self.assertIn("seat: beta", console.transcript)
+
+    def test_a_given_folder_does_not_fall_through_to_the_record(self):
+        given = self._box()
+        other = pathlib.Path(self.tmp.name) / "recorded"
+        (other / "gamma" / "inbox").mkdir(parents=True)
+
+        def recorded():
+            raise AssertionError("recorded dir was read")
+
+        console, result = self.run_init(
+            answers=["gamma", "print"],
+            letterbox_dir=str(given),
+            supply_name=True,
+            recorded_dir=recorded)
+        self.assertEqual(result["mode"], "standalone")
+        self.assertIn("gamma is not a seat", console.transcript)
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertNotIn(f"ALB_MAIL_ROOT={other / 'gamma'}", env)
+
+    def test_a_recorded_symlink_is_not_a_folder(self):
+        note = pathlib.Path(self.tmp.name) / "default-dir"
+        target = pathlib.Path(self.tmp.name) / "real-default"
+        target.write_text(str(self._box()) + "\n", encoding="utf-8")
+        note.symlink_to(target)
+        self.assertEqual(wizard.recorded_letterbox_dir(note), "")
+
+    def test_the_installer_path_reader_uses_only_the_path_it_is_given(self):
+        path = pathlib.Path(self.tmp.name) / "letterbox"
+        path.write_text("#!/bin/sh\n", encoding="utf-8")
+        self.assertEqual(wizard.installed_letterbox(path), str(path))
+        self.assertEqual(
+            wizard.installed_letterbox(self.tmp.name + "/missing-helper"), "")
 
     def test_without_a_letterbox_folder_cmux_is_still_the_pane_route(self):
         console, _ = self.run_init(answers=["print"], panes=[])
