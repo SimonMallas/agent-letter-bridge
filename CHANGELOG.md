@@ -7,6 +7,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.7.3] — 2026-11-23
+
 - The screen before this terminal becomes the bridge no longer says whether, and it does not print a command. It says this terminal is the bridge, to leave it open, and that closing it stops the bridge. Those lines are flushed before the process is replaced, so a pipe keeps them. A plain terminal with no Letterbox still only prints the command. Zellij and Rex start in this terminal only when the bell is the folder helper.
 - When a chat is allowed and this terminal can reach the bell, finishing the questions starts the bridge in this terminal. The folder helper, tmux, and Herdr take that path, so the person does not have to say they finished. Inside cmux, enter still starts a pane of its own. An empty allowlist still does not start. A cmux bell from outside cmux still only prints the command. The files remain the signal only when the wizard cannot start.
 - An existing checkout is not treated as current. The copy-this prompt fetches, and a clean worktree checks out the remote tip before the manual is read. Local changes are left where they are, the person is told, and that checkout is not installed from. The manual says the same, and says not to merge or rebase.
