@@ -1122,6 +1122,9 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running,
 def _chat_ids(console, token, reader, ask_again=None):
     """Ask how the operator wants their chat id obtained. Both routes are real.
 
+    One answer contacts the platform. The other does not. That is why this
+    is asked. Plain words and the old words select the same two paths.
+
     Reading it removes a genuine trap: the payload contains a `from` id beside
     the `chat` id, they are identical in a direct message, and the wrong one
     denies everything the first time a group is used - silently.
@@ -1136,13 +1139,15 @@ def _chat_ids(console, token, reader, ask_again=None):
     The choice is the operator's. Neither is the safe answer for everyone.
     """
     console.say()
-    console.say("Your chat id goes in the allowlist. Two ways:")
-    console.say("  read  - I make ONE getUpdates call with your token and show")
-    console.say("          you the ids it returns. It consumes nothing and")
+    console.say("Your chat has to be allowed, or your messages will not arrive.")
+    console.say("Two ways. One contacts the platform. The other does not.")
+    console.say("  look it up - one getUpdates check. It consumes nothing and")
     console.say("          leaves your messages queued.")
-    console.say("  print - I print the command and you run it yourself. I do")
-    console.say("          not poll for messages.")
-    choice = console.ask("  read or print", "print").strip().lower()
+    console.say("  you do it - the command is printed, and nothing is asked")
+    console.say("          from here. Enter means you do it.")
+    choice = console.ask("  look it up, or you do it?", "you do it").strip().lower()
+    if choice in {"look", "lookup", "look it up"}:
+        choice = "read"
 
     if choice != "read" or reader is None:
         console.say()

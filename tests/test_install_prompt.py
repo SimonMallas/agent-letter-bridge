@@ -55,9 +55,17 @@ class TheInstallPrompt(unittest.TestCase):
             "On Slack or Discord",
             "What you say to the person at hand-over is only the next thing they do.",
             "do not say the wizard may ask for a pane",
+            "What you say to the person is only the next thing they do.",
+            "Do not tell them to come back when the terminal finishes.",
+            "Before the key, say only this: the terminal is waiting",
+            "When the wizard cannot start the bridge, the files in the root you chose are what tell you to start it.",
+            "The first letter is the wake.",
         ):
             with self.subTest(line):
                 self.assertIn(line, manual)
+        self.assertNotIn("Tell them to decline", manual)
+        self.assertNotIn("I am opening a terminal that will ask you to paste the bot token", manual)
+        self.assertNotIn("Setup can read your chat id itself", manual)
 
     def test_the_readme_jumps_to_install_before_that_section(self):
         readme = self.pages()["readme"]

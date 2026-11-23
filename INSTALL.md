@@ -201,16 +201,16 @@ You may be asked the name of the agent. You are not asked for a folder or
 a helper path. You write a file only when that
 terminal cannot be opened.
 
-**2. How to get your chat id — `read` or `print`.** Both are real options:
+**2. How your chat is allowed.** Your messages will not arrive until it is.
+Two ways. One contacts the platform. The other does not.
 
-| | what happens | what you can then say |
-| --- | --- | --- |
-| `read` | one `getUpdates` call with your token; shows the ids it found; you pick yours | the wrong-id trap is impossible — it reads `chat.id` by construction |
-| `print` | prints the command for you to run yourself | this step does not poll. The token check already happened |
+| | what happens |
+| --- | --- |
+| look it up | one check with your token. It does not take your messages. Typing `read` still means this. |
+| you do it | the command is printed, and nothing is asked from here. Pressing enter means this, and so does typing `print`. This step does not poll. |
 
-`read` consumes nothing — it sends no offset, so your messages stay queued for
-the bridge to collect properly later. Pick whichever you prefer; neither is the
-safe answer for everybody.
+Looking it up sends no offset, so your messages stay queued for the bridge.
+Neither answer is the safe one for everybody.
 
 **3. Your agent's pane, if you want the ring.** When this terminal already
 named a seat, this question is not asked. Init says there is no pane to
@@ -222,7 +222,8 @@ into `bridge.env` as `ALB_SURFACE`.
 ### What it will not do
 
 It never invents an allowlist entry, never overwrites a file that already
-exists, and never polls for messages unless you choose `read`. Pasting the
+exists, and never polls for messages unless you choose to look the chat up.
+Typing `read` still means that. Pasting the
 token asks the platform once whether it accepts that token. It never picks a
 pane or a mailbox for you. Re-running it on a working bridge is safe: it keeps
 what is there and tells you what it kept.
@@ -233,7 +234,7 @@ what is there and tells you what it kept.
 alb --doctor --root ~/.alb
 ```
 
-If you chose `print`, this will say **nothing will be delivered** — correct, and
+If you did the chat step yourself, this will say **nothing will be delivered** — correct, and
 the allowlist is still empty. Add your chat id to `~/.alb/allowlist.json`:
 
 ```json

@@ -337,6 +337,31 @@ class ItRefusesToGuess(Base):
         self.assertEqual(calls, [FAKE_TOKEN])
         self.assertEqual(json.loads((self.root / "allowlist.json").read_text())["chats"], ["111"])
 
+    def test_look_it_up_is_the_same_path_as_read(self):
+        """The plain words select the lookup. The screen says why the question exists."""
+        calls = []
+
+        def reader(token):
+            calls.append(token)
+            return [{"chat_id": "111", "label": "you"}]
+
+        console, _ = self.run_init(answers=["look it up", "", "1"], chat_id_reader=reader)
+        self.assertEqual(calls, [FAKE_TOKEN])
+        self.assertEqual(json.loads((self.root / "allowlist.json").read_text())["chats"], ["111"])
+        self.assertIn("One contacts the platform. The other does not.", console.transcript)
+        self.assertIn("getUpdates", console.transcript)
+        self.assertIn("  look it up, or you do it?", console.asked)
+
+    def test_a_stray_yes_does_not_look_up_the_chat(self):
+        """A yes is not the lookup. Enter, print, and any other answer stay off the platform."""
+        polls = []
+        console, _ = self.run_init(
+            answers=["y", ""],
+            chat_id_reader=lambda token: polls.append(token) or [])
+        self.assertEqual(polls, [])
+        self.assertIn("does not poll", console.transcript)
+        self.assertEqual(json.loads((self.root / "allowlist.json").read_text())["chats"], [])
+
     def test_the_network_call_is_described_before_it_happens(self):
         """Narrated, not hidden. The operator agreeing is only consent if they
         were told what they were agreeing to."""
