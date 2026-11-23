@@ -163,7 +163,7 @@ look like something else.
 **Copy this and give it to the agent you already work with.** The prompt points at the manual. The rules are on that page:
 
 ```text
-Set up Agent Letter Bridge from https://github.com/SimonMallas/agent-letter-bridge. Clone that repository if you do not already have this checkout. Do not install a published package instead. Read docs/agent-install.md and follow it. Do not read the setup terminal. I will paste the key.
+Set up Agent Letter Bridge from https://github.com/SimonMallas/agent-letter-bridge. If a checkout is already here, fetch, and if the worktree is clean check out the remote tip. If it has local changes, leave them, say so, and stop without reading that checkout. If there is no checkout, clone that repository. Do not install a published package instead. Read docs/agent-install.md from that current checkout and follow it. Do not read the setup terminal. I will paste the key.
 ```
 
 The short version, once you know the shape. Open a terminal. Copy this block, paste it there, and press Enter:

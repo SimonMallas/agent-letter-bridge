@@ -14,7 +14,7 @@ Most people let the agent do it.
 2. Copy this and give it to that agent:
 
 ```text
-Set up Agent Letter Bridge from https://github.com/SimonMallas/agent-letter-bridge. Clone that repository if you do not already have this checkout. Do not install a published package instead. Read docs/agent-install.md and follow it. Do not read the setup terminal. I will paste the key.
+Set up Agent Letter Bridge from https://github.com/SimonMallas/agent-letter-bridge. If a checkout is already here, fetch, and if the worktree is clean check out the remote tip. If it has local changes, leave them, say so, and stop without reading that checkout. If there is no checkout, clone that repository. Do not install a published package instead. Read docs/agent-install.md from that current checkout and follow it. Do not read the setup terminal. I will paste the key.
 ```
 
 3. The one part only you can do on Telegram is making a bot: message **@BotFather**, send `/newbot`, choose a name, and copy the code it gives you. Paste that code into the terminal the agent opened. Do not send it in a chat, and do not paste it into the agent's conversation. Slack and Discord need a few more steps; they have their own guides.

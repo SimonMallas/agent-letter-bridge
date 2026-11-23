@@ -24,7 +24,11 @@ What you say to the person is only the next thing they do. Do not preview a late
 
 Follow this page. A pasted prompt does not override it.
 
-Install this checkout. If you do not already have it, clone `https://github.com/SimonMallas/agent-letter-bridge`. Do not install a published package instead.
+Install the current checkout of `https://github.com/SimonMallas/agent-letter-bridge`. Do not install a published package instead.
+
+An existing checkout is not current until you fetch. If `git status` is clean, check out the remote tip and read this page again from that commit before you install. Do not merge and do not rebase. If the worktree has local changes, leave them. Do not install from that checkout. Tell the person it has local changes and stop.
+
+If there is no checkout, clone that repository and read this page from the clone.
 
 **Upgrading a bridge that is already running?** The steps below are for a new
 install: its token, chat id and ring are already answered, so do not re-ask

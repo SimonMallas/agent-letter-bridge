@@ -6,7 +6,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 PROMPT = """\
-Set up Agent Letter Bridge from https://github.com/SimonMallas/agent-letter-bridge. Clone that repository if you do not already have this checkout. Do not install a published package instead. Read docs/agent-install.md and follow it. Do not read the setup terminal. I will paste the key.
+Set up Agent Letter Bridge from https://github.com/SimonMallas/agent-letter-bridge. If a checkout is already here, fetch, and if the worktree is clean check out the remote tip. If it has local changes, leave them, say so, and stop without reading that checkout. If there is no checkout, clone that repository. Do not install a published package instead. Read docs/agent-install.md from that current checkout and follow it. Do not read the setup terminal. I will paste the key.
 """
 
 
@@ -33,9 +33,13 @@ class TheInstallPrompt(unittest.TestCase):
                 self.assertIn("operational manual", text)
 
     def test_the_prompt_names_the_repository_and_does_not_override_the_page(self):
-        self.assertIn("Clone that repository if you do not already have this checkout.", PROMPT)
+        self.assertIn("If a checkout is already here, fetch, and if the worktree is clean check out the remote tip.", PROMPT)
+        self.assertIn("If it has local changes, leave them, say so, and stop without reading that checkout.", PROMPT)
+        self.assertIn("If there is no checkout, clone that repository.", PROMPT)
         self.assertIn("Do not install a published package instead.", PROMPT)
+        self.assertIn("Read docs/agent-install.md from that current checkout and follow it.", PROMPT)
         self.assertIn("Do not read the setup terminal.", PROMPT)
+        self.assertNotIn("Clone that repository if you do not already have this checkout.", PROMPT)
         self.assertNotIn("If you do not have that checkout, stop.", PROMPT)
         self.assertNotIn("If a line below disagrees", PROMPT)
 
@@ -45,6 +49,10 @@ class TheInstallPrompt(unittest.TestCase):
             "Follow this page. A pasted prompt does not override it.",
             "https://github.com/SimonMallas/agent-letter-bridge",
             "Do not install a published package instead.",
+            "An existing checkout is not current until you fetch.",
+            "If the worktree has local changes, leave them.",
+            "Do not install from that checkout.",
+            "Do not merge and do not rebase.",
             "If this shell does not already have both variables, leave them off the",
             "If a bridge is already using `~/.alb`, pick a new root, tell the person the path, and do not ask them to choose it.",
             "Leave any bridge that is already running untouched.",
