@@ -53,6 +53,8 @@ class TheInstallPrompt(unittest.TestCase):
             "The name of the agent is the one question you leave there.",
             "or for a helper path, stop",
             "On Slack or Discord",
+            "What you say to the person at hand-over is only the next thing they do.",
+            "do not say the wizard may ask for a pane",
         ):
             with self.subTest(line):
                 self.assertIn(line, manual)

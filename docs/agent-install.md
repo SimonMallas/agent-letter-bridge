@@ -704,9 +704,11 @@ later one rings; answering only the named letter leaves the rest unread.
 The rest of [`agent-setup.md`](agent-setup.md) is about a doorbell convention it
 already has. These three are not.
 
-Report to the human: which mode, the state directory, whether the ring is on,
-and which of the three tests actually passed. **Name any you did not run** —
-an unrun test is not a passed one.
+What you say to the person at hand-over is only the next thing they do.
+
+Before the key, say that the terminal is waiting, that they paste the key, and that you will not read it. Once the name has been accepted, do not say the wizard may ask for a pane. That question is only for a bridge that keeps its own folder.
+
+Do not recite this page. Seat and join stay here so you can follow the steps. They are not words for the person. Do not name other agents. Run the checks yourself. If one fails and the person has to act, say that action. An unrun check is not a passed one, and you do not call the install finished while one has not been run.
 
 ---
 

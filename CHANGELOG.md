@@ -7,6 +7,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+- The install manual tells the installing agent that hand-over is only the next thing the person does. Before the key, that is the waiting terminal and the paste. Once the name has been accepted, the agent does not say the wizard may ask for a pane. Seat and join stay on the page for the agent.
 - The setup screens say agent where they used to say seat, and they do not say join. Yes means messages go to that agent's folder. When no folder is known, the screen says before the key that the bridge may stay stopped until something can tell you a message arrived. The line that said a poller with nothing to ping is not an install now says the bridge will not be started, because nothing is set up to tell you a message arrived. What the answers do is unchanged.
 - The readme opens with a Quick install jump to the install section. That section still holds the copy-this prompt and the commands. The section stays where it is.
 - The copy-this prompt is a short pointer. It names the public repository, clones it when this checkout is not already present, refuses a published package, and follows the operational manual. The prompt does not override that page. Rules that had lived only in the long prompt now sit on the manual: install this checkout, pick a new root when the usual one is already in use, leave a running bridge untouched, and the installer does not send the first answer.
