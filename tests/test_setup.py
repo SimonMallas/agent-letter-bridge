@@ -487,6 +487,7 @@ class TheMailboxQuestionIsSmallFirst(Base):
         self.assertEqual(result["mode"], "standalone")
         self.assertIn("No name was given", console.transcript)
         self.assertIn("keep its own folder", console.transcript)
+        self.assertNotIn("may stay stopped", console.transcript)
         self.assertNotIn("ALB_MAIL_ROOT",
                          (self.root / "bridge.env").read_text(encoding="utf-8"))
 
@@ -497,7 +498,7 @@ class TheMailboxQuestionIsSmallFirst(Base):
             letterbox_dir=str(box),
             supply_name=True)
         self.assertEqual(result["mode"], "standalone")
-        self.assertIn("alp is not a seat", console.transcript)
+        self.assertIn("alp is not an agent", console.transcript)
         self.assertIn("will not create one", console.transcript)
         self.assertIn("nearby name", console.transcript)
         self.assertFalse((box / "alp").exists())
@@ -628,7 +629,7 @@ class InitCatchesWhatTheRuntimeWouldRefuse(Base):
             letterbox_dir=self.listed_dir(),
             supply_name=True)
         self.assertEqual(result["mode"], "standalone")
-        self.assertIn("not a seat", console.transcript)
+        self.assertIn("is not an agent", console.transcript)
         self.assertIn("will not create one", console.transcript)
         self.assertNotIn("ALB_MAIL_ROOT",
                          (self.root / "bridge.env").read_text(encoding="utf-8"))
@@ -828,7 +829,9 @@ class TheRingAsksForItsSurface(Base):
             start_pane=lambda title, command: started.append(title) or "S-1")
         self.assertEqual(started, [])
         out = console.transcript.lower()
-        self.assertIn("no ring", out)
+        self.assertIn(
+            "will not be started, because nothing is set up to tell you a message arrived.",
+            out)
         self.assertIn("not an install", out)
         self.assertEqual(result.get("resident"), "incomplete")
 
@@ -1099,7 +1102,7 @@ class AnIntegratedInstallIsAnInstall(Base):
         console, result = self.run_init(["print"])
         self.assertEqual(result["ring"], "not configured")
         self.assertEqual(result["resident"], "incomplete")
-        self.assertIn("nothing to ping", console.transcript)
+        self.assertIn("will not be started, because nothing is set up to tell you a message arrived.", console.transcript)
 
 
 class TheExitStatusAgreesWithTheWizard(Base):
@@ -1994,7 +1997,8 @@ class LetterboxAlreadyInstalled(Base):
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertNotIn("ALB_MAIL_ROOT", env)
         self.assertNotIn("ALB_TO=", env)
-        self.assertIn("This is not set up for any seat.", console.transcript)
+        self.assertIn("This is not set up for an agent by name.", console.transcript)
+        self.assertNotIn("may stay stopped", console.transcript)
         self.assertNotIn("setting this up for the first time", console.transcript)
 
     def test_enter_on_a_matching_name_joins_that_seat(self):
@@ -2007,6 +2011,7 @@ class LetterboxAlreadyInstalled(Base):
         self.assertIn("ALB_TO=beta", env)
         self.assertIn(f"ALB_MAIL_ROOT={box / 'beta'}", env)
         self.assertIn("This is set up for beta.", console.transcript)
+        self.assertIn("messages go to that agent's folder.", console.transcript)
         self.assertEqual(console.asked[0], "  name")
         self.assertIn("  Y/n", console.asked)
 
@@ -2022,7 +2027,7 @@ class LetterboxAlreadyInstalled(Base):
         self.assertEqual(result["mode"], "standalone")
         self.assertNotIn("ALB_TO=custom", env)
         self.assertNotIn(f"ALB_MAIL_ROOT={other}", env)
-        self.assertIn("not a seat name", console.transcript)
+        self.assertIn("not a name this setup can use", console.transcript)
         self.assertNotIn("Y/n", "\n".join(console.asked))
 
     def test_a_symlink_is_not_an_exact_seat(self):
@@ -2032,7 +2037,7 @@ class LetterboxAlreadyInstalled(Base):
             letterbox_dir=str(box),
             supply_name=True)
         self.assertEqual(result["mode"], "standalone")
-        self.assertIn("linked is not a seat", console.transcript)
+        self.assertIn("linked is not an agent", console.transcript)
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertNotIn("ALB_TO=linked", env)
 
@@ -2048,6 +2053,7 @@ class LetterboxAlreadyInstalled(Base):
         self.assertNotIn("Re-run init from a cmux pane", console.transcript)
         self.assertIn("exact name", console.transcript)
         self.assertIn("No panes are visible", console.transcript)
+        self.assertNotIn("may stay stopped", console.transcript)
 
     def test_a_recorded_folder_is_used_only_when_none_was_given(self):
         box = self._box()
@@ -2061,7 +2067,7 @@ class LetterboxAlreadyInstalled(Base):
         self.assertEqual(result["mode"], "integrated")
         self.assertIn(f"ALB_MAIL_ROOT={box / 'beta'}", env)
         self.assertIn("ALB_TO=beta", env)
-        self.assertIn("seat: beta", console.transcript)
+        self.assertIn("agent: beta", console.transcript)
 
     def test_a_given_folder_does_not_fall_through_to_the_record(self):
         given = self._box()
@@ -2077,7 +2083,7 @@ class LetterboxAlreadyInstalled(Base):
             supply_name=True,
             recorded_dir=recorded)
         self.assertEqual(result["mode"], "standalone")
-        self.assertIn("gamma is not a seat", console.transcript)
+        self.assertIn("gamma is not an agent", console.transcript)
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertNotIn(f"ALB_MAIL_ROOT={other / 'gamma'}", env)
 
@@ -2098,6 +2104,7 @@ class LetterboxAlreadyInstalled(Base):
     def test_without_a_letterbox_folder_cmux_is_still_the_pane_route(self):
         console, _ = self.run_init(answers=["print"], panes=[])
         self.assertIn("Re-run init from a cmux pane", console.transcript)
+        self.assertIn("may stay stopped", console.transcript)
         self.assertNotIn("setting this up for the first time", console.transcript)
 
     def test_an_empty_read_can_be_tried_again(self):
@@ -2141,7 +2148,7 @@ class LetterboxAlreadyInstalled(Base):
         self.assertEqual(result["ring"], "helper")
         self.assertIn("ALB_TO=beta", env)
         self.assertIn(f"ALB_MAIL_ROOT={box / 'beta'}", env)
-        self.assertIn("did not choose a seat", console.transcript)
+        self.assertIn("did not choose an agent", console.transcript)
         self.assertIn("This is set up for beta.", console.transcript)
         self.assertNotIn("Y/n", asked)
         self.assertNotIn("y/N", asked)
@@ -2157,8 +2164,8 @@ class LetterboxAlreadyInstalled(Base):
         self.assertEqual(result["mode"], "refused")
         self.assertEqual(result["ring"], "not configured")
         self.assertFalse((self.root / "bridge.env").exists())
-        self.assertIn("will not ask you to choose a seat", console.transcript)
-        self.assertIn("seat: missing", console.transcript)
+        self.assertIn("will not ask you to choose an agent", console.transcript)
+        self.assertIn("agent: missing", console.transcript)
         self.assertEqual(console.asked, [])
 
     def test_a_seat_name_that_is_not_one_name_is_not_shown(self):

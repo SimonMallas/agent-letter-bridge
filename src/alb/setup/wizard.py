@@ -244,8 +244,9 @@ def _folder_for_a_typed_name(letterbox_dir, recorded_dir):
 def _ask_agent_name(console):
     console.say("Name of the agent.")
     console.say("One word, the name that agent already uses.")
-    console.say("A blank does not join. A name that is not already a seat")
-    console.say("does not create one and does not match a nearby name.")
+    console.say("Leave it blank and the bridge keeps its own folder.")
+    console.say("A name that is not already an agent here does not create one,")
+    console.say("and it does not match a nearby name.")
     return console.ask("  name", "").strip()
 
 
@@ -256,9 +257,9 @@ def _join_typed_name(console, typed, folder, seats):
     """
     if not typed or not _SEAT_NAME.fullmatch(typed):
         if typed:
-            console.say("That is not a seat name, so this run does not join a seat.")
+            console.say("That is not a name this setup can use, so this run does not use an agent.")
         else:
-            console.say("No name was given, so this run does not join a seat.")
+            console.say("No name was given, so this run does not use an agent.")
         console.say("The bridge will keep its own folder.")
         if not folder:
             console.say("Setup did not look for a folder.")
@@ -266,18 +267,18 @@ def _join_typed_name(console, typed, folder, seats):
         return False, "", ""
     if not folder:
         console.say("Setup did not look for a folder.")
-        console.say("The name is not joined.")
+        console.say("The name is not used.")
         console.say("The bridge will keep its own folder.")
         console.say("It will not ask you for a folder.")
         return False, "", ""
     if typed not in seats:
-        console.say(f"  {typed} is not a seat in that folder.")
+        console.say(f"  {typed} is not an agent in that folder.")
         console.say("Setup will not create one, and it will not match a nearby name.")
         console.say("The bridge will keep its own folder.")
         console.say("It will not ask you for a folder.")
         return False, "", ""
     console.say("Is Letterbox already installed for this agent?")
-    console.say("  yes - join that seat only.")
+    console.say("  yes - messages go to that agent's folder.")
     console.say("  no  - the bridge keeps its own folder.")
     if not _yes(console.ask("  Y/n", "y")):
         console.say("The bridge will keep its own folder.")
@@ -306,11 +307,11 @@ def _resolve_helper(console, helper_on_path, helper_install):
     def rejected(msg):
         console.say()
         console.say(msg)
-        console.say("Integrated mode rings through `letterbox ring`:")
+        console.say("A new message is announced with `letterbox ring`:")
         console.say("Letterbox 0.5.1 or later for cmux, tmux and Zellij,")
         console.say("0.6.2 or later for Herdr. To update, run your")
         console.say("edition's install command again. Installing now will")
-        console.say("record every ring as failing until it is updated.")
+        console.say("record every announcement as failing until it is updated.")
 
     if helper_on_path:
         status, msg = inspect_helper(helper_on_path)
@@ -333,9 +334,9 @@ def _resolve_helper(console, helper_on_path, helper_install):
         rejected(msg)
 
     console.say()
-    console.say("The name matches a seat, but the helper is not available.")
-    console.say("This run keeps the bridge's own folder rather than a")
-    console.say("mailbox it cannot ring.")
+    console.say("The name matches an agent, but letterbox is not available.")
+    console.say("This run keeps the bridge's own folder rather than one")
+    console.say("it cannot announce.")
     console.say("Re-run when letterbox is on PATH.")
     return False, ""
 
@@ -405,6 +406,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     recipient = ""
     integrated = False
     carried_ok = False
+    no_folder = False
     if carried:
         # The seat came with the terminal. Do not ask, and do not fall
         # through into the question a person answers for themselves.
@@ -414,20 +416,20 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
         summary["letterbox_seen"] = bool(seats)
         usable = bool(_SEAT_NAME.fullmatch(carried)) and carried in seats
         if not usable:
-            console.say("This terminal names a seat, and setup will not use it.")
+            console.say("This terminal names an agent, and setup will not use it.")
             if _SEAT_NAME.fullmatch(carried):
-                console.say(f"  seat: {carried}")
+                console.say(f"  agent: {carried}")
             else:
-                console.say("  The name is not a single seat name, so it is not shown.")
+                console.say("  The name is not one word, so it is not shown.")
             if letterbox_dir:
                 shown = pathlib.Path(letterbox_dir).expanduser()
                 console.say(f"  folder: {shown}")
-                console.say("That seat is not a child folder with an inbox there.")
+                console.say("That name is not a folder with an inbox there.")
             else:
                 console.say("The Letterbox folder is not set, so there is nowhere to look.")
-            console.say("Setup stopped. It will not ask you to choose a seat.")
-            console.say("Run it again from the seat's own terminal.")
-            console.say("A terminal with no seat keeps the bridge's own folder.")
+            console.say("Setup stopped. It will not ask you to choose an agent.")
+            console.say("Run it again from that agent's own terminal.")
+            console.say("A terminal with no agent name keeps the bridge's own folder.")
             summary["mode"] = "refused"
             summary["ring"] = "not configured"
             summary["resident"] = "not started"
@@ -441,6 +443,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     else:
         folder, seats = _folder_for_a_typed_name(
             letterbox_dir, recorded_dir)
+        no_folder = not bool(folder)
         summary["letterbox_seen"] = bool(seats)
         typed_name = _ask_agent_name(console)
         integrated, mailbox, recipient = _join_typed_name(
@@ -452,7 +455,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     # was done. Same loud downgrade as a blank, with the reason named.
     if integrated and mailbox and not pathlib.Path(mailbox).expanduser().is_dir():
         console.say()
-        console.say(f"  {mailbox} does not exist. A mailbox belongs to an agent")
+        console.say(f"  {mailbox} does not exist. A folder belongs to an agent")
         console.say("  that already has one, so it will not be invented.")
         mailbox = ""
 
@@ -470,12 +473,12 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
             carried_ok = False
         elif carried_ok:
             summary["seat_carried"] = True
-            console.say("This terminal already names a seat. Setup will use it.")
-            console.say(f"  seat: {recipient}")
+            console.say("This terminal already names an agent. Setup will use it.")
+            console.say(f"  agent: {recipient}")
             console.say(f"  folder: {mailbox}")
-            console.say("This run did not choose a seat, and it did not ask.")
+            console.say("This run did not choose an agent, and it did not ask.")
         else:
-            console.say(f"  seat: {recipient}")
+            console.say(f"  agent: {recipient}")
             console.say(f"  folder: {mailbox}")
 
     if integrated and mailbox and recipient:
@@ -490,8 +493,8 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
         mailbox = recipient = ""
         console.say()
         console.say("  Both the directory and the name are needed for that, and")
-        console.say("  one was blank. Writing a STANDALONE config instead.")
-        console.say("  Re-run init to set up the mailbox once you have both.")
+        console.say("  one was blank. This run keeps the bridge's own folder.")
+        console.say("  Re-run init once you have both the folder and the name.")
 
     # Said here, after the folder and the helper, so "next" is the token
     # and not a question that still sits in between.
@@ -502,6 +505,8 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     if summary["mode"] == "integrated":
         _noted(console, "messages will go to that agent's folder.", token_next)
     else:
+        if no_folder:
+            console.say("The bridge may stay stopped until something can tell you a message arrived.")
         _noted(console, "the bridge will keep its own folder.", token_next)
 
     # 3. The token. Never echoed, never an argument, never printed back.
@@ -1026,11 +1031,10 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running,
         # Simon: a full install is not an install without the bell. Starting
         # a poller here would succeed bell-less and --status would say
         # disabled, not broken. That is grok's install.
-        console.say("No ring is configured. The bridge will not be started.")
-        console.say("A poller with nothing to ping is not an install.")
+        console.say("The bridge will not be started, because nothing is set up to tell you a message arrived.")
         if summary.get("letterbox_seen"):
-            console.say("This is not set up for a named seat.")
-            console.say("Re-run init and give that seat's exact name.")
+            console.say("This is not set up for an agent by name.")
+            console.say("Re-run init and give that agent's exact name.")
             console.say("A cmux pane is only for a bridge that keeps its own")
             console.say("folder.")
         else:
@@ -1061,8 +1065,8 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running,
             console.say("to see that the line arrived where you meant it to.")
         elif (summary.get("notifier") or "").strip().lower() == "tmux":
             console.say("Run that in a tmux pane you leave open, or from your")
-            console.say("service manager. tmux has no born-inside rule, so the")
-            console.say("ring works either way.")
+            console.say("service manager. tmux does not care which pane you")
+            console.say("start it from, so a message still shows up either way.")
         else:
             # Real, and only here: cmux refuses a pane created from outside it.
             console.say("Run it from inside a cmux pane (cmux refuses processes")
@@ -1409,7 +1413,7 @@ def _offer_ring(console, panes, summary):
         console.say("someone else's work. Paste the id of your pane.")
         surface = console.ask("  your pane id", "").strip()
         if not surface:
-            console.say("  no pane id. The ring will not be configured.")
+            console.say("  no pane id. Nothing is set up to tell you a message arrived.")
             return "", ""
         for entry in panes:
             if entry.get("id") == surface:
@@ -1421,8 +1425,8 @@ def _offer_ring(console, panes, summary):
         return "", ""
 
     if summary.get("letterbox_seen"):
-        console.say("No panes are visible, so a pane ring cannot be set here.")
-        console.say("A seat already in that folder can be joined by its exact name.")
+        console.say("No panes are visible, so this cannot type a line into a pane.")
+        console.say("An agent already in that folder can be used by that exact name.")
         console.say("A pane id is only for a bridge that keeps its own folder.")
         return "", ""
 
@@ -1471,12 +1475,12 @@ def _closing(console, root, summary):
     recipient = summary.get("recipient") or ""
     if summary.get("mode") == "integrated" and recipient:
         console.say(f"This is set up for {recipient}.")
-        console.say("Messages go to that seat.")
+        console.say("Messages go to that agent's folder.")
     else:
-        console.say("This is not set up for any seat.")
+        console.say("This is not set up for an agent by name.")
         if summary.get("letterbox_seen"):
             console.say("Nothing names who the messages are for.")
-            console.say("Re-run init and give the exact name of a seat already there.")
+            console.say("Re-run init and give the exact name of an agent already there.")
         else:
             console.say("Nothing names who the messages are for.")
     console.say()

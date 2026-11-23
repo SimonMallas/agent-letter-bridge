@@ -25,17 +25,19 @@ Copy this, paste it into that terminal, and press Enter.
 alb --init --platform discord --root ~/.alb-discord
 ```
 
-With no seat named, setup asks for the name of the agent and not for a folder:
+With no agent named, setup asks for the name of the agent and not for a folder:
 
 ```text
 Name of the agent.
 One word, the name that agent already uses.
-A blank does not join. A name that is not already a seat
-does not create one and does not match a nearby name.
-No name was given, so this run does not join a seat.
+Leave it blank and the bridge keeps its own folder.
+A name that is not already an agent here does not create one,
+and it does not match a nearby name.
+No name was given, so this run does not use an agent.
 The bridge will keep its own folder.
 Setup did not look for a folder.
 It will not ask you for a folder.
+The bridge may stay stopped until something can tell you a message arrived.
 ```
 
 Setup then lists the
