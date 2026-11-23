@@ -241,9 +241,10 @@ first screen, so the app cannot exist before init runs.
 
 - Run `alb --init --platform slack --root ~/.alb-slack` in a terminal pane the
   human can see. Do not read the token prompts. Step 3 is the same rule.
-- They copy the manifest from that screen, make the app, then paste the two
-  tokens at init's hidden prompts themselves: the app-level token (`xapp-`)
-  and the bot token (`xoxb-`). Never ask for either in chat.
+- They copy the manifest from that screen, from the first `{` to the last
+  `}`, before any screenshot. They make the app, then paste the two tokens
+  at init's hidden prompts themselves: the app-level token (`xapp-`) and
+  the bot token (`xoxb-`). Never ask for either in chat.
 - If the app already exists and both tokens are issued, the token-file route
   works: `--token-file <bot> --app-token-file <app>`, both mode 600, both
   removed after reading.

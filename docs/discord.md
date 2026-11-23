@@ -152,8 +152,8 @@ again to finish it. Any other refusal is definite.
 Two connections on one bot token **both** receive every message. Two bridges
 started with the same bot would each write the letter and each answer it. The
 lock in each state directory stops that on one machine; across machines there
-is no signal. So **give each bridge its own application**. Making another
-takes a minute in the Developer Portal.
+is no signal. So **give each bridge its own application**. Make another
+in the Developer Portal.
 
 A Telegram, a Slack and a Discord bridge can run side by side, each with its
 own `--root`, all publishing into the same mailbox through `--mail-root`.

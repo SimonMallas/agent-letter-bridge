@@ -1,7 +1,7 @@
 # Discord, step by step
 
 This page walks you through connecting the bridge to Discord for the first
-time, one screen at a time. It takes about 15 minutes. You need:
+time, one screen at a time. You need:
 
 - the bridge installed (`pipx install agent-letter-bridge`; see
   [`INSTALL.md`](../INSTALL.md), Steps 1–2);

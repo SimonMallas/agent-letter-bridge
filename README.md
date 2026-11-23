@@ -153,8 +153,8 @@ The invariants are the product; the code is how they are kept.
 ## Install
 
 **Start here: [`INSTALL.md`](INSTALL.md)** — one numbered path from nothing to a
-working bridge, about 15 minutes, with the checkpoints that catch the failures
-that otherwise look like something else.
+working bridge, with the checkpoints that catch the failures that otherwise
+look like something else.
 
 Installing it with a CLI agent rather than by hand? Give the agent
 [`docs/agent-install.md`](docs/agent-install.md) — the same install written as a

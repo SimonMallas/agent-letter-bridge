@@ -275,7 +275,11 @@ class Words(Base):
         console, _ = self.run_init(answers=["n", "print"])
         text = console.transcript
         self.assertIn("https://api.slack.com/apps?new_app=1", text)
-        self.assertIn(manifest.render().splitlines()[1], text)
+        rendered = manifest.render().splitlines()[1]
+        self.assertIn(rendered, text)
+        self.assertIn("Copy the manifest below, from the first { to the last }.", text)
+        self.assertLess(text.index("Copy the manifest below"), text.index(rendered))
+        self.assertIn("That copied manifest is what you paste into Slack.", text)
         self.assertIn("before you take any screenshot", text)
         self.assertIn("Basic Information", text)
         self.assertIn("connections:write", text)

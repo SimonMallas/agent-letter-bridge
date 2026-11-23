@@ -1,6 +1,6 @@
 # Install
 
-A single path from nothing to a working bridge, in order. Roughly 15 minutes.
+A single path from nothing to a working bridge, in order.
 
 If you want to know *why* any step is the way it is, every step links into
 [`docs/operations.md`](docs/operations.md). This page only tells you what to do.

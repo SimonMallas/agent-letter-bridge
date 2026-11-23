@@ -35,11 +35,11 @@ alb --init --platform slack --root ~/.alb-slack
 `--init` walks you through it in this order:
 
 1. **Create the app.** Open <https://api.slack.com/apps?new_app=1>, choose
-   **From a manifest**, pick your workspace and paste the manifest `--init`
-   prints. In a work workspace an admin may need to approve the app; a free
-   workspace of your own works.
-   - Paste before you take any screenshot: a screenshot replaces what you
-     copied.
+   **From a manifest**, pick your workspace, and paste the manifest you
+   copied from what `--init` printed. In a work workspace an admin may need
+   to approve the app; a free workspace of your own works.
+   - **Copy the manifest first**, from the first `{` to the last `}`,
+     before you take any screenshot. A screenshot replaces what you copied.
    - Do not screenshot or share the **Basic Information** page. It shows the
      app's secrets. The bridge needs only the two tokens below.
 2. **App-level token** (starts `xapp-`): **Basic Information → App-Level

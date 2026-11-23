@@ -1,7 +1,7 @@
 # Slack, step by step
 
 This page walks you through connecting the bridge to Slack for the first time,
-one screen at a time. It takes about 15 minutes. You need:
+one screen at a time. You need:
 
 - the bridge installed (`pipx install agent-letter-bridge`, see
   [`INSTALL.md`](../INSTALL.md) Steps 1–2);
@@ -32,11 +32,11 @@ for a program are delivered?
 
 If you are not sure, press **Enter** (that means no). Setup then prints a
 block of text that starts with `{` and ends with `}`. That is the app's
-**manifest**: it tells Slack exactly what the app is allowed to do. Select
-all of it, from the first `{` to the last `}`, and copy it.
+**manifest**: it tells Slack exactly what the app is allowed to do.
 
-> Copy the manifest before you take any screenshot. A screenshot replaces
-> what you copied.
+> **Copy the manifest.** In the terminal, select from the first `{` to the
+> last `}`, and copy it. Do this before you take any screenshot. A
+> screenshot replaces what you copied.
 
 Leave the terminal where it is. Setup waits for you.
 
@@ -53,7 +53,8 @@ Under **Or start your own way**, choose **From a manifest**, then
 ![Create from a manifest: the manifest pasted in the JSON tab and the workspace chosen](images/slack/03-paste-manifest.png)
 
 1. Make sure the **JSON** tab is selected. Click in the box, select
-   everything already there, delete it, and paste the manifest you copied.
+   everything already there, delete it, and paste the manifest you copied
+   above.
 2. Under **Workspace**, pick the workspace the app should live in.
 3. Choose **Next**.
 
