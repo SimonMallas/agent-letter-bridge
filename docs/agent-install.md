@@ -471,7 +471,7 @@ When a chat is allowed, the wizard starts the bridge before it returns. The pers
 
 Inside cmux, enter on the existing question starts it in its own cmux pane. Do not tell them to decline it. An empty allowlist still defaults to not starting, and that default stays.
 
-Anywhere else, when the bell is the folder helper, or the notifier is tmux or Herdr, this same terminal becomes the bridge. Zellij, Rex, and a plain terminal use that helper path. There is no extra question. Leave the terminal open. Closing it stops the bridge. Do not start a second one.
+Anywhere else, when the bell is the folder helper, or the notifier is tmux or Herdr, this same terminal becomes the bridge. Zellij and Rex start here only when the install uses that helper. A plain terminal with no Letterbox still only prints the command. There is no extra question. Leave the terminal open. Closing it stops the bridge.
 
 A cmux bell from outside cmux still only prints the command, because that bell does not work from outside. When the wizard cannot start the bridge, the files in the root you chose are what tell you to start it.
 When `bridge.env` is there, that root's bridge is not running, and a chat is

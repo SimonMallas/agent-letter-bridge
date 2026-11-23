@@ -1588,8 +1588,15 @@ class TheTerminalBecomesTheBridge(Base):
         self.assertIn(f"--root {self.root}", here[0])
         self.assertEqual(panes, [])
         self.assertEqual(summary["resident"], "started")
-        self.assertIn("This terminal is now the bridge. Leave it open.",
-                      console.transcript)
+        text = console.transcript
+        self.assertIn("This terminal is now the bridge. Leave it open.", text)
+        self.assertIn("Closing it stops the bridge.", text)
+        self.assertNotIn("whether", text)
+        self.assertNotIn("The command:", text)
+        self.assertNotIn("allowlisted", text)
+        self.assertNotIn("Do not start a second one", text)
+        self.assertNotIn("Message the bot", text)
+        self.assertNotIn(f"--root {self.root}", text)
         self.assertFalse(any("start the bridge now" in q for q in console.asked))
 
     def test_tmux_and_herdr_start_in_this_terminal(self):
@@ -1627,7 +1634,11 @@ class TheTerminalBecomesTheBridge(Base):
         self.assertEqual(here, [])
         self.assertEqual(summary["resident"], "printed")
         self.assertIn("could not start it", console.transcript)
+        self.assertIn("Run this in a terminal you leave open:", console.transcript)
         self.assertIn(f"--root {self.root}", console.transcript)
+        self.assertLess(
+            console.transcript.index("could not start it"),
+            console.transcript.index(f"--root {self.root}"))
 
     def test_inside_cmux_still_asks_and_does_not_replace_this_terminal(self):
         console, summary, here, panes = self._offer(
@@ -1655,8 +1666,39 @@ class TheTerminalBecomesTheBridge(Base):
         self.assertEqual(len(started), 1)
         self.assertTrue(started[0].startswith("LETTERBOX_DIR="), started[0])
         self.assertIn("--root /opt/r", started[0])
-        self.assertIn("This terminal is now the bridge.", console.transcript)
-        self.assertNotIn("Then start the bridge", console.transcript)
+        text = console.transcript
+        self.assertIn("Next: this terminal becomes the bridge.", text)
+        self.assertIn("This terminal is now the bridge. Leave it open.", text)
+        self.assertIn("Closing it stops the bridge.", text)
+        self.assertNotIn("whether to start the bridge", text)
+        self.assertNotIn("Then start the bridge", text)
+        self.assertNotIn("The command:", text)
+        self.assertNotIn("/opt/alb/venv/bin/alb", text)
+        self.assertNotIn("allowlisted", text)
+        self.assertNotIn("Do not start a second one", text)
+        self.assertNotIn("Message the bot", text)
+
+    def test_replacing_the_process_flushes_before_exec(self):
+        """execvp drops a block-buffered pipe. The lines have to be out first."""
+        from unittest import mock
+        order = []
+        previous = os.environ.get("LETTERBOX_DIR")
+        try:
+            with mock.patch.object(os, "execvp", side_effect=lambda prog, argv: order.append(("exec", prog, argv))), \
+                 mock.patch.object(sys.stdout, "flush", side_effect=lambda: order.append("out")), \
+                 mock.patch.object(sys.stderr, "flush", side_effect=lambda: order.append("err")):
+                wizard._start_here("LETTERBOX_DIR=/tmp/box /bin/echo hello")
+        finally:
+            if previous is None:
+                os.environ.pop("LETTERBOX_DIR", None)
+            else:
+                os.environ["LETTERBOX_DIR"] = previous
+        self.assertEqual(order[0], "out")
+        self.assertEqual(order[1], "err")
+        kind, prog, argv = order[2]
+        self.assertEqual(kind, "exec")
+        self.assertEqual(prog, "/bin/echo")
+        self.assertEqual(argv, ["/bin/echo", "hello"])
 
 
 class TheOfferUsesTheBuilder(Base):

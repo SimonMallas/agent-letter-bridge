@@ -659,12 +659,24 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
             _persist_ring(console, env_path, env_path_existed, surface,
                           notifier, summary)
 
+    born_fn = cmux_born or _cmux_born
+    running_fn = bridge_running or _bridge_running
+    starts_here = (
+        _starts_in_this_terminal(summary, bool(born_fn()))
+        and not running_fn(root)
+    )
+    # "whether" is a question. This path asks nothing: the terminal is
+    # about to become the bridge.
+    start_next = (
+        "this terminal becomes the bridge." if starts_here
+        else "whether to start the bridge."
+    )
     if summary.get("ring") == "helper":
         _noted(console, "a new message is announced through the folder you named.",
-               "whether to start the bridge.")
+               start_next)
     elif summary.get("ring") == "configured":
         _noted(console, "a new message will be typed into the pane you chose.",
-               "whether to start the bridge.")
+               start_next)
     else:
         _noted(console, "nothing will announce a new message yet.",
                "the bridge stays stopped until that is set.")
@@ -860,6 +872,11 @@ def _start_here(command):
         argv = argv[1:]
     if not argv:
         raise RuntimeError("no command")
+    # A pipe block-buffers stdout. execvp drops that buffer, so the lines
+    # just said would vanish and only the new process would be seen.
+    import sys
+    sys.stdout.flush()
+    sys.stderr.flush()
     os.execvp(argv[0], argv)
 
 
@@ -1007,6 +1024,25 @@ def _resident_command(root, origin_of=None, executable=None):
     return shlex.join(argv + ["--config", f"{root}/bridge.env", "--root", root])
 
 
+def _starts_in_this_terminal(summary, born):
+    """True when this terminal becomes the bridge and nothing is asked.
+
+    Inside cmux the existing question still starts a pane. An empty
+    allowlist does not start. A plain terminal with no helper, and with
+    no tmux or Herdr notifier, only prints the command: nothing there
+    would announce a message.
+    """
+    if born:
+        return False
+    ring = summary.get("ring")
+    if ring not in RINGS:
+        return False
+    if not summary.get("delivers", True):
+        return False
+    notifier = (summary.get("notifier") or "").strip().lower()
+    return summary.get("ring") == "helper" or notifier in {"tmux", "herdr"}
+
+
 def _offer_resident(console, root, summary, cmux_born, bridge_running,
                     start_pane, command=_UNSET, start_here=None):
     """Finish the install, or hand over exactly what remains.
@@ -1043,10 +1079,15 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running,
         summary["resident"] = "already running"
         return
 
-    console.say("The bridge only delivers while it is running. The command:")
-    console.say()
-    console.say(f"  {command}")
-    console.say()
+    born = bool(cmux_born())
+    starts_here = _starts_in_this_terminal(summary, born)
+    # The command is for a person who has to run it. On the path that
+    # replaces this process, printing it asks them to do a thing they must not.
+    if not starts_here:
+        console.say("The bridge only delivers while it is running. The command:")
+        console.say()
+        console.say(f"  {command}")
+        console.say()
 
     if summary.get("ring") not in RINGS:
         # Simon: a full install is not an install without the bell. Starting
@@ -1064,7 +1105,7 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running,
         summary["resident"] = "incomplete"
         return
 
-    if not cmux_born():
+    if not born:
         # THE ADVICE HAS TO MATCH THE RING. Automatic pane creation exists
         # only for cmux, and this message once generalised that into a claim
         # about where the bridge may run at all - telling a tmux operator to
@@ -1074,20 +1115,21 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running,
         # Outside cmux, waiting for someone to come back and run the printed
         # command left a finished install with no bridge. When this terminal
         # can reach the bell, it becomes the bridge. A cmux pane still cannot
-        # be rung from outside cmux, so that case stays printed.
-        notifier = (summary.get("notifier") or "").strip().lower()
-        can_start_here = summary.get("delivers", True) and (
-            summary.get("ring") == "helper" or notifier in {"tmux", "herdr"}
-        )
-        if can_start_here:
+        # be rung from outside cmux, so that case stays printed. A plain
+        # terminal with no helper and no tmux or Herdr notifier stays printed
+        # too: nothing there would announce the message.
+        if starts_here:
+            # Said here, before the replace. exec does not return, so the
+            # closing screen is not what a person reads when this works.
+            # They already messaged the bot on the earlier screen.
             console.say("This terminal is now the bridge. Leave it open.")
-            console.say("Closing it stops the bridge. Do not start a second one.")
-            console.say("Message the bot from the account you allowlisted.")
+            console.say("Closing it stops the bridge.")
             try:
                 start_here(command)
             except Exception as exc:  # noqa: BLE001 - degrade to the printed path, never half-start
                 console.say(f"  could not start it: {exc}")
-                console.say("  run the command above in a terminal you leave open.")
+                console.say("  Run this in a terminal you leave open:")
+                console.say(f"  {command}")
                 summary["resident"] = "printed"
                 return
             summary["resident"] = "started"
@@ -1507,18 +1549,17 @@ def _closing(console, root, summary):
     console.say("error. That silence is the gate working. You do not need")
     console.say("a second person to finish.")
     console.say()
-    if summary.get("resident") == "started":
-        console.say("To finish: message the bot yourself, from the account")
-        console.say("you allowlisted. This bridge is already running.")
-        console.say("Leave it open. A second one on the same token collides.")
-    elif summary.get("has_token"):
-        console.say("To finish: message the bot yourself, from the account")
-        console.say("you allowlisted. Then start the bridge and leave it running:")
-    else:
-        console.say("To finish: put a token in bridge.env. The bridge refuses")
-        console.say("to start until that is there. Then message the bot yourself")
-        console.say("and leave the bridge running:")
+    # A start that works never gets here: the process was already replaced.
+    # Saying a different finish on this branch would only be seen by a
+    # starter that returns, and it would disagree with the lines above.
     if summary.get("resident") != "started":
+        if summary.get("has_token"):
+            console.say("To finish: message the bot yourself, from the account")
+            console.say("you allowlisted. Then start the bridge and leave it running:")
+        else:
+            console.say("To finish: put a token in bridge.env. The bridge refuses")
+            console.say("to start until that is there. Then message the bot yourself")
+            console.say("and leave the bridge running:")
         command = summary.get("start_command") or ""
         if command:
             console.say(f"  {command}")

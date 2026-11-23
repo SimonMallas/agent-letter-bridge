@@ -68,6 +68,8 @@ class TheInstallPrompt(unittest.TestCase):
             "Before the key, say only this: the terminal is waiting",
             "When a chat is allowed, the wizard starts the bridge before it returns.",
             "this same terminal becomes the bridge.",
+            "Zellij and Rex start here only when the install uses that helper.",
+            "A plain terminal with no Letterbox still only prints the command.",
             "When the wizard cannot start the bridge, the files in the root you chose are what tell you to start it.",
             "The first letter is the wake.",
             "Enter takes `read`.",
@@ -75,6 +77,7 @@ class TheInstallPrompt(unittest.TestCase):
             with self.subTest(line):
                 self.assertIn(line, manual)
         self.assertNotIn("Tell them to decline", manual)
+        self.assertNotIn("a plain terminal use that helper path", manual)
         self.assertNotIn("I am opening a terminal that will ask you to paste the bot token", manual)
         self.assertNotIn("Setup can read your chat id itself", manual)
 
