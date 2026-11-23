@@ -6,25 +6,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 PROMPT = """\
-Install Agent Letter Bridge from the checkout this prompt came from. If you do not have that checkout, stop. Do not install a published package in its place.
-
-Read docs/agent-install.md. If a line below disagrees with that page, follow the line below.
-
-Do not ask me for a folder, a path, a bot, or an allowlist. Do not invent a seat. There is no seat flag. Do not search this machine for a mailbox. Do not pass a name. The setup terminal may ask the name of the agent. Leave that question there.
-
-If LETTERBOX_DIR and LETTERBOX_AGENT are both already set and non-empty in this terminal, pass those references into the setup terminal. If either is empty, leave both off the command.
-
-Open a terminal and leave it open. If no bridge is using ~/.alb, run alb --init --root ~/.alb there. If a bridge is already using it, pick a new root, tell me the path, and do not ask me to choose it. Do not read that terminal. I will paste the key and press Enter.
-
-The setup terminal may ask which chat is mine. Leave that question there. Do not ask it yourself.
-
-If that terminal asks for a folder, a path, or a helper path, stop. Do not answer. Do not answer the name for me.
-
-Leave any bridge that is already running untouched.
-
-On Slack or Discord, follow that platform's page in this checkout. The same rules apply.
-
-When my first message arrives as a letter, answer it with alb --reply-to on this bridge. The installer does not send that answer.
+Set up Agent Letter Bridge from https://github.com/SimonMallas/agent-letter-bridge. Clone that repository if you do not already have this checkout. Do not install a published package instead. Read docs/agent-install.md and follow it. Do not read the setup terminal. I will paste the key.
 """
 
 
@@ -50,22 +32,30 @@ class TheInstallPrompt(unittest.TestCase):
                 self.assertIn("docs/agent-install.md", text)
                 self.assertIn("operational manual", text)
 
-    def test_the_prompt_forbids_the_questions_a_plain_sentence_produced(self):
+    def test_the_prompt_names_the_repository_and_does_not_override_the_page(self):
+        self.assertIn("Clone that repository if you do not already have this checkout.", PROMPT)
+        self.assertIn("Do not install a published package instead.", PROMPT)
+        self.assertIn("Do not read the setup terminal.", PROMPT)
+        self.assertNotIn("If you do not have that checkout, stop.", PROMPT)
+        self.assertNotIn("If a line below disagrees", PROMPT)
+
+    def test_rules_that_left_the_prompt_sit_on_the_manual(self):
+        manual = (ROOT / "docs" / "agent-install.md").read_text()
         for line in (
-            "Do not ask me for a folder, a path, a bot, or an allowlist.",
-            "Do not pass a name.",
-            "The setup terminal may ask the name of the agent.",
-            "If either is empty, leave both off the command.",
-            "Do not read that terminal.",
-            "If that terminal asks for a folder, a path, or a helper path, stop.",
-            "Do not answer the name for me.",
+            "Follow this page. A pasted prompt does not override it.",
+            "https://github.com/SimonMallas/agent-letter-bridge",
+            "Do not install a published package instead.",
+            "If this shell does not already have both variables, leave them off the",
+            "If a bridge is already using `~/.alb`, pick a new root, tell the person the path, and do not ask them to choose it.",
             "Leave any bridge that is already running untouched.",
-            "answer it with alb --reply-to on this bridge.",
             "The installer does not send that answer.",
-            "If you do not have that checkout, stop.",
+            "Do not read that terminal.",
+            "The name of the agent is the one question you leave there.",
+            "or for a helper path, stop",
+            "On Slack or Discord",
         ):
             with self.subTest(line):
-                self.assertIn(line, PROMPT)
+                self.assertIn(line, manual)
 
     def test_the_install_page_does_not_ask_the_person_to_pick_a_mode(self):
         install = self.pages()["install"]

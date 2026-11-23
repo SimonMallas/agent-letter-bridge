@@ -158,28 +158,10 @@ look like something else.
 
 **If you are an agent,** read [`docs/agent-install.md`](docs/agent-install.md) before you install. That is the operational manual.
 
-**Copy this and give it to the agent you already work with.** The prompt is the whole ask:
+**Copy this and give it to the agent you already work with.** The prompt points at the manual. The rules are on that page:
 
 ```text
-Install Agent Letter Bridge from the checkout this prompt came from. If you do not have that checkout, stop. Do not install a published package in its place.
-
-Read docs/agent-install.md. If a line below disagrees with that page, follow the line below.
-
-Do not ask me for a folder, a path, a bot, or an allowlist. Do not invent a seat. There is no seat flag. Do not search this machine for a mailbox. Do not pass a name. The setup terminal may ask the name of the agent. Leave that question there.
-
-If LETTERBOX_DIR and LETTERBOX_AGENT are both already set and non-empty in this terminal, pass those references into the setup terminal. If either is empty, leave both off the command.
-
-Open a terminal and leave it open. If no bridge is using ~/.alb, run alb --init --root ~/.alb there. If a bridge is already using it, pick a new root, tell me the path, and do not ask me to choose it. Do not read that terminal. I will paste the key and press Enter.
-
-The setup terminal may ask which chat is mine. Leave that question there. Do not ask it yourself.
-
-If that terminal asks for a folder, a path, or a helper path, stop. Do not answer. Do not answer the name for me.
-
-Leave any bridge that is already running untouched.
-
-On Slack or Discord, follow that platform's page in this checkout. The same rules apply.
-
-When my first message arrives as a letter, answer it with alb --reply-to on this bridge. The installer does not send that answer.
+Set up Agent Letter Bridge from https://github.com/SimonMallas/agent-letter-bridge. Clone that repository if you do not already have this checkout. Do not install a published package instead. Read docs/agent-install.md and follow it. Do not read the setup terminal. I will paste the key.
 ```
 
 The short version, once you know the shape. Open a terminal. Copy this block, paste it there, and press Enter:
@@ -189,7 +171,7 @@ pipx install agent-letter-bridge                # or: uv tool install agent-lett
 alb --init --root ~/.alb                        # creates the files, then the token
 ```
 
-That short version installs the published package. The prompt above installs this checkout. This checkout asks for the name of the agent when the terminal does not already name one. It does not ask for a folder.
+That short version installs the published package. The prompt above names this repository and follows the manual. This checkout asks for the name of the agent when the terminal does not already name one. It does not ask for a folder.
 
 For Slack instead of Telegram, in that same terminal, run `alb --init --platform slack --root
 ~/.alb-slack`; it prints the app manifest and asks for the two tokens. What
