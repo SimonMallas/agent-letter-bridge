@@ -7,6 +7,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+- When Letterbox is on PATH and it fails its check, setup stops. It does not ask for the key, and it does not say to type the name again. The next step is to update Letterbox and run init again. A missing Letterbox still keeps the bridge's own folder and continues.
 - A helper on PATH that fails its check is not used, and this run keeps the bridge's own folder. A token the platform refused, then a blank paste, is not a finished install. When the bridge is already running, the closing screen points at status. One cycle stays the route only when nothing is running. Whether a token is saved is read from the file the bridge will read, so a blank token still says to put one in bridge.env.
 
 ## [0.7.3] — 2026-11-23

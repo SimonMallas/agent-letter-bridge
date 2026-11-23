@@ -2395,20 +2395,29 @@ class FourCorrections(Base):
                 chat_id_reader=lambda token: [
                     {"chat_id": "424242424", "label": "you"}],
                 start_here=lambda command: started.append(command))
-        env = (self.root / "bridge.env").read_text(encoding="utf-8")
-        self.assertEqual(result["mode"], "standalone")
+        self.assertFalse((self.root / "bridge.env").exists())
+        self.assertFalse((self.root / "allowlist.json").exists())
+        self.assertEqual(result["mode"], "refused")
         self.assertEqual(result["ring"], "not configured")
+        self.assertEqual(result["resident"], "not started")
+        self.assertFalse(result["has_token"])
         self.assertEqual(started, [])
-        self.assertNotEqual(result["resident"], "started")
-        self.assertNotIn("ALB_BUS_BINARY", env)
-        self.assertNotIn("ALB_MAIL_ROOT", env)
+        asked = "\n".join(console.asked)
+        self.assertNotIn("token", asked)
+        self.assertNotIn("read or print", asked)
         text = console.transcript
         self.assertIn(INCOMPATIBLE, text)
         self.assertIn("This run will not use that helper.", text)
         self.assertIn("The bridge keeps its own folder.", text)
+        self.assertIn("This run stops here.", text)
+        self.assertIn("Update Letterbox, then run init again.", text)
+        self.assertNotIn("read or print", text)
+        self.assertNotIn("exact name", text)
         self.assertNotIn("record every announcement as failing", text)
         self.assertNotIn("That helper was not recorded.", text)
         self.assertNotIn("letterbox is not available", text)
+        from alb.cli import _init_status
+        self.assertNotEqual(_init_status(result), 0)
 
     def test_a_refused_token_then_a_blank_paste_is_not_a_finished_install(self):
         from alb.cli import _init_status

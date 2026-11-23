@@ -288,11 +288,12 @@ def _join_typed_name(console, typed, folder, seats):
 
 
 def _resolve_helper(console, helper_on_path, helper_install):
-    """Return (join, helper_path). A path is never asked for.
+    """Return (join, helper_path, halt). A path is never asked for.
 
     A helper on PATH that fails its check does not join, and the path is
-    not recorded. The bridge keeps its own folder. A helper that is present
-    and the wrong edition is not replaced by the installer candidate.
+    not recorded. halt is true only then: the helper is present and the
+    wrong edition, so setup stops instead of asking for a key. It is not
+    replaced by the installer candidate. A missing helper does not halt.
     Anything else has to be the one installer path and has to pass the same
     check. If neither is usable, this run does not join.
     """
@@ -319,8 +320,8 @@ def _resolve_helper(console, helper_on_path, helper_install):
             rejected(msg)
             console.say("This run will not use that helper.")
             console.say("The bridge keeps its own folder.")
-            return False, ""
-        return True, recorded(helper_on_path)
+            return False, "", True
+        return True, recorded(helper_on_path), False
 
     candidate = ""
     if helper_install is not None:
@@ -331,7 +332,7 @@ def _resolve_helper(console, helper_on_path, helper_install):
     if candidate:
         status, msg = inspect_helper(candidate)
         if status == "ok":
-            return True, recorded(candidate)
+            return True, recorded(candidate), False
         rejected(msg)
 
     console.say()
@@ -339,7 +340,7 @@ def _resolve_helper(console, helper_on_path, helper_install):
     console.say("This run keeps the bridge's own folder rather than one")
     console.say("it cannot announce.")
     console.say("Re-run when letterbox is on PATH.")
-    return False, ""
+    return False, "", False
 
 
 def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
@@ -466,7 +467,17 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
     # run does not join: a mailbox it cannot ring is not an install.
     helper = ""
     if integrated and mailbox and recipient:
-        join, helper = _resolve_helper(console, helper_on_path, helper_install)
+        join, helper, halt = _resolve_helper(console, helper_on_path, helper_install)
+        if halt:
+            # The name was right. The helper is present and cannot announce.
+            # Continuing would ask for a key and then blame the name.
+            console.say("This run stops here.")
+            console.say("Update Letterbox, then run init again.")
+            summary["mode"] = "refused"
+            summary["ring"] = "not configured"
+            summary["resident"] = "not started"
+            summary["has_token"] = False
+            return summary
         if not join:
             integrated = False
             mailbox = ""
