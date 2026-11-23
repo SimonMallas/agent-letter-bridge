@@ -66,6 +66,8 @@ class TheInstallPrompt(unittest.TestCase):
             "What you say to the person is only the next thing they do.",
             "Do not tell them to come back when the terminal finishes.",
             "Before the key, say only this: the terminal is waiting",
+            "When a chat is allowed, the wizard starts the bridge before it returns.",
+            "this same terminal becomes the bridge.",
             "When the wizard cannot start the bridge, the files in the root you chose are what tell you to start it.",
             "The first letter is the wake.",
             "Enter takes `read`.",

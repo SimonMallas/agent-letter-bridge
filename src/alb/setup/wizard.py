@@ -346,7 +346,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
          resident_command=_UNSET, token_file=None, platform="telegram",
          app_token_file=None, slack_call=None, discord_call=None,
          letterbox_dir="", letterbox_agent="", token_check=None,
-         recorded_dir=None, helper_install=None):
+         recorded_dir=None, helper_install=None, start_here=None):
     """Create the boilerplate under `root`, asking for what cannot be derived.
 
     `console` supplies say / ask / ask_secret, so the questions are testable
@@ -676,7 +676,8 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
                     cmux_born or _cmux_born,
                     bridge_running or _bridge_running,
                     start_pane or _start_pane,
-                    command=resident_command)
+                    command=resident_command,
+                    start_here=start_here or _start_here)
 
     _closing(console, root, summary)
     return summary
@@ -844,6 +845,24 @@ def _bridge_running(root):
         os.close(fd)
 
 
+def _start_here(command):
+    """Become the bridge in this same terminal.
+
+    The person just finished the questions here. Replacing this process
+    keeps the bell in the context init was started in, and leaves the
+    terminal occupied so closing it is an obvious stop. A detached
+    process would be a bridge they cannot see.
+    """
+    import shlex
+    argv = shlex.split(command)
+    if argv and argv[0].startswith("LETTERBOX_DIR="):
+        os.environ["LETTERBOX_DIR"] = argv[0].split("=", 1)[1]
+        argv = argv[1:]
+    if not argv:
+        raise RuntimeError("no command")
+    os.execvp(argv[0], argv)
+
+
 def _start_pane(title, command):
     """Create the dedicated pane. Returns an identifier for the report."""
     import subprocess
@@ -989,7 +1008,7 @@ def _resident_command(root, origin_of=None, executable=None):
 
 
 def _offer_resident(console, root, summary, cmux_born, bridge_running,
-                    start_pane, command=_UNSET):
+                    start_pane, command=_UNSET, start_here=None):
     """Finish the install, or hand over exactly what remains.
 
     The printed command and the pane's command are the same bytes, so both
@@ -1000,6 +1019,8 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running,
     """
     command = _resident_command(root) if command is _UNSET else command
     command = _prefix_letterbox_dir(command, summary)
+    if start_here is None:
+        start_here = _start_here
     if isinstance(command, str) and command:
         summary["start_command"] = command
     if command is None:
@@ -1049,6 +1070,28 @@ def _offer_resident(console, root, summary, cmux_born, bridge_running,
         # about where the bridge may run at all - telling a tmux operator to
         # adopt a multiplexer they do not need, and an integrated one to worry
         # about panes that play no part in their bell.
+        #
+        # Outside cmux, waiting for someone to come back and run the printed
+        # command left a finished install with no bridge. When this terminal
+        # can reach the bell, it becomes the bridge. A cmux pane still cannot
+        # be rung from outside cmux, so that case stays printed.
+        notifier = (summary.get("notifier") or "").strip().lower()
+        can_start_here = summary.get("delivers", True) and (
+            summary.get("ring") == "helper" or notifier in {"tmux", "herdr"}
+        )
+        if can_start_here:
+            console.say("This terminal is now the bridge. Leave it open.")
+            console.say("Closing it stops the bridge. Do not start a second one.")
+            console.say("Message the bot from the account you allowlisted.")
+            try:
+                start_here(command)
+            except Exception as exc:  # noqa: BLE001 - degrade to the printed path, never half-start
+                console.say(f"  could not start it: {exc}")
+                console.say("  run the command above in a terminal you leave open.")
+                summary["resident"] = "printed"
+                return
+            summary["resident"] = "started"
+            return
         if summary.get("ring") == "helper":
             # NOT a broker. The helper is executed in the BRIDGE's context, so
             # whatever it needs, the bridge needs - and a helper that reaches
@@ -1464,18 +1507,23 @@ def _closing(console, root, summary):
     console.say("error. That silence is the gate working. You do not need")
     console.say("a second person to finish.")
     console.say()
-    if summary.get("has_token"):
+    if summary.get("resident") == "started":
+        console.say("To finish: message the bot yourself, from the account")
+        console.say("you allowlisted. This bridge is already running.")
+        console.say("Leave it open. A second one on the same token collides.")
+    elif summary.get("has_token"):
         console.say("To finish: message the bot yourself, from the account")
         console.say("you allowlisted. Then start the bridge and leave it running:")
     else:
         console.say("To finish: put a token in bridge.env. The bridge refuses")
         console.say("to start until that is there. Then message the bot yourself")
         console.say("and leave the bridge running:")
-    command = summary.get("start_command") or ""
-    if command:
-        console.say(f"  {command}")
-    else:
-        console.say(f"  alb --config {root}/bridge.env --root {root}")
+    if summary.get("resident") != "started":
+        command = summary.get("start_command") or ""
+        if command:
+            console.say(f"  {command}")
+        else:
+            console.say(f"  alb --config {root}/bridge.env --root {root}")
     console.say()
     recipient = summary.get("recipient") or ""
     if summary.get("mode") == "integrated" and recipient:

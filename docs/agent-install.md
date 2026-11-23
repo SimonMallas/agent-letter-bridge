@@ -467,13 +467,13 @@ that already exists, and it reports what it kept.
 **Do not create these files yourself instead.** They have modes that matter and
 `init` sets them at creation, not afterwards.
 
-The wizard starts the bridge only when it is itself inside cmux and a chat is
-allowed. Enter on that question starts it in its own cmux pane. Do not tell
-them to decline it. An empty allowlist still defaults to not starting, and
-that default stays.
+When a chat is allowed, the wizard starts the bridge before it returns. The person does not start it, and they do not have to tell you they finished.
 
-Anywhere else, including Herdr, the wizard prints the start command and does
-not ask. There is nothing to decline. When the wizard cannot start the bridge, the files in the root you chose are what tell you to start it.
+Inside cmux, enter on the existing question starts it in its own cmux pane. Do not tell them to decline it. An empty allowlist still defaults to not starting, and that default stays.
+
+Anywhere else, when the bell is the folder helper, or the notifier is tmux or Herdr, this same terminal becomes the bridge. Zellij, Rex, and a plain terminal use that helper path. There is no extra question. Leave the terminal open. Closing it stops the bridge. Do not start a second one.
+
+A cmux bell from outside cmux still only prints the command, because that bell does not work from outside. When the wizard cannot start the bridge, the files in the root you chose are what tell you to start it.
 When `bridge.env` is there, that root's bridge is not running, and a chat is
 allowed, start the printed command in a pane that stays open. Do not start
 it as a child of your own session. Do not wait for the person to come back.

@@ -107,6 +107,8 @@ class Base(unittest.TestCase):
         kw.setdefault("bridge_running", lambda root: False)
         kw.setdefault("start_pane", lambda title, command: (_ for _ in ()).throw(
             AssertionError("start_pane reached without an explicit test override")))
+        kw.setdefault("start_here", lambda command: (_ for _ in ()).throw(
+            AssertionError("start_here reached without an explicit test override")))
         # A deterministic launcher. Resolving the real one runs a subprocess
         # and depends on whether alb is installed for whichever interpreter is
         # running the suite - so these tests would pass or fail by accident of
@@ -1548,6 +1550,113 @@ class TheCommandSurvivesAShell(Base):
         import shlex
         command = self._command("/tmp/My Bridge/root")
         self.assertIn("/tmp/My Bridge/root/bridge.env", shlex.split(command))
+
+
+class TheTerminalBecomesTheBridge(Base):
+    """Outside cmux, a finished allowlist used to print a command and wait.
+
+    The person then messaged the bot and nothing was running. When this
+    terminal can reach the bell, finishing starts the bridge here. No extra
+    question. A cmux pane from outside cmux still only prints.
+    """
+
+    def _offer(self, summary, answers=(), cmux=False, starter=None):
+        from alb.setup import wizard
+        started_here = []
+        panes = []
+
+        def start_here(command):
+            started_here.append(command)
+
+        def start_pane(title, command):
+            panes.append((title, command))
+            return "S"
+
+        console = ScriptedConsole(list(answers))
+        wizard._offer_resident(
+            console, self.root, summary,
+            lambda: cmux, lambda root: False, start_pane,
+            command=f"/opt/alb/venv/bin/alb --config {self.root}/bridge.env --root {self.root}",
+            start_here=starter or start_here)
+        return console, summary, started_here, panes
+
+    def test_an_integrated_install_starts_in_this_terminal(self):
+        console, summary, here, panes = self._offer(
+            {"created": [], "kept": [], "ring": "helper", "delivers": True,
+             "has_token": True})
+        self.assertEqual(len(here), 1)
+        self.assertIn(f"--root {self.root}", here[0])
+        self.assertEqual(panes, [])
+        self.assertEqual(summary["resident"], "started")
+        self.assertIn("This terminal is now the bridge. Leave it open.",
+                      console.transcript)
+        self.assertFalse(any("start the bridge now" in q for q in console.asked))
+
+    def test_tmux_and_herdr_start_in_this_terminal(self):
+        for notifier in ("tmux", "herdr"):
+            _console, summary, here, panes = self._offer(
+                {"created": [], "kept": [], "ring": "configured",
+                 "notifier": notifier, "delivers": True})
+            self.assertEqual(len(here), 1, notifier)
+            self.assertEqual(panes, [], notifier)
+            self.assertEqual(summary["resident"], "started", notifier)
+
+    def test_an_empty_allowlist_does_not_start_outside_cmux(self):
+        console, summary, here, _panes = self._offer(
+            {"created": [], "kept": [], "ring": "helper", "delivers": False})
+        self.assertEqual(here, [])
+        self.assertEqual(summary["resident"], "printed")
+        self.assertIn("doorbell helper supports", console.transcript)
+
+    def test_a_cmux_pane_from_outside_cmux_still_only_prints(self):
+        console, summary, here, panes = self._offer(
+            {"created": [], "kept": [], "ring": "configured",
+             "notifier": "cmux", "delivers": True})
+        self.assertEqual(here, [])
+        self.assertEqual(panes, [])
+        self.assertEqual(summary["resident"], "printed")
+        self.assertIn("inside a cmux pane", console.transcript.lower())
+
+    def test_a_failed_start_prints_the_command(self):
+        def boom(command):
+            raise OSError("missing")
+
+        console, summary, here, _panes = self._offer(
+            {"created": [], "kept": [], "ring": "helper", "delivers": True},
+            starter=boom)
+        self.assertEqual(here, [])
+        self.assertEqual(summary["resident"], "printed")
+        self.assertIn("could not start it", console.transcript)
+        self.assertIn(f"--root {self.root}", console.transcript)
+
+    def test_inside_cmux_still_asks_and_does_not_replace_this_terminal(self):
+        console, summary, here, panes = self._offer(
+            {"created": [], "kept": [], "ring": "helper", "delivers": True},
+            answers=["y"], cmux=True)
+        self.assertEqual(here, [])
+        self.assertEqual(len(panes), 1)
+        self.assertEqual(summary["resident"], "started")
+        self.assertTrue(any("start the bridge now" in q for q in console.asked))
+        self.assertIn("started:", console.transcript)
+
+    def test_init_wires_the_terminal_start_for_an_integrated_chat(self):
+        started = []
+        console, result = self.run_init(
+            ["alpha", "y", "read", "", "1"],
+            letterbox_dir=self.listed_dir(),
+            supply_name=True,
+            chat_id_reader=lambda token: [{"chat_id": "424242424", "label": "you"}],
+            cmux_born=lambda: False,
+            start_here=lambda command: started.append(command))
+        self.assertEqual(result["mode"], "integrated")
+        self.assertEqual(result["ring"], "helper")
+        self.assertTrue(result["delivers"])
+        self.assertEqual(result["resident"], "started")
+        self.assertEqual(len(started), 1)
+        self.assertTrue(started[0].startswith("LETTERBOX_DIR="), started[0])
+        self.assertIn("--root /opt/r", started[0])
+        self.assertIn("This terminal is now the bridge.", console.transcript)
+        self.assertNotIn("Then start the bridge", console.transcript)
 
 
 class TheOfferUsesTheBuilder(Base):
