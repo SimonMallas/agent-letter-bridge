@@ -202,15 +202,15 @@ a helper path. You write a file only when that
 terminal cannot be opened.
 
 **2. How your chat is allowed.** Your messages will not arrive until it is.
-Two ways. One contacts the platform. The other does not.
+Two ways. One contacts the platform. The other does not. `read` is recommended.
 
 | | what happens |
 | --- | --- |
-| look it up | one check with your token. It does not take your messages. Typing `read` still means this. |
-| you do it | the command is printed, and nothing is asked from here. Pressing enter means this, and so does typing `print`. This step does not poll. |
+| `read` | recommended. Pressing enter means this. One check with your token. It does not take your messages. |
+| `print` | the command is printed, and nothing is asked from here. This step does not poll. |
 
-Looking it up sends no offset, so your messages stay queued for the bridge.
-Neither answer is the safe one for everybody.
+Reading sends no offset, so your messages stay queued for the bridge.
+`print` is the path that does not contact the platform.
 
 **3. Your agent's pane, if you want the ring.** When this terminal already
 named a seat, this question is not asked. Init says there is no pane to
@@ -222,8 +222,8 @@ into `bridge.env` as `ALB_SURFACE`.
 ### What it will not do
 
 It never invents an allowlist entry, never overwrites a file that already
-exists, and never polls for messages unless you choose to look the chat up.
-Typing `read` still means that. Pasting the
+exists, and never polls for messages unless you choose `read`. Pressing enter
+chooses `read`. Pasting the
 token asks the platform once whether it accepts that token. It never picks a
 pane or a mailbox for you. Re-running it on a working bridge is safe: it keeps
 what is there and tells you what it kept.
@@ -234,7 +234,7 @@ what is there and tells you what it kept.
 alb --doctor --root ~/.alb
 ```
 
-If you did the chat step yourself, this will say **nothing will be delivered** — correct, and
+If you chose `print`, this will say **nothing will be delivered** — correct, and
 the allowlist is still empty. Add your chat id to `~/.alb/allowlist.json`:
 
 ```json

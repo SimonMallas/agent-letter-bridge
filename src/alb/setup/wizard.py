@@ -1123,7 +1123,8 @@ def _chat_ids(console, token, reader, ask_again=None):
     """Ask how the operator wants their chat id obtained. Both routes are real.
 
     One answer contacts the platform. The other does not. That is why this
-    is asked. Plain words and the old words select the same two paths.
+    is asked. The words are read and print. read is recommended, and enter
+    takes it. print does not contact the platform.
 
     Reading it removes a genuine trap: the payload contains a `from` id beside
     the `chat` id, they are identical in a direct message, and the wrong one
@@ -1141,11 +1142,10 @@ def _chat_ids(console, token, reader, ask_again=None):
     console.say()
     console.say("Your chat has to be allowed, or your messages will not arrive.")
     console.say("Two ways. One contacts the platform. The other does not.")
-    console.say("  look it up - one getUpdates check. It consumes nothing and")
+    console.say("  read  - recommended. One getUpdates check. It consumes nothing and")
     console.say("          leaves your messages queued.")
-    console.say("  you do it - the command is printed, and nothing is asked")
-    console.say("          from here. Enter means you do it.")
-    choice = console.ask("  look it up, or you do it?", "you do it").strip().lower()
+    console.say("  print - the command is printed, and nothing is asked from here.")
+    choice = console.ask("  read or print", "read").strip().lower()
     if choice in {"look", "lookup", "look it up"}:
         choice = "read"
 

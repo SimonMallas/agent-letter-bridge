@@ -419,11 +419,10 @@ do not read the terminal to see which they picked. `--doctor` tells you
 whether an id was saved.
 
 The question is there because the two answers do different things. One
-contacts the platform. The other does not. Looking the chat up is one check
-and does not take their messages. Doing it themselves prints a command and
-does not contact the platform for a chat. Enter takes that second answer.
-Typing `read`, `look`, `lookup`, or `look it up` is the lookup. Typing
-`print`, or anything else, is the printed command.
+contacts the platform. The other does not. The words are `read` and `print`.
+`read` is recommended. It is one check and does not take their messages.
+Enter takes `read`. `print` prints a command and does not contact the
+platform for a chat.
 
 Do not say this before the terminal asks it. Do not explain the two ids, and
 do not say `getUpdates`, in what you tell the person.
@@ -431,9 +430,10 @@ do not say `getUpdates`, in what you tell the person.
 For you: the lookup is one `getUpdates` call, and the platform allows one
 consumer per token. If anything is already polling this bot, that call can
 collide with it (often a 409). Two consumers on one token make update
-ownership and recovery ambiguous. When the token is already in use, the
-printed command is the one that does not collide. The lookup is safe only
-on a bot nothing else is polling. You still do not type their answer.
+ownership and recovery ambiguous. When the token is already in use, they type `print` instead of pressing
+enter. That check can collide, and the printed command does not. The
+lookup is safe only on a bot nothing else is polling. You still do not
+type their answer.
 
 ---
 
@@ -492,7 +492,7 @@ alb --doctor --root ~/.alb
 ```
 
 - `DELIVERY: n chat(s) permitted` → the gate is armed. Continue.
-- `NOTHING WILL BE DELIVERED` → expected when they did not look the chat up. Ask them
+- `NOTHING WILL BE DELIVERED` → expected when they chose `print`. Ask them
   for the number their command returned and put **exactly that** in
   `~/.alb/allowlist.json` as `{"chats": ["<id>"]}`, then re-run `--doctor`.
 

@@ -60,6 +60,7 @@ class TheInstallPrompt(unittest.TestCase):
             "Before the key, say only this: the terminal is waiting",
             "When the wizard cannot start the bridge, the files in the root you chose are what tell you to start it.",
             "The first letter is the wake.",
+            "Enter takes `read`.",
         ):
             with self.subTest(line):
                 self.assertIn(line, manual)

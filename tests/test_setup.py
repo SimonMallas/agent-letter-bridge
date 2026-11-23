@@ -350,10 +350,25 @@ class ItRefusesToGuess(Base):
         self.assertEqual(json.loads((self.root / "allowlist.json").read_text())["chats"], ["111"])
         self.assertIn("One contacts the platform. The other does not.", console.transcript)
         self.assertIn("getUpdates", console.transcript)
-        self.assertIn("  look it up, or you do it?", console.asked)
+        self.assertIn("  read or print", console.asked)
+        self.assertIn("recommended", console.transcript)
+
+    def test_enter_takes_the_recommended_read(self):
+        """A blank answer is the default, and the default is the recommended read."""
+        calls = []
+
+        def reader(token):
+            calls.append(token)
+            return [{"chat_id": "111", "label": "you"}]
+
+        console, _ = self.run_init(answers=[], chat_id_reader=reader)
+        self.assertEqual(calls, [FAKE_TOKEN])
+        self.assertIn("recommended", console.transcript)
+        self.assertIn("  read or print", console.asked)
+        self.assertEqual(json.loads((self.root / "allowlist.json").read_text())["chats"], [])
 
     def test_a_stray_yes_does_not_look_up_the_chat(self):
-        """A yes is not the lookup. Enter, print, and any other answer stay off the platform."""
+        """A yes is not the lookup. print, and any answer other than read, stays off the platform."""
         polls = []
         console, _ = self.run_init(
             answers=["y", ""],
