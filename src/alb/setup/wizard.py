@@ -34,7 +34,9 @@ WHAT IT WILL NOT DO, and why each one is a refusal rather than an omission:
   - It will not guess a mailbox from a layout it invented. If LETTERBOX_DIR
     is given and a child folder there already has an inbox, those names are
     listed and the operator picks one. A blank pick is not a seat. Choosing
-    no still keeps the bridge's own folder. No other layout is searched.
+    no still keeps the bridge's own folder. A terminal that was not given
+    that folder, and does not name a seat, is not asked: the bridge keeps
+    its own folder. No other layout is searched.
 """
 import json
 import os
@@ -214,10 +216,12 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
 
     # 2. Standalone or integrated.
     #
-    # SMALL QUESTION FIRST. One prompt that carried mode, path and name failed
-    # the first integrated install: the operator had decided, and got a
-    # standalone config because the prompt did not read as that decision.
-    # The question is still yes or no. The path is asked only after yes.
+    # A terminal that already names a seat uses it and does not ask.
+    # A terminal that carries a Letterbox folder lists the seats and asks
+    # once, yes or no, before any path. One prompt that carried mode, path
+    # and name failed the first integrated install. A terminal that names
+    # nothing is not asked: there is no folder this run can safely attach
+    # to, so the bridge keeps its own.
     #
     # LETTERBOX_DIR is not a guess. It is the folder Letterbox was given.
     # Seats already in it are listed. The person picks. A blank is not a pick.
@@ -246,8 +250,8 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
             else:
                 console.say("The Letterbox folder is not set, so there is nowhere to look.")
             console.say("Setup stopped. It will not ask you to choose a seat.")
-            console.say("Run it again from the seat's own terminal, or from a")
-            console.say("terminal that does not name a seat if you mean to choose.")
+            console.say("Run it again from the seat's own terminal.")
+            console.say("A terminal with no seat keeps the bridge's own folder.")
             summary["mode"] = "refused"
             summary["ring"] = "not configured"
             summary["resident"] = "not started"
@@ -263,9 +267,9 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
         console.say(f"  folder: {mailbox}")
         console.say("This run did not choose a seat, and it did not ask.")
     else:
-        console.say("Do you already have a folder on this machine where messages")
-        console.say("for a program are delivered?")
         if seats:
+            console.say("Do you already have a folder on this machine where messages")
+            console.say("for a program are delivered?")
             shown = pathlib.Path(letterbox_dir).expanduser()
             console.say("Letterbox is already on this machine.")
             console.say(f"  folder: {shown}")
@@ -274,17 +278,16 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
                 console.say(f"    {index}) {name}")
             console.say("Choose yes to deliver into one of those seats.")
             console.say("Choose no only if this bridge should keep its own folder.")
-        elif helper_on_path:
-            console.say("letterbox is on PATH. Choose yes if a folder already")
-            console.say("receives messages. Choose no only if this bridge should")
-            console.say("keep its own folder.")
-        console.say("  yes - messages will go into that folder. I will ask which")
-        console.say("        folder, and the name that folder already uses.")
-        console.say("  no  - the bridge keeps its own folder. Choose no only if")
-        console.say("        there is no such folder.")
-        mode_default = "y" if seats else "n"
-        mode_prompt = "  Y/n" if seats else "  y/N"
-        integrated = _yes(console.ask(mode_prompt, mode_default))
+            console.say("  yes - messages will go into that folder. I will ask which")
+            console.say("        folder, and the name that folder already uses.")
+            console.say("  no  - the bridge keeps its own folder. Choose no only if")
+            console.say("        there is no such folder.")
+            integrated = _yes(console.ask("  Y/n", "y"))
+        else:
+            integrated = False
+            console.say("This terminal does not name a seat.")
+            console.say("The bridge will keep its own folder.")
+            console.say("It will not ask you for a folder or a name.")
 
     if not carried and integrated and seats:
         console.say()
@@ -305,18 +308,6 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
             console.say("The name that folder already uses for this program.")
             console.say("It has to match that registration, not a nickname.")
             recipient = console.ask("  name", "").strip()
-    elif integrated and not carried:
-        console.say()
-        console.say("The folder that already receives those messages, not a")
-        console.say("folder inside it. The seat is a name inside that folder.")
-        console.say("Example: ~/mail/agents/<agent-name>")
-        mailbox = console.ask("  folder", "").strip()
-
-        console.say()
-        console.say("The name that folder already uses for this program.")
-        console.say("It has to match that registration, not a nickname.")
-        console.say("Example: research-bot")
-        recipient = console.ask("  name", "").strip()
 
     # A ghost path is caught HERE, while the human is still present. The
     # runtime refuses to invent a mailbox, so a config naming one would fail at

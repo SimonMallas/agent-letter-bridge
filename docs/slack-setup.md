@@ -24,15 +24,15 @@ Copy this, paste it into that terminal, and press Enter.
 alb --init --platform slack --root ~/.alb-slack
 ```
 
-The first question is about where letters go:
+With no seat named, setup does not ask where letters go:
 
 ```text
-Do you already have a folder on this machine where messages
-for a program are delivered?
-  y/N:
+This terminal does not name a seat.
+The bridge will keep its own folder.
+It will not ask you for a folder or a name.
 ```
 
-If you are not sure, press **Enter** (that means no). Setup then prints a
+Setup then prints a
 block of text that starts with `{` and ends with `}`. That is the app's
 **manifest**: it tells Slack exactly what the app is allowed to do.
 

@@ -25,15 +25,15 @@ Copy this, paste it into that terminal, and press Enter.
 alb --init --platform discord --root ~/.alb-discord
 ```
 
-The first question is about where letters go:
+With no seat named, setup does not ask where letters go:
 
 ```text
-Do you already have a folder on this machine where messages
-for a program are delivered?
-  y/N:
+This terminal does not name a seat.
+The bridge will keep its own folder.
+It will not ask you for a folder or a name.
 ```
 
-If you are not sure, press **Enter** (that means no). Setup then lists the
+Setup then lists the
 steps below and waits for the token. Leave the terminal where it is.
 
 ## 2. Make the application

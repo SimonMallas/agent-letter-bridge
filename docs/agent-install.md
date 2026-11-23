@@ -64,6 +64,12 @@ has. A name you type is a choice, and a choice can point the bridge at
 someone else's mailbox. Setup trusts only the seat the terminal already
 had. There is no flag for a seat.
 
+A shell that has just started has neither variable. Empty references are
+not a seat. Do not ask the person for a folder or a name. Run init. It
+keeps the bridge's own folder. Joining a mailbox that already exists needs
+a terminal that already names that seat. This run does not search the
+machine for one.
+
 You run init in Step 3, in a terminal the person can type into. The program
 is `alb --init`. It uses a seat only when that terminal's own environment
 already names one. A pane started by a server does not inherit this
@@ -82,22 +88,22 @@ still no flag.
   type a helper path. Do not guess a participant name from the repo, a
   transcript, or a folder listing.
 
-### Only when this terminal does not name a seat
+### When this terminal does not name a seat
 
-A person running init themselves, in a terminal with no `LETTERBOX_AGENT`,
-is asked the question below. You are not that person. If you are the agent
-doing the install and you reached this heading, you already stopped above.
+Init says the terminal does not name a seat, keeps the bridge's own folder,
+and does not ask for a folder or a name. You read that folder from the root
+you passed to init. You still do not read the paste terminal.
 
-> "Do you already have a folder on this machine where messages for a program
-> are delivered?"
+**Running inside cmux does not make an install integrated.** Integrated is
+about where mail goes. cmux is only the ring transport, and a bridge that
+keeps its own folder uses it too.
 
-- **No / don't know → standalone.** Letters go to a directory this bridge owns.
-  **Running inside cmux does NOT make an install integrated** — integrated is
-  about where mail goes; cmux is only the ring transport, and standalone
-  installs use it too.
-- **Yes → integrated.** Letters go into that existing inbox. The person names
-  the folder and the participant. If the Letterbox folder already lists
-  seats, they pick a number. You still do not pick for them.
+A folder or name question means an older build, or a terminal that was
+given a Letterbox folder listing seats and no seat name. Stop. Do not
+answer. Do not guess a name from the repo, a transcript, or a folder listing.
+
+Joining a mailbox that already exists still needs a terminal that already
+names that seat.
 
 ---
 
@@ -321,6 +327,10 @@ do not assign them. You do not print them. You do not replace
 someone else's mailbox. There is still no flag. Setup trusts only the
 environment the paste terminal actually receives.
 
+If this shell does not already have both variables, leave them off the
+command and run `alb --init --root ~/.alb`. Do not ask the person to
+supply them.
+
 `PATH` is in that line because a server-started pane does not keep this
 terminal's `PATH`, and both `alb` and `letterbox` have to be found there.
 Do not type a path to the helper.
@@ -354,10 +364,11 @@ the bot id and does not print the secret half.
 
 - **Rex.** A pane opened with `rex session new` is started by the Rex
   server and does not inherit the caller's environment. A bare `alb --init`
-  there asks for a folder and a seat. The program after `--` is the env
-  line above. Do not add Rex flags this page does not show. It shows none:
-  this repo does not ship that command. If you do not already know a
-  complete `rex session new` line, do not guess one.
+  there names no seat, so the bridge keeps its own folder and does not ask
+  for one. The program after `--` is the env line above, and only when this
+  terminal already has those variables. Do not add Rex flags this page does
+  not show. It shows none: this repo does not ship that command. If you do
+  not already know a complete `rex session new` line, do not guess one.
 - **tmux, Zellij, Herdr.** Open a new pane in the same window and run the
   env line in it. This repo does not ship an open command for those, and
   this page will not invent flags. Inheritance was not measured for them.

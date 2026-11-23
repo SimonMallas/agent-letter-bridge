@@ -154,13 +154,13 @@ class Base(unittest.TestCase):
 
 class Tokens(Base):
     def test_tokens_are_asked_secretly_and_never_echoed(self):
-        console, _ = self.run_init(answers=["n", "print"])
+        console, _ = self.run_init(answers=["print"])
         self.assertEqual(len([q for q in console.asked if "token" in q]), 2)
         self.assertNotIn(BOT, console.transcript)
         self.assertNotIn(APP, console.transcript)
 
     def test_env_is_0600_with_platform_and_both_tokens(self):
-        self.run_init(answers=["n", "print"])
+        self.run_init(answers=["print"])
         env_path = self.root / "bridge.env"
         self.assertEqual(mode(env_path), 0o600)
         env = self.env()
@@ -177,7 +177,7 @@ class Tokens(Base):
             os.write(fd, value.encode())
             os.close(fd)
             files[name] = path
-        console, _ = self.run_init(answers=["n", "print"], secrets=(),
+        console, _ = self.run_init(answers=["print"], secrets=(),
                                    token_file=files["bot"],
                                    app_token_file=files["app"])
         self.assertFalse(files["bot"].exists())
@@ -188,7 +188,7 @@ class Tokens(Base):
 
     def test_wrong_prefix_is_explained_not_written(self):
         # Swapped: the app token pasted where the bot token goes, and back.
-        console, _ = self.run_init(answers=["n", "print"], secrets=(BOT, APP))
+        console, _ = self.run_init(answers=["print"], secrets=(BOT, APP))
         env = self.env()
         self.assertNotIn(BOT, env.get("ALB_APP_TOKEN", ""))
         self.assertNotIn(APP, env.get("ALB_TOKEN", ""))
@@ -203,13 +203,13 @@ class Tokens(Base):
         os.write(fd, BOT.encode())
         os.close(fd)
         with self.assertRaises(wizard.SetupError) as cm:
-            self.run_init(answers=["n", "print"], secrets=(), app_token_file=path)
+            self.run_init(answers=["print"], secrets=(), app_token_file=path)
         self.assertNotIn(BOT, str(cm.exception))
 
 
 class Discovery(Base):
     def test_print_route_never_touches_the_network(self):
-        console, _ = self.run_init(answers=["n", "print"])
+        console, _ = self.run_init(answers=["print"])
         self.assertEqual(self.call.calls, [])
         self.assertEqual(self.allowlist(), [])
         # The manual route names both halves of the pair.
@@ -217,7 +217,7 @@ class Discovery(Base):
         self.assertIn("/", console.transcript)
 
     def test_dm_discovery_writes_the_chosen_pair_only(self):
-        console, _ = self.run_init(answers=["n", "read", "", "1"])
+        console, _ = self.run_init(answers=["read", "", "1"])
         self.assertEqual(self.allowlist(), ["D0000001/U0000001"])
         self.assertIn("hello bot", console.transcript)
         methods = [c[0] for c in self.call.calls]
@@ -234,24 +234,24 @@ class Discovery(Base):
             with self.subTest(pick=pick):
                 self.tearDown()
                 self.setUp()
-                self.run_init(answers=["n", "read", "", pick])
+                self.run_init(answers=["read", "", pick])
                 self.assertEqual(self.allowlist(), [])
 
     def test_bots_and_quiet_dms_are_not_offered(self):
-        console, _ = self.run_init(answers=["n", "read", "", ""])
+        console, _ = self.run_init(answers=["read", "", ""])
         self.assertNotIn("USLACKBOT", console.transcript)
         self.assertNotIn("D0000002", console.transcript)
 
     def test_bad_tokens_are_explained_and_nothing_is_allowlisted(self):
         call = FakeCall(auth={"ok": False, "error": "invalid_auth"})
-        console, _ = self.run_init(answers=["n", "read", "", "1"], call=call)
+        console, _ = self.run_init(answers=["read", "", "1"], call=call)
         self.assertIn("invalid_auth", console.transcript)
         self.assertEqual(self.allowlist(), [])
         self.assertEqual([c[0] for c in call.calls], ["auth.test"])
 
     def test_socket_mode_off_is_explained(self):
         call = FakeCall(socket={"ok": False, "error": "not_allowed_token_type"})
-        console, _ = self.run_init(answers=["n", "read", "", "1"], call=call)
+        console, _ = self.run_init(answers=["read", "", "1"], call=call)
         self.assertIn("not_allowed_token_type", console.transcript)
         self.assertEqual(self.allowlist(), [])
 
@@ -259,20 +259,23 @@ class Discovery(Base):
         class Broken(FakeCall):
             def __call__(self, method, token, params=None):
                 raise OSError("network unreachable")
-        console, _ = self.run_init(answers=["n", "read", "", "1"], call=Broken())
+        console, _ = self.run_init(answers=["read", "", "1"], call=Broken())
         self.assertIn("member ID", console.transcript)
         self.assertEqual(self.allowlist(), [])
 
 
 class Words(Base):
     def test_the_printed_manifest_names_the_bot_after_the_participant(self):
-        mailbox = pathlib.Path(self.tmp.name) / "box" / "builder"
-        (mailbox / "inbox").mkdir(parents=True)
-        console, _ = self.run_init(answers=["y", str(mailbox), "builder", "print", ""])
+        box = pathlib.Path(self.tmp.name) / "box"
+        (box / "builder" / "inbox").mkdir(parents=True)
+        console, _ = self.run_init(
+            answers=["print", ""],
+            letterbox_dir=str(box),
+            letterbox_agent="builder")
         self.assertIn('"display_name": "letterbox-builder"', console.transcript)
 
     def test_first_time_user_is_told_what_matters(self):
-        console, _ = self.run_init(answers=["n", "print"])
+        console, _ = self.run_init(answers=["print"])
         text = console.transcript
         self.assertIn("https://api.slack.com/apps?new_app=1", text)
         rendered = manifest.render().splitlines()[1]
@@ -292,7 +295,7 @@ class Words(Base):
         (self.root / "bridge.env").write_text("ALB_TOKEN=old\n")
         os.chmod(self.root / "bridge.env", 0o600)
         (self.root / "allowlist.json").write_text('{"chats": ["D9/U9"]}')
-        self.run_init(answers=["n", "read", "", "1"])
+        self.run_init(answers=["read", "", "1"])
         self.assertEqual((self.root / "bridge.env").read_text(), "ALB_TOKEN=old\n")
         self.assertEqual(self.allowlist(), ["D9/U9"])
 
@@ -306,7 +309,7 @@ class TelegramUnchanged(unittest.TestCase):
              unittest.mock.patch("alb.setup.discover.check_token",
                                  return_value=None):
             token = "1234567:" + ("a" * 35)
-            console = ScriptedConsole(["n", "print"], [token])
+            console = ScriptedConsole(["print"], [token])
             wizard.init(pathlib.Path(tmp.name) / "alb", console,
                         helper_found=lambda n: "/usr/local/bin/bus.sh",
                         cmux_born=lambda: False,

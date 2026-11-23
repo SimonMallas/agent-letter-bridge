@@ -158,25 +158,26 @@ creates the state directory `0700`, writes `bridge.env` at `0600`, and writes
 If this terminal already names a seat (`LETTERBOX_AGENT` is set, and that
 name is a child of `LETTERBOX_DIR` with an inbox), init uses that seat and
 does not ask for a folder or a name. That is the path when an agent you are
-already working with runs init here. The questions below are for a terminal
-that does not name a seat.
+already working with runs init here.
 
-It asks you four things:
+If this terminal does not name a seat, init does not ask for a folder or a
+name either. There is no safe folder to attach to, so the bridge keeps its
+own folder and says so. You then paste the token.
 
-**1. Do you already have a folder on this machine where messages for a program are delivered?**
-A yes/no — you do not need a path to answer it. With no seats listed, `n`
-(the default) keeps the bridge's own folder. When seats are listed, enter
-means yes, and a blank seat is not a pick.
-
-Say yes and it asks two more: the directory containing that inbox, and the
-agent's registered participant name. **Both are required.** Leave either blank
-and it writes a standalone config and tells you it did — it will not hand you
-something that looks integrated and is not. A letterbox seat is
+The folder question appears only when this terminal was given a Letterbox
+folder that already lists seats, and was not given a seat name. Enter on
+that question means yes. A blank seat is not a pick. Yes asks which seat:
+a number from the list, or a folder path if the seat is not listed, then
+the name that folder already uses. **Both are required.** Leave either
+blank and it writes a standalone config and tells you it did. It will not
+hand you something that looks integrated and is not. A letterbox seat is
 `<letterbox>/<name>`. It records the letterbox helper it found as an absolute
-`ALB_BUS_BINARY`. It asks for a path only if that helper is not already on
-`PATH`.
+`ALB_BUS_BINARY`. It asks for a helper path only if that helper is not
+already on `PATH`.
 
-**2. Your bot token.** Nothing is shown as you paste. Paste it once and press
+It then asks three things:
+
+**1. Your bot token.** Nothing is shown as you paste. Paste it once and press
 enter. That paste asks the platform once whether it accepts the token.
 Accepted means the platform accepted it. Setup gives the character count
 and names the next step. A refusal is not saved. If the platform could not
@@ -187,7 +188,7 @@ terminal that is already waiting at that paste. You paste and press enter.
 You are not asked to type a seat name. You write a file only when that
 terminal cannot be opened.
 
-**3. How to get your chat id — `read` or `print`.** Both are real options:
+**2. How to get your chat id — `read` or `print`.** Both are real options:
 
 | | what happens | what you can then say |
 | --- | --- | --- |
@@ -198,7 +199,7 @@ terminal cannot be opened.
 the bridge to collect properly later. Pick whichever you prefer; neither is the
 safe answer for everybody.
 
-**4. Your agent's pane, if you want the ring.** When this terminal already
+**3. Your agent's pane, if you want the ring.** When this terminal already
 named a seat, this question is not asked. Init says there is no pane to
 pick, and the ring is the letterbox helper. Otherwise it lists the panes it can see.
 **It will not pick one** — a listing can't tell which pane holds your agent, and

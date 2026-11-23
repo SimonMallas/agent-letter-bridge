@@ -10,6 +10,7 @@ the value of this command is entirely in what it will not do:
   - a paste asks whether the platform accepts the token; a chat read is separate
   - it never overwrites something that already exists
   - it never picks a pane, or a mailbox, on the operator's behalf
+  - a terminal that names no seat is not asked for a folder or a name
 """
 import errno
 import json
@@ -110,6 +111,12 @@ class Base(unittest.TestCase):
         result = wizard.init(self.root, console, **kw)
         return console, result
 
+    def listed_dir(self):
+        """A Letterbox folder that already lists one seat, so the question is asked."""
+        box = pathlib.Path(self.tmp.name) / "listed"
+        (box / "alpha" / "inbox").mkdir(parents=True, exist_ok=True)
+        return str(box)
+
 
 class TokenFile(Base):
     """`alb --init --token-file`: agent-driven handoff. The file is consumed."""
@@ -125,7 +132,7 @@ class TokenFile(Base):
     def test_file_is_consumed_and_removed_and_token_is_not_echoed(self):
         path = self._token_file(text=FAKE_TOKEN)
         console, result = self.run_init(
-            answers=["n", "print", ""], secrets=[], token_file=str(path))
+            answers=["print", ""], secrets=[], token_file=str(path))
         self.assertFalse(path.exists())
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertIn(f"ALB_TOKEN={FAKE_TOKEN}", env)
@@ -136,7 +143,7 @@ class TokenFile(Base):
         doubled = FAKE_TOKEN + FAKE_TOKEN
         path = self._token_file(text=doubled)
         with self.assertRaises(wizard.SetupError) as caught:
-            self.run_init(answers=["n", "print", ""], secrets=[],
+            self.run_init(answers=["print", ""], secrets=[],
                           token_file=str(path))
         message = str(caught.exception)
         self.assertIn("does not look like one token", message)
@@ -149,7 +156,7 @@ class TokenFile(Base):
     def test_world_readable_token_file_is_refused_and_kept(self):
         path = self._token_file(mode=0o644)
         with self.assertRaises(wizard.SetupError):
-            self.run_init(answers=["n", "print", ""], secrets=[],
+            self.run_init(answers=["print", ""], secrets=[],
                           token_file=str(path))
         self.assertTrue(path.exists())
         self.assertFalse((self.root / "bridge.env").exists())
@@ -157,7 +164,7 @@ class TokenFile(Base):
     def test_empty_token_file_is_refused_and_kept(self):
         path = self._token_file(text="")
         with self.assertRaises(wizard.SetupError) as caught:
-            self.run_init(answers=["n", "print", ""], secrets=[],
+            self.run_init(answers=["print", ""], secrets=[],
                           token_file=str(path))
         self.assertIn("empty", str(caught.exception).lower())
         self.assertTrue(path.exists())
@@ -166,7 +173,7 @@ class TokenFile(Base):
     def test_whitespace_only_token_file_is_refused_and_kept(self):
         path = self._token_file(text="  \n\t  \n")
         with self.assertRaises(wizard.SetupError) as caught:
-            self.run_init(answers=["n", "print", ""], secrets=[],
+            self.run_init(answers=["print", ""], secrets=[],
                           token_file=str(path))
         self.assertIn("empty", str(caught.exception).lower())
         self.assertTrue(path.exists())
@@ -175,7 +182,7 @@ class TokenFile(Base):
     def test_token_with_internal_whitespace_is_refused_and_kept(self):
         path = self._token_file(text="123456:FROM FILE\nsecond-line\n")
         with self.assertRaises(wizard.SetupError) as caught:
-            self.run_init(answers=["n", "print", ""], secrets=[],
+            self.run_init(answers=["print", ""], secrets=[],
                           token_file=str(path))
         self.assertNotIn("empty", str(caught.exception).lower())
         self.assertTrue(path.exists())
@@ -261,11 +268,11 @@ class ItCreatesTheBoilerplate(Base):
         """0700 explicitly, never inherited from umask. The dogfood install
         proved that class: a directory made with the default umask is 0755 and
         nobody notices until they look."""
-        self.run_init(answers=["n", "print", ""])
+        self.run_init(answers=["print", ""])
         self.assertEqual(mode(self.root), 0o700)
 
     def test_the_config_is_written_mode_600(self):
-        self.run_init(answers=["n", "print", ""])
+        self.run_init(answers=["print", ""])
         env = self.root / "bridge.env"
         self.assertEqual(mode(env), 0o600)
         self.assertIn(f"ALB_TOKEN={FAKE_TOKEN}", env.read_text(encoding="utf-8"))
@@ -274,14 +281,14 @@ class ItCreatesTheBoilerplate(Base):
         """Setup must SATISFY the rules, not bypass them. A config this command
         wrote that the binary then refuses is worse than no command."""
         from alb.bridge import run
-        self.run_init(answers=["n", "print", ""])
+        self.run_init(answers=["print", ""])
         loaded = run.load_config(self.root / "bridge.env")
         self.assertEqual(loaded["ALB_TOKEN"], FAKE_TOKEN)
 
     def test_the_allowlist_is_created_denying_everyone(self):
         """Fail-closed on arrival. The file existing is a convenience; the file
         being empty is the security property."""
-        self.run_init(answers=["n", "print", ""])
+        self.run_init(answers=["print", ""])
         allow = self.root / "allowlist.json"
         self.assertEqual(mode(allow), 0o600)
         self.assertEqual(json.loads(allow.read_text())["chats"], [])
@@ -290,13 +297,13 @@ class ItCreatesTheBoilerplate(Base):
         """Asserting the file's contents is not asserting the gate. Ask the
         gate."""
         from alb.allowlist import gate
-        self.run_init(answers=["n", "print", ""])
+        self.run_init(answers=["print", ""])
         self.assertFalse(gate.allows(self.root / "allowlist.json", "111"))
 
 
 class ItRefusesToGuess(Base):
     def test_it_never_writes_a_chat_id_the_operator_did_not_give(self):
-        self.run_init(answers=["n", "print", ""])
+        self.run_init(answers=["print", ""])
         self.assertEqual(json.loads((self.root / "allowlist.json").read_text())["chats"], [])
 
     def test_it_does_not_touch_the_network_when_the_operator_declines(self):
@@ -304,7 +311,7 @@ class ItRefusesToGuess(Base):
         whether the platform accepts the token."""
         polls = []
         checks = []
-        self.run_init(answers=["n", "print", ""],
+        self.run_init(answers=["print", ""],
                       chat_id_reader=lambda token: polls.append(token) or [],
                       token_check=lambda token: checks.append(token))
         self.assertEqual(polls, [])
@@ -319,7 +326,7 @@ class ItRefusesToGuess(Base):
             calls.append(token)
             return [{"chat_id": "111", "label": "you"}]
 
-        console, _ = self.run_init(answers=["n", "read", "", "1"], chat_id_reader=reader)
+        console, _ = self.run_init(answers=["read", "", "1"], chat_id_reader=reader)
         self.assertEqual(calls, [FAKE_TOKEN])
         self.assertEqual(json.loads((self.root / "allowlist.json").read_text())["chats"], ["111"])
 
@@ -329,7 +336,7 @@ class ItRefusesToGuess(Base):
         def reader(token):
             return [{"chat_id": "111", "label": "you"}]
 
-        console, _ = self.run_init(answers=["n", "read", "", "1"], chat_id_reader=reader)
+        console, _ = self.run_init(answers=["read", "", "1"], chat_id_reader=reader)
         described = console.transcript.lower()
         self.assertIn("getupdates", described)
         self.assertIn("nothing", described)
@@ -339,14 +346,14 @@ class ItRefusesToGuess(Base):
         means, and a ring typed into the wrong pane lands in someone else's
         session."""
         console, result = self.run_init(
-            answers=["n", "print", ""],
+            answers=["print", ""],
             panes=[{"id": "%1", "label": "zsh"}, {"id": "%2", "label": "agent"}])
         self.assertNotIn("ALB_SURFACE", (self.root / "bridge.env").read_text())
 
     def test_it_never_assumes_a_mailbox(self):
         """Grok: filesystem presence is not consent. There is also no detector
         to be wrong - the operator gives a path or does not."""
-        console, result = self.run_init(answers=["n", "print", ""])
+        console, result = self.run_init(answers=["print", ""])
         self.assertEqual(result["mode"], "standalone")
         self.assertNotIn("ALB_MAIL_ROOT", (self.root / "bridge.env").read_text())
 
@@ -354,7 +361,8 @@ class ItRefusesToGuess(Base):
         mailbox = pathlib.Path(self.tmp.name) / "seat"
         (mailbox / "inbox").mkdir(parents=True)
         console, result = self.run_init(
-            answers=["y", str(mailbox), "an-agent", "print", ""])
+            answers=["y", str(mailbox), "an-agent", "print", ""],
+            letterbox_dir=self.listed_dir())
         self.assertEqual(result["mode"], "integrated")
         env = (self.root / "bridge.env").read_text()
         self.assertIn(f"ALB_MAIL_ROOT={mailbox}", env)
@@ -367,7 +375,7 @@ class ItNeverDestroys(Base):
         env = self.root / "bridge.env"
         env.write_text("ALB_TOKEN=already:here\n", encoding="utf-8")
         os.chmod(env, 0o600)
-        self.run_init(answers=["n", "print", ""])
+        self.run_init(answers=["print", ""])
         self.assertIn("already:here", env.read_text(encoding="utf-8"))
 
     def test_an_existing_allowlist_is_not_emptied(self):
@@ -377,7 +385,7 @@ class ItNeverDestroys(Base):
         allow = self.root / "allowlist.json"
         allow.write_text(json.dumps({"chats": ["111"]}), encoding="utf-8")
         os.chmod(allow, 0o600)
-        self.run_init(answers=["n", "print", ""])
+        self.run_init(answers=["print", ""])
         self.assertEqual(json.loads(allow.read_text())["chats"], ["111"])
 
     def test_it_says_what_it_skipped(self):
@@ -385,7 +393,7 @@ class ItNeverDestroys(Base):
         self.root.mkdir(parents=True)
         (self.root / "bridge.env").write_text("ALB_TOKEN=already:here\n", encoding="utf-8")
         os.chmod(self.root / "bridge.env", 0o600)
-        console, _ = self.run_init(answers=["n", "print", ""])
+        console, _ = self.run_init(answers=["print", ""])
         self.assertIn("bridge.env", console.transcript)
         self.assertIn("kept", console.transcript.lower())
 
@@ -394,7 +402,7 @@ class TheSecretNeverLands(Base):
     def test_the_token_is_asked_for_without_echo(self):
         """ask_secret, not ask. A token echoed into a terminal is a token in a
         scrollback buffer."""
-        console = ScriptedConsole(["n", "print", ""], [FAKE_TOKEN])
+        console = ScriptedConsole(["print", ""], [FAKE_TOKEN])
         self.run_init(answers=None)  # not used; kept for symmetry
         wizard.init(self.root / "echo-check", console,
                     helper_found=lambda name: "x", cmux_born=lambda: False,
@@ -402,7 +410,7 @@ class TheSecretNeverLands(Base):
         self.assertEqual(console.secrets, [])
 
     def test_the_token_is_never_printed_back(self):
-        console, _ = self.run_init(answers=["n", "print", ""])
+        console, _ = self.run_init(answers=["print", ""])
         self.assertNotIn(FAKE_TOKEN, console.transcript)
         self.assertIn("Accepted.", console.transcript)
         self.assertIn("The platform accepted that token", console.transcript)
@@ -430,24 +438,29 @@ class TheMailboxQuestionIsSmallFirst(Base):
     config - then Grok hand-appended three keys. Nothing errored.
     """
 
-    def test_the_first_question_is_answerable_without_knowing_a_path(self):
-        console, _ = self.run_init(answers=["n", "print", ""])
-        first = console.asked[0].lower()
-        self.assertNotIn("path", first)
-
-    def test_no_is_standalone_and_asks_nothing_further_about_mail(self):
-        console, result = self.run_init(answers=["n", "print", ""])
+    def test_a_terminal_with_no_seat_is_not_asked(self):
+        """No folder was carried and no seat was named. There is nothing
+        safe to attach to, so init does not ask and does not invent one."""
+        console, result = self.run_init(answers=["print", ""])
+        asked = "\n".join(console.asked)
+        self.assertNotIn("Y/n", asked)
+        self.assertNotIn("y/N", asked)
+        self.assertNotIn("folder", asked)
+        self.assertNotIn("name", asked)
+        self.assertNotIn("seat", asked)
         self.assertEqual(result["mode"], "standalone")
-        self.assertFalse(any("participant" in q.lower() for q in console.asked))
-
-    def test_blank_is_treated_as_no(self):
-        console, result = self.run_init(answers=["", "print", ""])
-        self.assertEqual(result["mode"], "standalone")
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertNotIn("ALB_MAIL_ROOT", env)
+        self.assertIn("does not name a seat", console.transcript)
+        self.assertIn("keep its own folder", console.transcript)
+        self.assertIn("will not ask you for a folder or a name", console.transcript)
 
     def test_yes_then_path_and_name_gives_a_complete_integrated_config(self):
         mailbox = pathlib.Path(self.tmp.name) / "seat"
         (mailbox / "inbox").mkdir(parents=True)
-        _, result = self.run_init(answers=["y", str(mailbox), "an-agent", "print", ""])
+        _, result = self.run_init(
+            answers=["y", str(mailbox), "an-agent", "print", ""],
+            letterbox_dir=self.listed_dir())
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertEqual(result["mode"], "integrated")
         self.assertIn(f"ALB_MAIL_ROOT={mailbox}", env)
@@ -457,7 +470,8 @@ class TheMailboxQuestionIsSmallFirst(Base):
         """The exact failure. Saying yes and then leaving a prompt empty
         produced a token-only config that runs, delivers, and rings nowhere the
         operator expected - with no error at any point."""
-        console, result = self.run_init(answers=["y", "", "print", ""])
+        console, result = self.run_init(answers=["y", "", "print", ""],
+            letterbox_dir=self.listed_dir())
         self.assertEqual(result["mode"], "standalone")
         transcript = console.transcript.lower()
         self.assertIn("standalone", transcript)
@@ -466,7 +480,9 @@ class TheMailboxQuestionIsSmallFirst(Base):
     def test_yes_then_a_blank_name_does_not_silently_become_standalone(self):
         mailbox = pathlib.Path(self.tmp.name) / "seat"
         (mailbox / "inbox").mkdir(parents=True)
-        console, result = self.run_init(answers=["y", str(mailbox), "", "print", ""])
+        console, result = self.run_init(
+            answers=["y", str(mailbox), "", "print", ""],
+            letterbox_dir=self.listed_dir())
         self.assertEqual(result["mode"], "standalone")
         self.assertIn("re-run", console.transcript.lower())
 
@@ -478,7 +494,8 @@ class TheMailboxQuestionIsSmallFirst(Base):
         for its path is being asked to solve a problem you do not have."""
         console, result = self.run_init(
             answers=["y", "", "print", ""],
-            helper_found=lambda name: None)
+            helper_found=lambda name: None,
+            letterbox_dir=self.listed_dir())
         self.assertEqual(result["mode"], "standalone")
         self.assertFalse(any("helper" in q.lower() for q in console.asked))
 
@@ -507,7 +524,8 @@ class TheMailboxQuestionIsSmallFirst(Base):
         """Separate claim, still worth keeping: whatever setup prints about
         THIS machine is the operator's own business, but our internal names
         have no reason to appear in it."""
-        console, _ = self.run_init(answers=["y", "", "print", ""])
+        console, _ = self.run_init(answers=["y", "", "print", ""],
+            letterbox_dir=self.listed_dir())
         for leak in ("shared-" "brain", "team-" "seat"):
             self.assertNotIn(leak, console.transcript)
 
@@ -517,13 +535,14 @@ class TheHelperIsAskedForOnlyWhenMissing(Base):
     there, and only when integrated - a standalone install never calls it."""
 
     def _integrated(self, answers, which):
-        mailbox = pathlib.Path(self.tmp.name) / "seat"
-        (mailbox / "inbox").mkdir(parents=True)
-        console = ScriptedConsole(["y", str(mailbox), "an-agent"] + answers,
-                                  [FAKE_TOKEN])
+        box = pathlib.Path(self.tmp.name) / "letterbox"
+        (box / "an-agent" / "inbox").mkdir(parents=True)
+        console = ScriptedConsole(answers, [FAKE_TOKEN])
         result = wizard.init(self.root, console, helper_found=which,
                              cmux_born=lambda: False,
-                             bridge_running=lambda root: False)
+                             bridge_running=lambda root: False,
+                             letterbox_dir=str(box),
+                             letterbox_agent="an-agent")
         return console, result
 
     def test_a_helper_on_the_path_is_not_asked_about(self):
@@ -545,7 +564,7 @@ class TheHelperIsAskedForOnlyWhenMissing(Base):
                       (self.root / "bridge.env").read_text(encoding="utf-8"))
 
     def test_a_standalone_install_never_asks_about_the_helper(self):
-        console = ScriptedConsole(["n", "print", ""], [FAKE_TOKEN])
+        console = ScriptedConsole(["print", ""], [FAKE_TOKEN])
         wizard.init(self.root, console, helper_found=lambda name: None,
                     cmux_born=lambda: False, bridge_running=lambda root: False)
         self.assertFalse(any("helper" in q.lower() for q in console.asked))
@@ -563,7 +582,8 @@ class InitCatchesWhatTheRuntimeWouldRefuse(Base):
         away believing the install was done. init is the moment the human is
         still present, so it is the moment to say so."""
         console, result = self.run_init(
-            answers=["y", str(self.root / "no-such-seat"), "an-agent", "print", ""])
+            answers=["y", str(self.root / "no-such-seat"), "an-agent", "print", ""],
+            letterbox_dir=self.listed_dir())
         self.assertEqual(result["mode"], "standalone")
         transcript = console.transcript.lower()
         self.assertIn("does not exist", transcript)
@@ -572,7 +592,7 @@ class InitCatchesWhatTheRuntimeWouldRefuse(Base):
                          (self.root / "bridge.env").read_text(encoding="utf-8"))
 
     def test_an_empty_token_is_named_before_the_operator_walks_away(self):
-        console, _ = self.run_init(answers=["n", "print", ""], secrets=("",))
+        console, _ = self.run_init(answers=["print", ""], secrets=("",))
         transcript = console.transcript.lower()
         self.assertIn("no token", transcript)
         self.assertIn("refuse to start", transcript)
@@ -606,7 +626,7 @@ class TheResidentOffer(Base):
 
     def test_yes_starts_the_bridge_in_a_new_pane(self):
         command = f"/opt/alb/venv/bin/alb --config {self.root}/bridge.env --root {self.root}"
-        console, result, started = self._init(["n", "print", "AGENT-PANE", "y"],
+        console, result, started = self._init(["print", "AGENT-PANE", "y"],
                                               resident_command=command)
         self.assertEqual(len(started), 1)
         title, command = started[0]
@@ -616,13 +636,13 @@ class TheResidentOffer(Base):
 
     def test_the_command_is_shown_before_the_question(self):
         """Consent to a named thing, not to "start services?"."""
-        console, _, started = self._init(["n", "print", "AGENT-PANE", "y"])
+        console, _, started = self._init(["print", "AGENT-PANE", "y"])
         transcript = console.transcript
         self.assertIn("/opt/alb/venv/bin/alb --config",
                       transcript[:transcript.index("It can start now")])
 
     def test_the_report_names_the_surface_and_the_stop_path(self):
-        console, _, _ = self._init(["n", "print", "AGENT-PANE", "y"])
+        console, _, _ = self._init(["print", "AGENT-PANE", "y"])
         out = console.transcript
         self.assertIn("SURFACE-NEW", out)
         self.assertIn("close", out.lower())
@@ -631,21 +651,21 @@ class TheResidentOffer(Base):
         """An agent driving setup sent a user id at this prompt, and it
         counted as yes. Only an explicit yes starts the bridge."""
         for stray in ("687555211639914544", "print", "ok", "sure"):
-            console, _, started = self._init(["n", "print", "AGENT-PANE", stray])
+            console, _, started = self._init(["print", "AGENT-PANE", stray])
             self.assertEqual(started, [], stray)
             self.assertIn("Not started", console.transcript)
         for yes in ("y", "Y", "yes"):
-            _, _, started = self._init(["n", "print", "AGENT-PANE", yes])
+            _, _, started = self._init(["print", "AGENT-PANE", yes])
             self.assertEqual(len(started), 1, repr(yes))
 
     def test_no_prints_the_identical_command_instead(self):
-        console, _, started = self._init(["n", "print", "AGENT-PANE", "no"])
+        console, _, started = self._init(["print", "AGENT-PANE", "no"])
         self.assertEqual(started, [])
         self.assertIn(f"alb --config {self.root}/bridge.env --root {self.root}",
                       console.transcript)
 
     def test_not_cmux_born_skips_the_question_and_says_why(self):
-        console, _, started = self._init(["n", "print", "AGENT-PANE", ""],
+        console, _, started = self._init(["print", "AGENT-PANE", ""],
                                          cmux_born=lambda: False)
         self.assertEqual(started, [])
         self.assertFalse(any("start the bridge now" in q for q in console.asked))
@@ -654,7 +674,7 @@ class TheResidentOffer(Base):
         self.assertIn("alb --config", console.transcript)
 
     def test_a_running_bridge_skips_the_offer_entirely(self):
-        console, _, started = self._init(["n", "print", "AGENT-PANE", ""],
+        console, _, started = self._init(["print", "AGENT-PANE", ""],
                                          bridge_running=lambda root: True)
         self.assertEqual(started, [])
         self.assertIn("already running", console.transcript.lower())
@@ -666,7 +686,7 @@ class TheResidentOffer(Base):
         chat id the operator would have. See
         StartingABridgeThatCanReceiveNothing for the empty case."""
         console, _, started = self._init(
-            ["n", "read", "", "1", "AGENT-PANE", ""],
+            ["read", "", "1", "AGENT-PANE", ""],
             chat_id_reader=lambda token: [{"chat_id": "424242424",
                                            "label": "you"}])
         self.assertEqual(len(started), 1)
@@ -674,7 +694,7 @@ class TheResidentOffer(Base):
     def test_a_failed_start_degrades_to_the_printed_command(self):
         def boom(title, command):
             raise RuntimeError("no socket")
-        console, result, _ = self._init(["n", "print", "AGENT-PANE", "y"], start_pane=boom)
+        console, result, _ = self._init(["print", "AGENT-PANE", "y"], start_pane=boom)
         self.assertIn("alb --config", console.transcript)
         self.assertIn("could not", console.transcript.lower())
 
@@ -689,7 +709,7 @@ class TheRingAsksForItsSurface(Base):
 
     def test_a_pasted_surface_is_written_to_the_env(self):
         console, result = self.run_init(
-            answers=["n", "print", "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"],
+            answers=["print", "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"],
             panes=[{"id": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "label": "agent",
                     "notifier": "cmux"}])
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
@@ -699,7 +719,7 @@ class TheRingAsksForItsSurface(Base):
     def test_an_unknown_paste_is_not_configured(self):
         """Fat-fingered uuid: success + default cmux is grok's defect one step later."""
         console, result = self.run_init(
-            answers=["n", "print", "not-in-the-list"],
+            answers=["print", "not-in-the-list"],
             panes=[{"id": "%1", "label": "main:0.0 zsh", "notifier": "tmux"}])
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertNotIn("ALB_SURFACE", env)
@@ -712,7 +732,7 @@ class TheRingAsksForItsSurface(Base):
     def test_a_tmux_pane_sets_the_notifier_from_the_paste(self):
         """latitude-pi shape: cmux absent, tmux present. No extra question."""
         console, result = self.run_init(
-            answers=["n", "print", "%1"],
+            answers=["print", "%1"],
             panes=[{"id": "%1", "label": "main:0.0 zsh", "notifier": "tmux"}])
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertIn("ALB_SURFACE=%1", env)
@@ -723,7 +743,7 @@ class TheRingAsksForItsSurface(Base):
         """Blank is not a skip-to-success. No id, no ALB_SURFACE. The
         operator still has to supply one; init will not invent or skip."""
         console, result = self.run_init(
-            answers=["n", "print", ""],
+            answers=["print", ""],
             panes=[{"id": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "label": "agent"}])
         self.assertNotIn("ALB_SURFACE", (self.root / "bridge.env").read_text(encoding="utf-8"))
         self.assertIn("not an install", console.transcript.lower())
@@ -731,24 +751,24 @@ class TheRingAsksForItsSurface(Base):
     def test_the_id_must_come_from_the_operator_not_the_listing(self):
         """One pane in the listing is still not a choice init may make."""
         console, result = self.run_init(
-            answers=["n", "print", ""],
+            answers=["print", ""],
             panes=[{"id": "only-pane-here", "label": "agent"}])
         self.assertNotIn("only-pane-here", (self.root / "bridge.env").read_text(encoding="utf-8"))
 
     def test_incomplete_install_is_nonzero_for_the_agent(self):
         """docs/agent-install.md branches on exit status, not on prose."""
         from alb.cli import _init_status
-        _, result = self.run_init(answers=["n", "print"], panes=[])
+        _, result = self.run_init(answers=["print"], panes=[])
         self.assertEqual(_init_status(result), 1)
         _, result = self.run_init(
-            answers=["n", "print", "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"],
+            answers=["print", "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"],
             panes=[{"id": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "label": "agent"}])
         self.assertEqual(result.get("ring"), "configured")
         self.assertEqual(_init_status(result), 0)
 
     def test_no_visible_panes_is_not_a_silent_skip(self):
         """Grok: empty discovery printed one line and succeeded. Fail closed."""
-        console, result = self.run_init(answers=["n", "print"], panes=[])
+        console, result = self.run_init(answers=["print"], panes=[])
         self.assertNotIn("ALB_SURFACE", (self.root / "bridge.env").read_text(encoding="utf-8"))
         out = console.transcript.lower()
         self.assertIn("no panes", out)
@@ -759,7 +779,7 @@ class TheRingAsksForItsSurface(Base):
         disabled not broken. Simon: that is not an install."""
         started = []
         console, result = self.run_init(
-            answers=["n", "print", "", "y"],
+            answers=["print", "", "y"],
             cmux_born=lambda: True,
             start_pane=lambda title, command: started.append(title) or "S-1")
         self.assertEqual(started, [])
@@ -796,7 +816,7 @@ class RerunningAfterAnIncompleteInstall(Base):
         self._existing_env_without_surface()
         started = []
         self.run_init(
-            answers=["n", "print", "fixture-pane", "y"],
+            answers=["print", "fixture-pane", "y"],
             secrets=(FAKE_TOKEN,),
             panes=[{"id": "fixture-pane", "label": "agent", "notifier": "cmux"}],
             cmux_born=lambda: True,
@@ -811,7 +831,7 @@ class RerunningAfterAnIncompleteInstall(Base):
         from alb.cli import _init_status
         self._existing_env_without_surface()
         _, result = self.run_init(
-            answers=["n", "print", "fixture-pane", "y"],
+            answers=["print", "fixture-pane", "y"],
             panes=[{"id": "fixture-pane", "label": "agent", "notifier": "cmux"}],
             cmux_born=lambda: True,
             start_pane=lambda title, command: "surface:9")
@@ -825,7 +845,7 @@ class RerunningAfterAnIncompleteInstall(Base):
         """Non-clobber still holds for what is actually there."""
         self._existing_env_without_surface()
         self.run_init(
-            answers=["n", "print", "fixture-pane", "y"],
+            answers=["print", "fixture-pane", "y"],
             secrets=(OTHER_TOKEN,),
             panes=[{"id": "fixture-pane", "label": "agent", "notifier": "cmux"}],
             cmux_born=lambda: True,
@@ -852,7 +872,7 @@ class TheEnvIsParsedNotPatternMatched(Base):
 
     def _rerun(self):
         return self.run_init(
-            answers=["n", "print", "fixture-pane", "y"],
+            answers=["print", "fixture-pane", "y"],
             panes=[{"id": "fixture-pane", "label": "agent", "notifier": "cmux"}],
             cmux_born=lambda: True,
             start_pane=lambda title, command: "surface:9")
@@ -905,7 +925,7 @@ class TheRingClaimIsEstablishedNotAsserted(Base):
 
     def _rerun(self):
         return self.run_init(
-            answers=["n", "print", "fixture-pane", "y"],
+            answers=["print", "fixture-pane", "y"],
             panes=[{"id": "fixture-pane", "label": "agent", "notifier": "cmux"}],
             cmux_born=lambda: True,
             start_pane=lambda title, command: "surface:9")
@@ -968,7 +988,7 @@ class ARetainedSurfaceKeepsItsOwnType(Base):
 
     def _select(self, pane_id, notifier):
         return self.run_init(
-            answers=["n", "print", pane_id, "y"],
+            answers=["print", pane_id, "y"],
             panes=[{"id": pane_id, "label": "agent", "notifier": notifier}],
             cmux_born=lambda: True,
             start_pane=lambda title, command: "surface:9")
@@ -1013,6 +1033,7 @@ class AnIntegratedInstallIsAnInstall(Base):
     def _integrated(self, **kw):
         mailbox = pathlib.Path(self.tmp.name) / "mail"
         mailbox.mkdir()
+        kw.setdefault("letterbox_dir", self.listed_dir())
         return self.run_init(["y", str(mailbox), "agent", "print"], **kw)
 
     def test_the_helper_is_named_as_the_ring(self):
@@ -1032,7 +1053,7 @@ class AnIntegratedInstallIsAnInstall(Base):
         """The control. Without a mailbox there IS no helper to ring through,
         so the original refusal must survive untouched - this fix must not
         become a way to ship a bell-less standalone install."""
-        console, result = self.run_init(["n", "print"])
+        console, result = self.run_init(["print"])
         self.assertEqual(result["ring"], "not configured")
         self.assertEqual(result["resident"], "incomplete")
         self.assertIn("nothing to ping", console.transcript)
@@ -1056,7 +1077,9 @@ class TheExitStatusAgreesWithTheWizard(Base):
         from alb.cli import _init_status
         mailbox = pathlib.Path(self.tmp.name) / "mail"
         mailbox.mkdir()
-        _console, result = self.run_init(["y", str(mailbox), "agent", "print"])
+        _console, result = self.run_init(
+            ["y", str(mailbox), "agent", "print"],
+            letterbox_dir=self.listed_dir())
         self.assertEqual(result["ring"], "helper")
         self.assertEqual(_init_status(result), 0)
 
@@ -1083,10 +1106,12 @@ class ARerunIntoIntegratedActuallyBecomesIntegrated(Base):
     """
 
     def _standalone_then_integrated(self):
-        self.run_init(["n", "print"])                      # leaves a standalone env
+        self.run_init(["print"])                      # leaves a standalone env
         mailbox = pathlib.Path(self.tmp.name) / "mail"
         mailbox.mkdir()
-        return self.run_init(["y", str(mailbox), "agent", "print"]), mailbox
+        return self.run_init(
+            ["y", str(mailbox), "agent", "print"],
+            letterbox_dir=self.listed_dir()), mailbox
 
     def test_the_mailbox_keys_reach_the_config(self):
         (_console, result), mailbox = self._standalone_then_integrated()
@@ -1104,12 +1129,14 @@ class ARerunIntoIntegratedActuallyBecomesIntegrated(Base):
 
     def test_a_config_it_cannot_write_is_not_reported_as_integrated(self):
         """If the keys do not land, the mode must not be claimed."""
-        self.run_init(["n", "print"])
+        self.run_init(["print"])
         mailbox = pathlib.Path(self.tmp.name) / "mail"
         mailbox.mkdir()
         env_path = self.root / "bridge.env"
         env_path.write_text("this is not = a config\x00", encoding="utf-8")
-        _console, result = self.run_init(["y", str(mailbox), "agent", "print"])
+        _console, result = self.run_init(
+            ["y", str(mailbox), "agent", "print"],
+            letterbox_dir=self.listed_dir())
         self.assertNotEqual(result.get("mode"), "integrated")
 
 
@@ -1133,7 +1160,9 @@ class ARouteIsAPairNotTwoKeys(Base):
         env = self.root / "bridge.env"
         env.write_text(existing, encoding="utf-8")
         env.chmod(0o600)
-        return self.run_init(["y", str(answers_mailbox), recipient])
+        return self.run_init(
+            ["y", str(answers_mailbox), recipient],
+            letterbox_dir=self.listed_dir())
 
     def _mailbox(self, name):
         path = pathlib.Path(self.tmp.name) / name
@@ -1202,7 +1231,7 @@ class TheStartAdviceMatchesTheRing(Base):
 
     def test_a_tmux_install_is_not_told_to_use_cmux(self):
         panes = [{"id": "%3", "label": "agent", "notifier": "tmux"}]
-        transcript, _result = self._advice(["n", "print", "%3"], panes=panes)
+        transcript, _result = self._advice(["print", "%3"], panes=panes)
         self.assertIn("tmux", transcript)
         self.assertNotIn("cmux refuses processes", transcript)
 
@@ -1215,7 +1244,9 @@ class TheStartAdviceMatchesTheRing(Base):
         LaunchAgent that delivers mail silently forever."""
         mailbox = pathlib.Path(self.tmp.name) / "mail"
         mailbox.mkdir()
-        transcript, _result = self._advice(["y", str(mailbox), "agent", "print"])
+        transcript, _result = self._advice(
+            ["y", str(mailbox), "agent", "print"],
+            letterbox_dir=self.listed_dir())
         self.assertNotIn("does not change whether it rings", transcript)
         self.assertIn("supports", transcript)
 
@@ -1225,7 +1256,9 @@ class TheStartAdviceMatchesTheRing(Base):
         other is the same overclaim as the heartbeat and the lock file."""
         mailbox = pathlib.Path(self.tmp.name) / "mail"
         mailbox.mkdir()
-        transcript, _result = self._advice(["y", str(mailbox), "agent", "print"])
+        transcript, _result = self._advice(
+            ["y", str(mailbox), "agent", "print"],
+            letterbox_dir=self.listed_dir())
         self.assertIn("--status", transcript)
         self.assertIn("RETURNED", transcript)
         self.assertIn("pane", transcript)
@@ -1233,7 +1266,7 @@ class TheStartAdviceMatchesTheRing(Base):
     def test_a_cmux_install_still_gets_the_born_inside_warning(self):
         """The control: the rule is real where it applies."""
         panes = [{"id": "PANE-1", "label": "agent", "notifier": "cmux"}]
-        transcript, _result = self._advice(["n", "print", "PANE-1"], panes=panes)
+        transcript, _result = self._advice(["print", "PANE-1"], panes=panes)
         self.assertIn("cmux refuses processes", transcript)
 
 
@@ -1268,6 +1301,7 @@ class ARefusedRouteEndsTheInstall(Base):
         console, result = self.run_init(
             ["y", str(new), "new-agent", "print", "PANE-1", "y"],
             panes=self.PANES, cmux_born=lambda: True,
+            letterbox_dir=self.listed_dir(),
             start_pane=lambda title, command: started.append(title) or "S-NEW")
         return console, result, started, env.read_text(encoding="utf-8")
 
@@ -1382,18 +1416,18 @@ class StartingABridgeThatCanReceiveNothing(Base):
         return console.transcript, result, started
 
     def test_it_says_plainly_that_nothing_will_arrive(self):
-        transcript, _result, _started = self._offer(["n", "print", "P1", ""])
+        transcript, _result, _started = self._offer(["print", "P1", ""])
         self.assertIn("deny", transcript.lower())
 
     def test_enter_does_not_start_it(self):
         """Default is no while the allowlist is empty: pressing enter must not
         leave a bridge running that cannot receive anything."""
-        _transcript, _result, started = self._offer(["n", "print", "P1", ""])
+        _transcript, _result, started = self._offer(["print", "P1", ""])
         self.assertEqual(started, [])
 
     def test_an_explicit_yes_is_still_honoured(self):
         """Not a refusal. An operator who means it can still start one."""
-        _transcript, _result, started = self._offer(["n", "print", "P1", "y"])
+        _transcript, _result, started = self._offer(["print", "P1", "y"])
         self.assertEqual(len(started), 1)
 
 
@@ -1540,14 +1574,14 @@ class TheWarningReadsTheSAVEDAllowlist(Base):
 
     def test_a_kept_deny_all_is_not_reported_as_deliverable(self):
         console, result, started = self._rerun(
-            '{"chats": []}', ["n", "read", "", "1", "P1", ""],
+            '{"chats": []}', ["read", "", "1", "P1", ""],
             chat_id_reader=lambda token: [{"chat_id": "424242424"}])
         self.assertFalse(result["delivers"])
         self.assertEqual(started, [])
 
     def test_a_kept_populated_allowlist_is_not_warned_about(self):
         console, result, started = self._rerun(
-            '{"chats": ["424242424"]}', ["n", "print", "P1", ""])
+            '{"chats": ["424242424"]}', ["print", "P1", ""])
         self.assertTrue(result["delivers"])
         self.assertNotIn("denies everyone, so a", console.transcript)
         self.assertEqual(len(started), 1)
@@ -1555,7 +1589,7 @@ class TheWarningReadsTheSAVEDAllowlist(Base):
     def test_an_unreadable_allowlist_is_treated_as_delivering_nothing(self):
         """Fail closed: if we cannot tell, do not start by default."""
         console, result, started = self._rerun(
-            "{not json", ["n", "print", "P1", ""])
+            "{not json", ["print", "P1", ""])
         self.assertFalse(result["delivers"])
         self.assertEqual(started, [])
 
@@ -1619,7 +1653,7 @@ class FirstRunSaysWhatHappened(Base):
     def test_a_doubled_paste_is_asked_again_and_not_saved(self):
         doubled = FAKE_TOKEN + FAKE_TOKEN
         console, _ = self.run_init(
-            answers=["n", "print", ""], secrets=(doubled, FAKE_TOKEN))
+            answers=["print", ""], secrets=(doubled, FAKE_TOKEN))
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertIn(f"ALB_TOKEN={FAKE_TOKEN}", env)
         self.assertNotIn(doubled, env)
@@ -1650,7 +1684,7 @@ class FirstRunSaysWhatHappened(Base):
             return [{"chat_id": "111", "label": "you"}]
 
         console, _ = self.run_init(
-            answers=["n", "read", "", "", "1"],
+            answers=["read", "", "", "1"],
             secrets=(FAKE_TOKEN, OTHER_TOKEN),
             chat_id_reader=reader)
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
@@ -1672,7 +1706,7 @@ class FirstRunSaysWhatHappened(Base):
                           + token + "/getUpdates")
 
         console, _ = self.run_init(
-            answers=["n", "read", ""], chat_id_reader=reader)
+            answers=["read", ""], chat_id_reader=reader)
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertIn(f"ALB_TOKEN={FAKE_TOKEN}", env)
         self.assertNotIn(FAKE_TOKEN, console.transcript)
@@ -1696,7 +1730,7 @@ class FirstRunSaysWhatHappened(Base):
             raise Refused()
 
         console, _ = self.run_init(
-            answers=["n", "read", ""], secrets=[], token_file=str(path),
+            answers=["read", ""], secrets=[], token_file=str(path),
             chat_id_reader=reader)
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertFalse(path.exists())
@@ -1706,7 +1740,7 @@ class FirstRunSaysWhatHappened(Base):
         self.assertNotIn("<YOUR_TOKEN>", console.transcript)
 
     def test_the_closing_ends_on_the_required_step(self):
-        console, _ = self.run_init(answers=["n", "print", ""])
+        console, _ = self.run_init(answers=["print", ""])
         text = console.transcript
         optional = text.index("Optional, and not required")
         finish = text.index("To finish: message the bot yourself")
@@ -1723,10 +1757,11 @@ class FirstRunSaysWhatHappened(Base):
 
     def test_the_opening_and_the_ring_are_plain(self):
         console, _ = self.run_init(
-            answers=["n", "print", ""],
+            answers=["print", ""],
             panes=[{"id": "pane-1", "label": "work", "notifier": "tmux"}])
         text = console.transcript
-        self.assertIn("folder on this machine", text)
+        self.assertIn("does not name a seat", text)
+        self.assertIn("will not ask you for a folder or a name", text)
         self.assertNotIn("inbox it already sweeps", text)
         self.assertNotIn("feel alive", text)
         self.assertIn("I will not pick one", text)
@@ -1739,7 +1774,7 @@ class FirstRunSaysWhatHappened(Base):
             return [{"chat_id": "111", "label": "you"}]
 
         console, _ = self.run_init(
-            answers=["n", "read", "", "1"], chat_id_reader=reader)
+            answers=["read", "", "1"], chat_id_reader=reader)
         self.assertIn("the platform accepted this token", console.transcript)
         self.assertNotIn(FAKE_TOKEN, console.transcript)
 
@@ -1748,6 +1783,7 @@ class FirstRunSaysWhatHappened(Base):
         (mailbox / "inbox").mkdir(parents=True)
         console, result = self.run_init(
             answers=["y", str(mailbox), "seat", "print", ""],
+            letterbox_dir=self.listed_dir(),
             cmux_born=lambda: False)
         self.assertEqual(result["mode"], "integrated")
         parent = str(mailbox.parent)
@@ -1772,7 +1808,7 @@ class FirstRunSaysWhatHappened(Base):
                 raise Refused()
 
         console, _ = self.run_init(
-            answers=["n", "print", ""],
+            answers=["print", ""],
             secrets=(FAKE_TOKEN, OTHER_TOKEN),
             token_check=checker)
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
@@ -1795,7 +1831,7 @@ class FirstRunSaysWhatHappened(Base):
                               + token + "/getMe")
 
         console, _ = self.run_init(
-            answers=["n", "y", "print", ""],
+            answers=["y", "print", ""],
             token_check=checker)
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertEqual(calls, [FAKE_TOKEN, FAKE_TOKEN])
@@ -1811,7 +1847,7 @@ class FirstRunSaysWhatHappened(Base):
             raise OSError("down " + token)
 
         console, _ = self.run_init(
-            answers=["n", "n", "print", ""],
+            answers=["n", "print", ""],
             token_check=checker)
         env = (self.root / "bridge.env").read_text(encoding="utf-8")
         self.assertNotIn(FAKE_TOKEN, env)
@@ -1824,7 +1860,7 @@ class FirstRunSaysWhatHappened(Base):
     def test_an_empty_paste_does_not_ask_the_platform(self):
         checks = []
         console, _ = self.run_init(
-            answers=["n", "print", ""], secrets=("",),
+            answers=["print", ""], secrets=("",),
             token_check=lambda token: checks.append(token))
         self.assertEqual(checks, [])
         self.assertIn("no token entered", console.transcript)
@@ -1833,7 +1869,7 @@ class FirstRunSaysWhatHappened(Base):
         checks = []
         doubled = FAKE_TOKEN + FAKE_TOKEN
         self.run_init(
-            answers=["n", "print", ""],
+            answers=["print", ""],
             secrets=(doubled, FAKE_TOKEN),
             token_check=lambda token: checks.append(token))
         self.assertEqual(checks, [FAKE_TOKEN])
@@ -1851,7 +1887,7 @@ class FirstRunSaysWhatHappened(Base):
                 super().__init__("no " + FAKE_TOKEN)
 
         with self.assertRaises(wizard.SetupError) as caught:
-            self.run_init(answers=["n"], secrets=[], token_file=str(path),
+            self.run_init(answers=[], secrets=[], token_file=str(path),
                           token_check=lambda token: (_ for _ in ()).throw(Refused()))
         self.assertNotIn(FAKE_TOKEN, str(caught.exception))
         self.assertIn(str(len(FAKE_TOKEN)), str(caught.exception))
@@ -1871,7 +1907,7 @@ class FirstRunSaysWhatHappened(Base):
             raise OSError("down " + token)
 
         with self.assertRaises(wizard.SetupError) as caught:
-            self.run_init(answers=["n", "n"], secrets=[], token_file=str(path),
+            self.run_init(answers=["n"], secrets=[], token_file=str(path),
                           token_check=checker)
         self.assertNotIn(FAKE_TOKEN, str(caught.exception))
         self.assertIn(str(len(FAKE_TOKEN)), str(caught.exception))
@@ -1950,7 +1986,7 @@ class LetterboxAlreadyInstalled(Base):
         self.assertIn("No panes are visible", console.transcript)
 
     def test_without_a_letterbox_folder_cmux_is_still_the_pane_route(self):
-        console, _ = self.run_init(answers=["n", "print"], panes=[])
+        console, _ = self.run_init(answers=["print"], panes=[])
         self.assertIn("Re-run init from a cmux pane", console.transcript)
         self.assertNotIn("setting this up for the first time", console.transcript)
 
@@ -1964,7 +2000,7 @@ class LetterboxAlreadyInstalled(Base):
             return [{"chat_id": "111", "label": "you"}]
 
         console, _ = self.run_init(
-            answers=["n", "read", "", "y", "", "1"], chat_id_reader=reader)
+            answers=["read", "", "y", "", "1"], chat_id_reader=reader)
         self.assertEqual(calls, [FAKE_TOKEN, FAKE_TOKEN])
         self.assertEqual(
             json.loads((self.root / "allowlist.json").read_text())["chats"],
@@ -1974,7 +2010,7 @@ class LetterboxAlreadyInstalled(Base):
 
     def test_declining_the_second_read_saves_no_chat(self):
         console, _ = self.run_init(
-            answers=["n", "read", "", "n"],
+            answers=["read", "", "n"],
             chat_id_reader=lambda token: [])
         self.assertEqual(
             json.loads((self.root / "allowlist.json").read_text())["chats"],
