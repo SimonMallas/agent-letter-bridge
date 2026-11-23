@@ -7,6 +7,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+- A helper on PATH that fails its check is not used, and this run keeps the bridge's own folder. A token the platform refused, then a blank paste, is not a finished install. When the bridge is already running, the closing screen points at status. One cycle stays the route only when nothing is running. Whether a token is saved is read from the file the bridge will read, so a blank token still says to put one in bridge.env.
+
 ## [0.7.3] — 2026-11-23
 
 - The screen before this terminal becomes the bridge no longer says whether, and it does not print a command. It says this terminal is the bridge, to leave it open, and that closing it stops the bridge. Those lines are flushed before the process is replaced, so a pipe keeps them. A plain terminal with no Letterbox still only prints the command. Zellij and Rex start in this terminal only when the bell is the folder helper.

@@ -290,10 +290,11 @@ def _join_typed_name(console, typed, folder, seats):
 def _resolve_helper(console, helper_on_path, helper_install):
     """Return (join, helper_path). A path is never asked for.
 
-    A helper on PATH that fails its check still joins, and the path is not
-    recorded. That is the previous behaviour. Anything else has to be the
-    one installer path and has to pass the same check. If neither is
-    usable, this run does not join.
+    A helper on PATH that fails its check does not join, and the path is
+    not recorded. The bridge keeps its own folder. A helper that is present
+    and the wrong edition is not replaced by the installer candidate.
+    Anything else has to be the one installer path and has to pass the same
+    check. If neither is usable, this run does not join.
     """
     from alb.helper_probe import inspect_helper
 
@@ -310,15 +311,15 @@ def _resolve_helper(console, helper_on_path, helper_install):
         console.say("A new message is announced with `letterbox ring`:")
         console.say("Letterbox 0.5.1 or later for cmux, tmux and Zellij,")
         console.say("0.6.2 or later for Herdr. To update, run your")
-        console.say("edition's install command again. Installing now will")
-        console.say("record every announcement as failing until it is updated.")
+        console.say("edition's install command again.")
 
     if helper_on_path:
         status, msg = inspect_helper(helper_on_path)
         if status != "ok":
             rejected(msg)
-            console.say("  That helper was not recorded.")
-            return True, ""
+            console.say("This run will not use that helper.")
+            console.say("The bridge keeps its own folder.")
+            return False, ""
         return True, recorded(helper_on_path)
 
     candidate = ""
@@ -544,7 +545,7 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
             summary["ring"] = "not configured"
             summary["resident"] = "not started"
             summary.pop("mail_root", None)
-            summary["has_token"] = bool(token)
+            summary["has_token"] = _saved_has_token(env_path)
             console.say()
             console.say("Setup stopped. Your existing configuration is untouched.")
             _closing(console, root, summary)
@@ -587,13 +588,13 @@ def init(root, console, chat_id_reader=None, panes=None, helper_found=None,
             summary["ring"] = "not configured"
             summary["resident"] = "not started"
             summary.pop("mail_root", None)
-            summary["has_token"] = bool(token)
+            summary["has_token"] = _saved_has_token(env_path)
             console.say()
             console.say("Setup stopped. Your existing configuration is untouched.")
             _closing(console, root, summary)
             return summary
 
-    summary["has_token"] = bool(token) or env_path_existed
+    summary["has_token"] = _saved_has_token(env_path)
 
     # 4. The allowlist. Written deny-all whatever else happens; an entry is
     #    added only from a value the operator supplied or explicitly asked us
@@ -701,6 +702,30 @@ def _helper_absolute(path):
     if not checked.is_absolute():
         checked = pathlib.Path.cwd() / checked
     return str(checked)
+
+
+def _saved_has_token(env_path):
+    """True only when the file the bridge will read holds a token.
+
+    A paste this run, and the mere existence of the file, are not that.
+    The loader treats a blank ALB_TOKEN as missing. An unreadable file is
+    the same as missing: this run cannot claim a token it cannot see.
+    Loose permissions and a bad notifier are not "no token". The loader
+    names those after the token is present, so this parse stops at the key.
+    """
+    try:
+        text = pathlib.Path(env_path).read_text(encoding="utf-8")
+    except OSError:
+        return False
+    saved = ""
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key.strip() == "ALB_TOKEN":
+            saved = value.strip()
+    return bool(saved)
 
 
 def _token_was_refused(exc):
@@ -1541,18 +1566,23 @@ def _closing(console, root, summary):
     console.say("Next:")
     console.say(f"  alb --doctor --root {root}")
     console.say("     says whether the allowlist is why nothing is arriving.")
-    console.say(f"  alb --config {root}/bridge.env --root {root} --once")
-    console.say("     one cycle. Reports fetched / published / denied.")
+    # Same-terminal start replaces this process, so a person does not read
+    # this screen then. A pane start returns, and so does a bridge that was
+    # already running. One cycle against a folder already in use exits 4.
+    if summary.get("resident") in {"started", "already running"}:
+        console.say(f"  alb --status --root {root}")
+        console.say("     already running. One cycle would refuse, because")
+        console.say("     this folder is in use.")
+    else:
+        console.say(f"  alb --config {root}/bridge.env --root {root} --once")
+        console.say("     one cycle. Reports fetched / published / denied.")
     console.say()
     console.say("Optional, and not required: have someone NOT on the")
     console.say("allowlist message the bot. Expect nothing to arrive and no")
     console.say("error. That silence is the gate working. You do not need")
     console.say("a second person to finish.")
     console.say()
-    # A start that works never gets here: the process was already replaced.
-    # Saying a different finish on this branch would only be seen by a
-    # starter that returns, and it would disagree with the lines above.
-    if summary.get("resident") != "started":
+    if summary.get("resident") not in {"started", "already running"}:
         if summary.get("has_token"):
             console.say("To finish: message the bot yourself, from the account")
             console.say("you allowlisted. Then start the bridge and leave it running:")

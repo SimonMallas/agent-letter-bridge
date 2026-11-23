@@ -645,12 +645,18 @@ def _init_status(summary):
     its own copy of that judgement, so when the wizard learned that integrated
     mode rings through the letterbox helper, this did not: a correct install
     completed and then exited 1 with nothing wrong.
+
+    A saved token is required as well. A ring with no token is the paste the
+    platform refused, and an installing agent would otherwise take that as
+    success. An empty allowlist is still success when the token is saved.
     """
     if not summary:
         return 1
     if summary.get("ring") not in _RINGS:
         return 1
     if summary.get("resident") == "incomplete":
+        return 1
+    if not summary.get("has_token"):
         return 1
     return 0
 

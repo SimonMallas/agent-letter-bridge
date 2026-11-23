@@ -2371,3 +2371,122 @@ class LetterboxAlreadyInstalled(Base):
         self.assertIn("not shown", console.transcript)
         self.assertFalse((self.root / "bridge.env").exists())
         self.assertEqual(console.asked, [])
+
+
+class FourCorrections(Base):
+    """A review of the screen that starts the bridge. Four places told a
+    first-time person the install had worked when it had not, or told them
+    to run a cycle against a folder that was already in use.
+
+    Each test is the case that was wrong. A good helper, a saved token, and
+    a bridge that was only printed still take the paths they took before.
+    """
+
+    def test_an_incompatible_helper_on_the_path_does_not_join_or_start(self):
+        from alb.helper_probe import INCOMPATIBLE
+        started = []
+        with unittest.mock.patch(
+                "alb.helper_probe.inspect_helper",
+                return_value=("incompatible", INCOMPATIBLE)):
+            console, result = self.run_init(
+                ["alpha", "y", "read", "", "1"],
+                letterbox_dir=self.listed_dir(),
+                supply_name=True,
+                chat_id_reader=lambda token: [
+                    {"chat_id": "424242424", "label": "you"}],
+                start_here=lambda command: started.append(command))
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertEqual(result["mode"], "standalone")
+        self.assertEqual(result["ring"], "not configured")
+        self.assertEqual(started, [])
+        self.assertNotEqual(result["resident"], "started")
+        self.assertNotIn("ALB_BUS_BINARY", env)
+        self.assertNotIn("ALB_MAIL_ROOT", env)
+        text = console.transcript
+        self.assertIn(INCOMPATIBLE, text)
+        self.assertIn("This run will not use that helper.", text)
+        self.assertIn("The bridge keeps its own folder.", text)
+        self.assertNotIn("record every announcement as failing", text)
+        self.assertNotIn("That helper was not recorded.", text)
+        self.assertNotIn("letterbox is not available", text)
+
+    def test_a_refused_token_then_a_blank_paste_is_not_a_finished_install(self):
+        from alb.cli import _init_status
+
+        class Refused(Exception):
+            def __init__(self):
+                self.code = 401
+                super().__init__("HTTP Error 401: " + FAKE_TOKEN)
+
+        def checker(token):
+            raise Refused()
+
+        console, result = self.run_init(
+            ["alpha", "y", "print"],
+            secrets=(FAKE_TOKEN, ""),
+            letterbox_dir=self.listed_dir(),
+            supply_name=True,
+            token_check=checker)
+        env = (self.root / "bridge.env").read_text(encoding="utf-8")
+        self.assertNotIn(FAKE_TOKEN, env)
+        self.assertNotIn(FAKE_TOKEN, console.transcript)
+        self.assertIn("ALB_TOKEN=", env)
+        self.assertFalse(result["has_token"])
+        self.assertEqual(result["ring"], "helper")
+        self.assertNotEqual(result["resident"], "started")
+        self.assertNotEqual(_init_status(result), 0)
+
+    def test_a_running_bridge_is_not_told_to_run_one_cycle(self):
+        def text_for(resident):
+            console = ScriptedConsole()
+            wizard._closing(console, self.root, {
+                "created": [],
+                "kept": [],
+                "resident": resident,
+                "has_token": True,
+            })
+            return console.transcript
+
+        for resident in ("started", "already running"):
+            text = text_for(resident)
+            self.assertIn(f"alb --status --root {self.root}", text, resident)
+            self.assertIn("this folder is in use", text, resident)
+            self.assertNotIn("--once", text, resident)
+            self.assertNotIn("To finish: message the bot yourself", text, resident)
+        quiet = text_for("printed")
+        self.assertIn("--once", quiet)
+        self.assertIn("one cycle", quiet)
+        self.assertNotIn("--status", quiet)
+        self.assertIn("To finish: message the bot yourself", quiet)
+
+    def test_a_kept_blank_token_is_still_missing(self):
+        from alb.bridge import run
+        self.root.mkdir(parents=True)
+        env = self.root / "bridge.env"
+        env.write_text("ALB_TOKEN=\n", encoding="utf-8")
+        os.chmod(env, 0o600)
+        console, result = self.run_init(
+            answers=["print", ""], secrets=(FAKE_TOKEN,))
+        saved = env.read_text(encoding="utf-8")
+        self.assertNotIn(FAKE_TOKEN, saved)
+        self.assertEqual(saved, "ALB_TOKEN=\n")
+        self.assertFalse(result["has_token"])
+        self.assertIn("put a token in bridge.env", console.transcript)
+        with self.assertRaises(run.ConfigError) as caught:
+            run.load_config(env)
+        self.assertIn("ALB_TOKEN", str(caught.exception))
+
+    def test_a_kept_token_stays_the_saved_one(self):
+        self.root.mkdir(parents=True)
+        env = self.root / "bridge.env"
+        env.write_text(f"ALB_TOKEN={OTHER_TOKEN}\n", encoding="utf-8")
+        os.chmod(env, 0o600)
+        console, result = self.run_init(
+            answers=["print", ""], secrets=(FAKE_TOKEN,))
+        saved = env.read_text(encoding="utf-8")
+        self.assertIn(f"ALB_TOKEN={OTHER_TOKEN}", saved)
+        self.assertNotIn(FAKE_TOKEN, saved)
+        self.assertTrue(result["has_token"])
+        self.assertNotIn("put a token in bridge.env", console.transcript)
+        self.assertNotIn(FAKE_TOKEN, console.transcript)
+        self.assertNotIn(OTHER_TOKEN, console.transcript)
