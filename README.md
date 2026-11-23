@@ -7,6 +7,8 @@
 **Message the CLI agents on your machine from your phone, via Telegram, Slack
 or Discord — and every message becomes part of their memory.**
 
+**[Quick install](#install)** — the copy-this prompt and the commands are in that section.
+
 **New in 0.7.0: a reply files its own letter.** Once the platform accepts your
 answer, the bridge files the letter you answered — no cleanup step, and the
 unfiled count with ages shows in `--status`. Receipts lock to owner-only at

@@ -57,6 +57,14 @@ class TheInstallPrompt(unittest.TestCase):
             with self.subTest(line):
                 self.assertIn(line, manual)
 
+    def test_the_readme_jumps_to_install_before_that_section(self):
+        readme = self.pages()["readme"]
+        self.assertIn("[Quick install](#install)", readme)
+        self.assertLess(
+            readme.index("[Quick install](#install)"),
+            readme.index("## Install"),
+        )
+
     def test_the_install_page_does_not_ask_the_person_to_pick_a_mode(self):
         install = self.pages()["install"]
         self.assertNotIn("does the agent you are waking already receive mail", install)
