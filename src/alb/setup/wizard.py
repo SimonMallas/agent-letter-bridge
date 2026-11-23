@@ -291,11 +291,11 @@ def _resolve_helper(console, helper_on_path, helper_install):
     """Return (join, helper_path, halt). A path is never asked for.
 
     A helper on PATH that fails its check does not join, and the path is
-    not recorded. halt is true only then: the helper is present and the
-    wrong edition, so setup stops instead of asking for a key. It is not
-    replaced by the installer candidate. A missing helper does not halt.
-    Anything else has to be the one installer path and has to pass the same
-    check. If neither is usable, this run does not join.
+    not recorded. halt is true when a helper is present and the wrong
+    edition, on PATH or at the one installer path, so setup stops instead
+    of asking for a key. A PATH helper is not replaced by the installer
+    candidate. A missing helper does not halt. If neither is usable, this
+    run does not join.
     """
     from alb.helper_probe import inspect_helper
 
@@ -319,7 +319,6 @@ def _resolve_helper(console, helper_on_path, helper_install):
         if status != "ok":
             rejected(msg)
             console.say("This run will not use that helper.")
-            console.say("The bridge keeps its own folder.")
             return False, "", True
         return True, recorded(helper_on_path), False
 
@@ -334,6 +333,9 @@ def _resolve_helper(console, helper_on_path, helper_install):
         if status == "ok":
             return True, recorded(candidate), False
         rejected(msg)
+        if status != "missing":
+            console.say("This run will not use that helper.")
+            return False, "", True
 
     console.say()
     console.say("The name matches an agent, but letterbox is not available.")
@@ -720,13 +722,14 @@ def _saved_has_token(env_path):
 
     A paste this run, and the mere existence of the file, are not that.
     The loader treats a blank ALB_TOKEN as missing. An unreadable file is
-    the same as missing: this run cannot claim a token it cannot see.
+    the same as missing, including one that is not text: this run cannot
+    claim a token it cannot see.
     Loose permissions and a bad notifier are not "no token". The loader
     names those after the token is present, so this parse stops at the key.
     """
     try:
         text = pathlib.Path(env_path).read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeError):
         return False
     saved = ""
     for line in text.splitlines():
