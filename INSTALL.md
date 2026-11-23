@@ -14,16 +14,39 @@ screen with screenshots. [`docs/slack.md`](docs/slack.md) and
 [`docs/discord.md`](docs/discord.md) cover what differs from Telegram. Every
 other step applies as written.
 
-**Installing this with a CLI agent rather than by hand?** Give it
-[`docs/agent-install.md`](docs/agent-install.md) instead — same install, written
-as a brief for an agent.
+**If you are an agent,** read [`docs/agent-install.md`](docs/agent-install.md) before you install. That is the operational manual.
+
+**Copy this and give it to the agent you already work with.** The prompt is the whole ask:
+
+```text
+Install Agent Letter Bridge from the checkout this prompt came from. If you do not have that checkout, stop. Do not install a published package in its place.
+
+Read docs/agent-install.md. If a line below disagrees with that page, follow the line below.
+
+Do not ask me for a folder, a seat, a name, a path, a bot, or an allowlist. Do not invent a seat. There is no seat flag. Do not search this machine for a mailbox.
+
+If LETTERBOX_DIR and LETTERBOX_AGENT are both already set and non-empty in this terminal, pass those references into the setup terminal. If either is empty, leave both off the command.
+
+Open a terminal and leave it open. If no bridge is using ~/.alb, run alb --init --root ~/.alb there. If a bridge is already using it, pick a new root, tell me the path, and do not ask me to choose it. Do not read that terminal. I will paste the key and press Enter.
+
+The setup terminal may ask which chat is mine. Leave that question there. Do not ask it yourself.
+
+If that terminal asks for a folder, a seat, a name, or a helper path, stop. Do not answer.
+
+Leave any bridge that is already running untouched.
+
+On Slack or Discord, follow that platform's page in this checkout. The same rules apply.
+
+When my first message arrives as a letter, answer it with alb --reply-to on this bridge. The installer does not send that answer.
+```
 
 ---
 
-## Step 0 — Pick your mode. Everything after this depends on it.
+## Step 0 — Where the letters go
 
-Answer one question: **does the agent you are waking already receive mail from
-other agents on this machine?**
+A terminal that does not name a seat is not asked for a folder or a name.
+The bridge keeps its own folder. That does not join a mailbox that already
+exists. Joining one needs a terminal that already names that seat.
 
 | | **Standalone** | **Integrated** |
 | --- | --- | --- |
@@ -31,13 +54,14 @@ other agents on this machine?**
 | Letters land in | a directory this bridge owns | the inbox it already sweeps |
 | The doorbell | a new line it must learn | the doorbell it already knows |
 | You must teach the agent | yes — one line, one path | no |
-| Setup asks you for | nothing extra | that inbox's path, and the agent's name |
+| Setup asks you for | the token, then which chat is yours | the token, then which chat is yours. It does not ask you to name a seat |
 
-**If in doubt, choose standalone.** It owns everything it touches, so it cannot
-disturb something already running. You can switch later by adding one setting.
+**If this terminal does not name a seat, the bridge stays standalone.**
+It owns everything it touches, so it cannot disturb something already running.
+You can switch later by adding one setting.
 
-`alb --init` asks you this in Step 4. It does **not** work it out by looking: an
-inbox existing on your disk is not you asking for letters to be put in it.
+Init does **not** work out the mode by looking: an inbox on disk is not you
+asking for letters to be put in it. Step 4 is what it actually asks.
 
 Steps marked **[integrated]** or **[standalone]** apply to one mode only.
 Everything else applies to both.

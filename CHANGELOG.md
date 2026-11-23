@@ -7,6 +7,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+- The install page, the readme, and the using guide carry one prompt a person can copy to the agent they already work with. The prompt is the whole ask. It installs this checkout, does not ask for a folder, a seat, a name, or a path, and stops if setup asks for one. An agent who opens the page is sent to the operational manual. A terminal that does not name a seat is not asked to pick a mode.
 - A terminal that does not name a seat, and was not given a Letterbox folder that already lists seats, is not asked for a folder or a name. The bridge keeps its own folder. Joining an existing mailbox still needs a terminal that already names that seat, or a folder that lists seats and no seat name. There is still no seat flag.
 - The install page, the readme's short version, and the Slack and Discord first-time starts say to open a terminal, copy the command block, paste it, and press Enter. Later blocks on the install page use that one instruction. Reference examples were left as they were.
 - Setup pages no longer say how long the install takes. The Slack manifest copy is its own step, in the setup page, the Slack page, the agent install brief, and the text `alb --init` prints: copy from the first `{` to the last `}` before any screenshot, then paste that copy.

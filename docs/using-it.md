@@ -11,16 +11,32 @@ a letter, does the work, and can answer you in the same chat.
 Most people let the agent do it.
 
 1. Open your agent on your computer.
-2. Say: “Set up Agent Letter Bridge so I can message you from my phone on
-   Telegram. Follow `docs/agent-install.md` and tell me each thing you need
-   from me.”
-3. The agent will ask you for the parts only you can do. On Telegram the main
-   one is making a bot: message **@BotFather**, send `/newbot`, choose a name,
-   and copy the code it gives you. Paste that code where the agent tells you.
-   Do not send it in a chat. Slack and Discord need a few more steps; they have
-   their own guides.
-4. Send your new bot a message, for example “hello”, and answer any questions
-   the agent asks.
+2. Copy this and give it to that agent:
+
+```text
+Install Agent Letter Bridge from the checkout this prompt came from. If you do not have that checkout, stop. Do not install a published package in its place.
+
+Read docs/agent-install.md. If a line below disagrees with that page, follow the line below.
+
+Do not ask me for a folder, a seat, a name, a path, a bot, or an allowlist. Do not invent a seat. There is no seat flag. Do not search this machine for a mailbox.
+
+If LETTERBOX_DIR and LETTERBOX_AGENT are both already set and non-empty in this terminal, pass those references into the setup terminal. If either is empty, leave both off the command.
+
+Open a terminal and leave it open. If no bridge is using ~/.alb, run alb --init --root ~/.alb there. If a bridge is already using it, pick a new root, tell me the path, and do not ask me to choose it. Do not read that terminal. I will paste the key and press Enter.
+
+The setup terminal may ask which chat is mine. Leave that question there. Do not ask it yourself.
+
+If that terminal asks for a folder, a seat, a name, or a helper path, stop. Do not answer.
+
+Leave any bridge that is already running untouched.
+
+On Slack or Discord, follow that platform's page in this checkout. The same rules apply.
+
+When my first message arrives as a letter, answer it with alb --reply-to on this bridge. The installer does not send that answer.
+```
+
+3. The one part only you can do on Telegram is making a bot: message **@BotFather**, send `/newbot`, choose a name, and copy the code it gives you. Paste that code into the terminal the agent opened. Do not send it in a chat, and do not paste it into the agent's conversation. Slack and Discord need a few more steps; they have their own guides.
+4. Send your new bot a message, for example “hello”. If the setup terminal asks which chat is yours, answer it there. If it asks for a folder, a seat, or a name, stop and tell the agent. Do not answer that.
 5. The agent tells you when the test message has arrived. You are done.
 
 If you would rather do it by hand, follow [the full installation guide](../INSTALL.md).
